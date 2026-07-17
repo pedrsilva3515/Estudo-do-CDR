@@ -1,0 +1,10 @@
+{
+  "caso": "caso_27_move_segundo_retangulo",
+  "arquivo": "caso_27_move_segundo_retangulo.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "move_segundo_objeto_vetorial",
+  "descricao": "Abre o caso_00, cria RetanguloDois (igual ao caso_26) e move SO ELE por um delta conhecido, deixando RetanguloBase parado. Teste decisivo: a regiao de 'geometria em cache' no offset 16 de page1.dat deve passar a refletir RetanguloDois, nao mais RetanguloBase, se a hipotese de 'cache do ultimo objeto transformado' estiver certa.",
+  "parametros": { "objeto_movido": "RetanguloDois", "delta_x_cm": 7, "delta_y_cm": -3, "posicao_antes_x_cm": 12, "posicao_antes_y_cm": 26, "posicao_depois_x_cm": 19, "posicao_depois_y_cm": 23, "tamanho_x_cm": 15, "tamanho_y_cm": 14, "retangulo_base_posicao_x_cm": 3, "retangulo_base_posicao_y_cm": 7, "objeto_nao_movido": "RetanguloBase" },
+  "gerado_em": "2026-07-17 19:07:16",
+  "corel_versao": "26.1 build 143"
+}
