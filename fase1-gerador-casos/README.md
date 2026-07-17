@@ -96,3 +96,26 @@ Fontes novas geradas: `fonte_alt.jpg` (composição diferente), `fonte_grande.jp
 (2400×2400), `fonte_cmyk.tif`, `fonte_alpha.png`, `fonte_master_1b.cdr`.
 Ponto com maior chance de ajuste: `ExportarBitmapAlpha` (exportação com canal alfa
 usa 3 argumentos a mais no `ExportBitmap`).
+
+## Fase 1c — geometria de objetos vetoriais (`GeradorCasosZCF_1c.bas`)
+
+Terceira macro, criada durante a investigação de `page1.dat` na Fase 3: achamos 4
+números em ponto flutuante que parecem ser a geometria (posição/tamanho) do retângulo
+base, mas nenhum caso de teste até agora movia ou redimensionava um objeto **vetorial**
+por um delta conhecido (o `caso_06` da Fase 1 move um *bitmap*, estrutura diferente).
+Ver "Geometria: candidato forte, ainda não confirmado" em
+`docs/descobertas-fase3-page1.md` para o raciocínio completo.
+
+**Pré-requisito:** `caso_00_base.cdr` precisa continuar em `PASTA_SAIDA`. Instalação
+idêntica às fases anteriores (colar o módulo, rodar `GerarCasosDeTeste1c`). Log em
+`log_geracao_1c.txt`.
+
+| Arquivo | Base | O que testa |
+|---|---|---|
+| `caso_22_move_retangulo.cdr` | caso_00 | Move `RetanguloBase` +5cm X, −1cm Y (delta assimétrico de propósito, para não confundir eixo X com Y) |
+| `caso_23_resize_retangulo.cdr` | caso_00 | Aumenta só a largura de `RetanguloBase` em 4cm, mantendo a altura — isola tamanho de posição |
+
+Os manifestos JSON desses dois casos gravam posição e tamanho exatos (via
+`GetPosition`/`GetSize` do próprio CorelDRAW) antes e depois da alteração — servem de
+gabarito preciso para o diff binário, mesmo sem saber de antemão a semântica exata dos
+parâmetros usados para criar o retângulo.

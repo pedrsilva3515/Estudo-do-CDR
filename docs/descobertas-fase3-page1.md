@@ -84,9 +84,69 @@ campo, reforçando a leitura de P1 (novo bloco de estilo substitui, não edita).
 Esse padrão se repete em pelo menos 6 pontos diferentes do mesmo arquivo, em
 profundidades diferentes (parece uma árvore, não uma lista plana) — indício forte de que
 é a moldura estrutural geral do formato "chunk" do `page*.dat` (análogo ao papel que
-`UI`/`RI` cumprem no `Bitmaps.dat`), mas **a semântica de cada item da tabela (é um
-offset? um tamanho? um tipo?) não foi decodificada nesta rodada** — só a JSON de estilo
-(P1) e os nomes (P2) foram identificados com confiança dentro dessa árvore.
+`UI`/`RI` cumprem no `Bitmaps.dat`).
+
+### P4. O "chunk" do objeto: tabela de offsets decodificada o bastante para achar nome, estilo e o início da geometria (n=2 objetos, 2 documentos)
+
+Usando as âncoras já confirmadas (offset exato do nome — P2 — e do bloco JSON — P1)
+como referência, dá para calibrar a tabela de offsets de P3 **especificamente para o
+chunk que envolve um objeto** (`RetanguloBase`, em `caso_00` e `caso_12`):
+
+```
+670  uint32 LE   616            tamanho do chunk (aponta exatamente para offset 1286 = 670+616)
+674  uint32 LE   7              "contagem" (semântica exata ainda não fechada — ver abaixo)
+678  uint32 LE[] 20,52,1,80,96,124,476,480,608,612,616   tabela de valores (11, não 7 — ver abaixo)
+```
+
+Os valores da tabela, quando somados ao início do chunk (670), batem **exatamente** com
+marcos já confirmados por outro caminho:
+
+| Valor na tabela | Posição absoluta (670+valor) | O que é |
+|---:|---:|---|
+| 96 | 766 | **Início do nome** `RetanguloBase` (confirmado por P2) |
+| 124 | 794 | Início do bloco `[flag uint32=1][tamanho uint32][JSON]` (P1) |
+| 476 | 1146 | **Fim exato do JSON** (802 + 344 = 1146) — bate byte a byte |
+
+Isso confirma que a tabela é, pelo menos em parte, uma lista de **offsets relativos ao
+início do chunk**, e que o valor "7" declarado como contagem não corresponde 1:1 ao
+número de valores brutos da tabela (11) — possivelmente contagem conta "propriedades"
+enquanto alguns valores da tabela são pares (offset+tipo) ou sub-tamanhos, não só
+offsets. Não fechado — próxima rodada.
+
+### Geometria: candidato forte, ainda não confirmado (bloqueado por falta de caso de teste)
+
+Logo depois do fim do JSON (offset 1146 em `caso_00`), aparecem 4 números em ponto
+flutuante (`float32` LE): **10.1444091796875, 9.52587890625, 1.875, 1.875**. São fortes
+candidatos a bounding box / posição do objeto — mas:
+
+- Esses valores são **idênticos** entre `caso_00` e `caso_12` (onde `RetanguloBase` não
+  foi movido nem redimensionado) — consistente com "são a geometria do retângulo", mas
+  não prova nada sozinho, já que nada mudou.
+- O mesmo padrão **não se replicou para o objeto `ElipseTeste`** no `caso_12` — o cálculo
+  do início do chunk pela regra "nome está sempre 96 bytes após o início do chunk" só
+  vale para o retângulo; a elipse claramente usa uma tabela/estrutura diferente (`size`/
+  `count` deram valores absurdos ao tentar aplicar a mesma regra), o que faz sentido:
+  retângulo e elipse provavelmente têm sub-tipos de chunk geométrico distintos
+  (bounding box vs. centro+raios).
+- **Não havia, até esta rodada, nenhum caso de teste que movesse ou redimensionasse um
+  objeto vetorial por um delta conhecido** (o `caso_06` da Fase 1 move um *bitmap*, não
+  o retângulo vetorial) — sem isso, não dá para saber com confiança qual float é X, qual
+  é Y, e se são posição, tamanho, ou algo do documento todo (ex. página).
+
+**Ação tomada:** macro nova `GeradorCasosZCF_1c.bas` (Fase 1c), com dois casos
+desenhados para fechar isso — mesma lógica de isolar uma variável por vez que já
+funcionou para o DPI do bitmap (Fase 1b, `caso_07`/`caso_08`):
+
+- `caso_22_move_retangulo`: move `RetanguloBase` por um delta conhecido e **assimétrico**
+  (+5 cm X, −1 cm Y — de propósito diferente em cada eixo, para não confundir X com Y se
+  a ordem dos campos for ambígua). O manifesto grava posição/tamanho antes e depois via
+  `GetPosition`/`GetSize`, então o gabarito é exato mesmo que a semântica do parâmetro de
+  `CreateRectangle2` não seja 100% conhecida.
+- `caso_23_resize_retangulo`: aumenta **só a largura** de `RetanguloBase` em 4 cm,
+  mantendo a altura — isola tamanho de posição (`SetSize` normalmente mantém um canto/
+  centro de referência, então a posição não deve mudar, ou muda de forma previsível).
+
+Pendente: rodar a macro no CorelDRAW e comparar `caso_22`/`caso_23` contra `caso_00`.
 
 ## HIPÓTESES / OBSERVAÇÕES (não confirmadas — precisam de mais amostras)
 
