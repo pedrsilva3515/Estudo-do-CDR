@@ -27,6 +27,14 @@ Option Explicit
 ' COMO USAR: cole este modulo no editor VBA (Alt+F11 > GlobalMacros >
 ' inserir modulo > colar) e execute a Sub GerarCasosDeTeste1c (F5).
 ' Log em log_geracao_1c.txt na pasta de saida.
+'
+' RESULTADO (ja rodado e analisado — ver docs/descobertas-fase3-page1.md,
+' secoes P5/P6): confirmou a unidade de coordenada (100.000 unid/cm, exato)
+' e localizou a regiao da geometria de RetanguloBase (offset 16 do arquivo,
+' fora do "chunk nomeado" do objeto). NOTA: a primeira rodada gravou os
+' manifestos JSON com posicao/tamanho zerados por um bug (GetPosition/
+' GetSize chamados com CDbl(x0) em vez de x0 — CDbl() cria um valor
+' temporario e nao recebe o ByRef de volta); ja corrigido no codigo abaixo.
 '==========================================================================
 
 Private Const PASTA_SAIDA As String = "C:\CDR_Testes\"
@@ -89,15 +97,15 @@ Private Sub Caso22_MoveRetangulo()
     If sr.Count = 0 Then Err.Raise ERRO_CUSTOM, , "RetanguloBase nao encontrado"
 
     Dim x0 As Double, y0 As Double, w0 As Double, h0 As Double
-    sr(1).GetPosition CDbl(x0), CDbl(y0)
-    sr(1).GetSize CDbl(w0), CDbl(h0)
+    sr(1).GetPosition x0, y0
+    sr(1).GetSize w0, h0
 
     Dim dx As Double, dy As Double
     dx = 5: dy = -1
     sr(1).Move dx, dy
 
     Dim x1 As Double, y1 As Double
-    sr(1).GetPosition CDbl(x1), CDbl(y1)
+    sr(1).GetPosition x1, y1
 
     SalvarCaso doc, "caso_22_move_retangulo"
     EscreverManifesto "caso_22_move_retangulo", "caso_00_base.cdr", "move_objeto_vetorial", _
@@ -127,8 +135,8 @@ Private Sub Caso23_RedimensionaRetangulo()
     If sr.Count = 0 Then Err.Raise ERRO_CUSTOM, , "RetanguloBase nao encontrado"
 
     Dim x0 As Double, y0 As Double, w0 As Double, h0 As Double
-    sr(1).GetPosition CDbl(x0), CDbl(y0)
-    sr(1).GetSize CDbl(w0), CDbl(h0)
+    sr(1).GetPosition x0, y0
+    sr(1).GetSize w0, h0
 
     Dim novaLargura As Double
     novaLargura = w0 + 4  ' cresce 4 cm so na largura; altura fica igual
@@ -136,8 +144,8 @@ Private Sub Caso23_RedimensionaRetangulo()
     sr(1).SetSize novaLargura, h0
 
     Dim x1 As Double, y1 As Double, w1 As Double, h1 As Double
-    sr(1).GetPosition CDbl(x1), CDbl(y1)
-    sr(1).GetSize CDbl(w1), CDbl(h1)
+    sr(1).GetPosition x1, y1
+    sr(1).GetSize w1, h1
 
     SalvarCaso doc, "caso_23_resize_retangulo"
     EscreverManifesto "caso_23_resize_retangulo", "caso_00_base.cdr", "redimensiona_objeto_vetorial", _

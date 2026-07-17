@@ -113,48 +113,98 @@ número de valores brutos da tabela (11) — possivelmente contagem conta "propr
 enquanto alguns valores da tabela são pares (offset+tipo) ou sub-tamanhos, não só
 offsets. Não fechado — próxima rodada.
 
-### Geometria: candidato forte, ainda não confirmado (bloqueado por falta de caso de teste)
+### P5. H3 CONFIRMADA: unidade de coordenada vetorial = exatamente 100.000 unidades/cm (0,1 µm) (n=2 casos, delta limpo e exato)
 
-Logo depois do fim do JSON (offset 1146 em `caso_00`), aparecem 4 números em ponto
-flutuante (`float32` LE): **10.1444091796875, 9.52587890625, 1.875, 1.875**. São fortes
-candidatos a bounding box / posição do objeto — mas:
+Os casos `caso_22` (move `RetanguloBase` +5 cm X, −1 cm Y) e `caso_23` (aumenta só a
+largura em +4 cm) fecharam a hipótese H3 da Fase 2, que vinha de uma estimativa
+aproximada no movimento de um *bitmap*. Agora confirmado para um objeto **vetorial**,
+com deltas exatos, sem arredondamento:
 
-- Esses valores são **idênticos** entre `caso_00` e `caso_12` (onde `RetanguloBase` não
-  foi movido nem redimensionado) — consistente com "são a geometria do retângulo", mas
-  não prova nada sozinho, já que nada mudou.
-- O mesmo padrão **não se replicou para o objeto `ElipseTeste`** no `caso_12` — o cálculo
-  do início do chunk pela regra "nome está sempre 96 bytes após o início do chunk" só
-  vale para o retângulo; a elipse claramente usa uma tabela/estrutura diferente (`size`/
-  `count` deram valores absurdos ao tentar aplicar a mesma regra), o que faz sentido:
-  retângulo e elipse provavelmente têm sub-tipos de chunk geométrico distintos
-  (bounding box vs. centro+raios).
-- **Não havia, até esta rodada, nenhum caso de teste que movesse ou redimensionasse um
-  objeto vetorial por um delta conhecido** (o `caso_06` da Fase 1 move um *bitmap*, não
-  o retângulo vetorial) — sem isso, não dá para saber com confiança qual float é X, qual
-  é Y, e se são posição, tamanho, ou algo do documento todo (ex. página).
+```
+delta X (+5 cm) -> +500.000 unidades   (500.000 / 5 = 100.000 unid/cm, exato)
+delta Y (−1 cm) -> −100.000 unidades   (100.000 / 1 = 100.000 unid/cm, exato)
+```
 
-**Ação tomada:** macro nova `GeradorCasosZCF_1c.bas` (Fase 1c), com dois casos
-desenhados para fechar isso — mesma lógica de isolar uma variável por vez que já
-funcionou para o DPI do bitmap (Fase 1b, `caso_07`/`caso_08`):
+**Nota importante para quem for usar essa descoberta:** o manifesto JSON de `caso_22`/
+`caso_23` saiu com todos os campos de posição/tamanho zerados — bug no macro
+`GeradorCasosZCF_1c.bas` (`GetPosition`/`GetSize` foram chamados com os parâmetros
+envolvidos em `CDbl(x0)`, que cria um valor temporário e não escreve de volta em `x0`;
+o padrão `CDbl()` da skill `coreldraw-vba` serve para conversão de entrada, não para
+capturar saída `ByRef`). A confirmação acima não depende do manifesto — veio de
+comparar os bytes de `caso_22`/`caso_23` contra `caso_00` e achar deltas que batem
+exatamente com o que a macro *deveria* ter feito (o `Move`/`SetSize` em si funcionaram
+normalmente; só o log ficou incompleto). Fica registrado para não reusar esse padrão de
+log sem corrigir.
 
-- `caso_22_move_retangulo`: move `RetanguloBase` por um delta conhecido e **assimétrico**
-  (+5 cm X, −1 cm Y — de propósito diferente em cada eixo, para não confundir X com Y se
-  a ordem dos campos for ambígua). O manifesto grava posição/tamanho antes e depois via
-  `GetPosition`/`GetSize`, então o gabarito é exato mesmo que a semântica do parâmetro de
-  `CreateRectangle2` não seja 100% conhecida.
-- `caso_23_resize_retangulo`: aumenta **só a largura** de `RetanguloBase` em 4 cm,
-  mantendo a altura — isola tamanho de posição (`SetSize` normalmente mantém um canto/
-  centro de referência, então a posição não deve mudar, ou muda de forma previsível).
+### P6. Localização da geometia de `RetanguloBase`: região fixa no início do arquivo, não dentro do "chunk nomeado" do objeto (n=3 casos)
 
-Pendente: rodar a macro no CorelDRAW e comparar `caso_22`/`caso_23` contra `caso_00`.
+A posição/tamanho de `RetanguloBase` **não está** nos 4 floats encontrados depois do
+JSON de estilo (P3/P4) — esses 4 floats (`10.1444091796875, 9.52587890625, 1.875,
+1.875`) ficaram **idênticos** em `caso_22` (objeto movido) e mudaram de forma confusa em
+`caso_23` — não são a geometria, ou pelo menos não são só isso (hipótese aberta: podem
+ser um ponto de referência/âncora de rotação, independente de posição).
+
+A geometria de verdade está numa região **bem mais cedo no arquivo**, a partir do
+offset absoluto 16 — a mesma região que já aparecia nos primeiros hex dumps deste
+projeto como "3 blocos de 16 bytes quase idênticos" (ver `docs/descobertas-fase2.md`,
+C5, que já suspeitava disso a partir do movimento de um bitmap). Confirmado agora:
+
+- **Essa região é específica de `RetanguloBase`, não da página inteira**: comparando
+  `caso_00` (só o retângulo) com `caso_12` (retângulo + elipse, retângulo sem se mover),
+  os 48 bytes da região ficam **byte-idênticos** — adicionar outro objeto em outra
+  posição não altera nada aqui. Ou seja, não é um bounding-box agregado da página; é
+  algo específico do primeiro objeto (a confirmar se é "por índice de criação" ou "por
+  algum outro critério" com mais objetos nomeados).
+- **Layout de cada bloco de 16 bytes** (`int32` LE, 4 campos): `[X, flag=2, campo?, Y]`.
+  - Campo 0 (**X**): delta exato de +500.000 no `caso_22` (move +5cm X); **inalterado**
+    no `caso_23` (resize sem mover X) — confirma que é a coordenada X.
+  - Campo 1 (constante `2` em todos os casos testados): não muda com posição nem
+    tamanho — provável tipo/flag, não geometria.
+  - Campo 2 (**hipótese, não confirmado**): muda de forma não-linear no `caso_22`
+    (+349.285 a +350.285, não é múltiplo limpo de 100.000) mas fica **inalterado** no
+    `caso_23` (resize sem mudar posição). Padrão consistente com um **checksum/valor
+    derivado de (X,Y)** recalculado a cada mudança de posição, não uma coordenada bruta
+    — hipótese razoável, não fechada.
+  - Campo 3 (**Y**): delta exato de −100.000 no `caso_22` (move −1cm Y) — confirma que é
+    a coordenada Y. **Mas também muda no `caso_23`** (resize só de largura): +133.333,
+    o que **não é compatível com "Y simples"**, já que a altura não mudou. 133.333 ≈
+    400.000 (delta de largura em unidades) ÷ 3 — condizente com um **ponto de controle
+    de curva Bézier cúbica** (regra clássica "1/3 e 2/3 do segmento" usada para
+    representar uma aresta reta como Bézier), não uma posição pura. **Hipótese forte,
+    não fechada**: os retângulos podem ser armazenados internamente como curvas
+    fechadas (4 cantos + pontos de controle), não como um bounding box simples — comum
+    em formatos vetoriais, e explicaria por que um campo "parece Y" mas reage a mudança
+    de largura.
+  - **3º bloco de 16 bytes** difere dos outros 2 por uma constante fixa: campo X é
+    1.000 unidades mais negativo (`-751713` vs `-750713`). 1.000 unidades = 0,01 cm =
+    **exatamente metade da largura do contorno** (`"width":"2000"` no JSON de estilo,
+    P1, na mesma escala de 100.000 unid/cm → 2000 unid = 0,02cm, metade = 1.000
+    unidades). Hipótese: blocos 1–2 = bounding box só do preenchimento; bloco 3 =
+    bounding box incluindo a expansão do contorno (que se estende para fora do
+    caminho, centrado nele).
+
+**Resumo do nível de confiança:** unidade (100.000/cm) e a existência de campos X/Y
+nessa região — **confirmados**. Layout exato dos 4 campos por bloco, significado do
+campo 2 (checksum?) e do padrão 1/3 do campo Y sob resize (Bézier?), e diferença do
+3º bloco (contorno?) — **hipóteses fortes, consistentes com todas as evidências
+coletadas, mas não fechadas**. Não testado ainda: rotação, um objeto com altura
+alterada (só testamos largura), e se esse padrão se repete para outros objetos além do
+primeiro criado no documento.
+
+### Próximos casos de teste sugeridos (Fase 1d)
+
+- Redimensionar só a **altura** (complementa `caso_23`, que só mexeu na largura) — se a
+  hipótese Bézier estiver certa, deve mexer no campo X (não no Y) de forma fracionada.
+- Rotacionar o retângulo por um ângulo conhecido — para ver se aparece em algum lugar
+  próximo dessa mesma região, ou se vive em outro lugar (matriz de transformação?).
+- Criar um SEGUNDO objeto nomeado e movê-lo (não o primeiro) — para confirmar se cada
+  objeto tem sua própria região de 3 blocos, e onde ela fica localizada em relação ao
+  primeiro objeto (logo depois? em outro lugar determinado pela ordem de criação?).
 
 ## HIPÓTESES / OBSERVAÇÕES (não confirmadas — precisam de mais amostras)
 
-- **H4 — Unidade de coordenada:** a hipótese H3 da Fase 2 (`~100.000 unidades/cm`,
-  baseada no diff do `caso_06`) não foi revisitada nesta rodada. Vários candidatos a
-  campo de coordenada aparecem perto dos blocos de nome/estilo (ex. valores como
-  `40001`, `2000`, `16001` no início do arquivo), mas nenhum foi cruzado com uma posição
-  conhecida de forma conclusiva ainda.
+- ~~H4 — Unidade de coordenada~~: **confirmada, virou P5 acima** (100.000 unidades/cm,
+  exato, testado com um objeto vetorial movido por delta conhecido).
 - **Contagem de objetos no `helo.cdr`:** o arquivo real tem **24 blocos de estilo JSON**
   em `page1.dat` — o mesmo número que o CorelDRAW reporta como "24 bitmaps" na
   interface. Consistente com a hipótese de deduplicação da Fase 1b (D2): são
