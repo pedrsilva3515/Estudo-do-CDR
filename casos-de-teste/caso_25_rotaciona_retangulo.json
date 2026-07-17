@@ -1,0 +1,10 @@
+{
+  "caso": "caso_25_rotaciona_retangulo",
+  "arquivo": "caso_25_rotaciona_retangulo.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "rotaciona_objeto_vetorial",
+  "descricao": "Abre o caso_00 e rotaciona RetanguloBase em 30 graus em torno do proprio centro, sem mover nem redimensionar. Objetivo: localizar onde a rotacao e armazenada em page1.dat.",
+  "parametros": { "objeto": "RetanguloBase", "angulo_graus": 30, "tamanho_x_cm": 6, "tamanho_y_cm": 4, "posicao_x_cm": 3, "posicao_y_cm": 7 },
+  "gerado_em": "2026-07-17 18:57:27",
+  "corel_versao": "26.1 build 143"
+}

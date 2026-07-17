@@ -1,0 +1,10 @@
+{
+  "caso": "caso_26_segundo_retangulo",
+  "arquivo": "caso_26_segundo_retangulo.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "add_segundo_objeto_vetorial",
+  "descricao": "Abre o caso_00 e cria um SEGUNDO retangulo nomeado (RetanguloDois), em posicao e cor distintas, sem alterar RetanguloBase. Objetivo: achar a regiao de geometria do segundo objeto e ver onde fica em relacao a do primeiro.",
+  "parametros": { "objeto_novo": "RetanguloDois", "cor": "CMYK 0,0,100,0", "posicao_x_cm": 12, "posicao_y_cm": 26, "tamanho_x_cm": 15, "tamanho_y_cm": 14, "objeto_original_inalterado": "RetanguloBase" },
+  "gerado_em": "2026-07-17 18:57:28",
+  "corel_versao": "26.1 build 143"
+}

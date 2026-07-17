@@ -1,0 +1,7 @@
+2026-07-17 18:57:26  ==================================================
+2026-07-17 18:57:26  Inicio da geracao Fase 1d
+2026-07-17 18:57:26  CorelDRAW: 26.1 build 143
+2026-07-17 18:57:27  OK: caso_24_resize_altura
+2026-07-17 18:57:27  OK: caso_25_rotaciona_retangulo
+2026-07-17 18:57:28  OK: caso_26_segundo_retangulo
+2026-07-17 18:57:28  Fim da geracao 1d: 3 casos OK, 0 falhas

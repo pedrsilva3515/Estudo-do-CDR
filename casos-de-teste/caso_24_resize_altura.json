@@ -1,0 +1,10 @@
+{
+  "caso": "caso_24_resize_altura",
+  "arquivo": "caso_24_resize_altura.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "redimensiona_objeto_vetorial",
+  "descricao": "Abre o caso_00 e aumenta so a ALTURA de RetanguloBase em 4cm (mesmo delta do caso_23, eixo oposto). Objetivo: testar se o campo X reage a ~1/3 do delta, espelhando o que o campo Y fez no caso_23 (hipotese de ponto de controle Bezier).",
+  "parametros": { "objeto": "RetanguloBase", "eixo": "altura", "tamanho_antes_x_cm": 6, "tamanho_antes_y_cm": 4, "tamanho_depois_x_cm": 6, "tamanho_depois_y_cm": 8, "posicao_antes_x_cm": 3, "posicao_antes_y_cm": 7, "posicao_depois_x_cm": 3, "posicao_depois_y_cm": 7 },
+  "gerado_em": "2026-07-17 18:57:27",
+  "corel_versao": "26.1 build 143"
+}
