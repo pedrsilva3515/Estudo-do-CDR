@@ -25,7 +25,7 @@ de confiança explícito (`confirmado por N casos` vs. `hipótese não testada`)
 | 1 | Gerador de casos de teste (macro VBA para CorelDRAW 2025 OEM) | **Concluída** — 16/16 casos gerados sem falhas (Corel 26.0 build 101) |
 | 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Concluída** — 6/6 casos gerados sem falhas, incluindo a foto real (caso_21) |
 | 2 | Motor de diferenças binárias (Python) | **Concluída** — 21 pares comparados, relatórios versionados |
-| 3 | Parser incremental (Python) | **Em andamento** — `zcfreader` extrai bitmaps (RGB/CMYK/alfa) de qualquer `.cdr`, com testes automatizados; objetos/texto/páginas ainda não têm parser |
+| 3 | Parser incremental (Python) | **Em andamento** — `zcfreader` extrai bitmaps (RGB/CMYK/alfa) e nomes/estilos de objetos de `page1.dat`, com testes automatizados; geometria (posição/curvas) e texto ainda não têm parser |
 | 4 | Especificação pública + biblioteca instalável com testes | Não iniciada |
 
 ## Estrutura do repositório
@@ -35,6 +35,7 @@ docs/
   evidencias-amostra-helo.md   Evidências do arquivo de exemplo real (helo.cdr)
   descobertas-fase2.md         Descobertas confirmadas + hipóteses, com nível de confiança
   descobertas-fase1b.md        Descobertas dos casos 16-20 (multi-bitmap, dedup, CMYK, alfa)
+  descobertas-fase3-page1.md   Descobertas sobre page1.dat (nomes, estilo JSON, chunks)
 casos-de-teste/                21 .cdr gerados pelas Fases 1/1b + manifestos JSON + imagens-fonte
 fase1-gerador-casos/
   GeradorCasosZCF.bas          Macro VBA que gera os casos de teste + manifestos JSON
@@ -79,3 +80,8 @@ e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
   de teste e contra o `helo.cdr` original (4 imagens extraídas corretamente). No processo,
   uma regra de formato documentada na Fase 1b (tamanho do registro `RI`) se mostrou
   errada sob teste automatizado e foi corrigida — ver `docs/descobertas-fase1b.md`.
+- **`page1.dat` parcialmente decodificado:** as propriedades de preenchimento/contorno/
+  transparência de cada objeto são gravadas como **JSON em texto puro** (não binário),
+  e nomes de layers/objetos aparecem em UTF-16LE — ambos já extraíveis pela biblioteca.
+  A geometria (posição, tamanho, curvas) ainda está numa árvore de "chunks" binários não
+  decodificada — ver `docs/descobertas-fase3-page1.md`.

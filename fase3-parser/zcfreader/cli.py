@@ -20,16 +20,32 @@ def _listar(caminho: Path) -> int:
         bitmaps = doc.bitmaps()
         if bitmaps is None:
             print("  bitmaps: nenhum (documento sem content/data/Bitmaps.dat)")
-            return 0
-        print(f"  bitmaps: {len(bitmaps)} imagem(ns) unica(s)")
-        for r in bitmaps:
-            img = r.imagem
-            mascara = f", com mascara de transparencia {r.mascara.largura}x{r.mascara.altura}" if r.mascara else ""
-            print(
-                f"    [{r.indice}] {img.largura}x{img.altura} px, {img.espaco_de_cor} "
-                f"({img.bits_por_pixel} bpp), {img.resolucao_x_dpi:.0f}x{img.resolucao_y_dpi:.0f} dpi"
-                f"{mascara}"
-            )
+        else:
+            print(f"  bitmaps: {len(bitmaps)} imagem(ns) unica(s)")
+            for r in bitmaps:
+                img = r.imagem
+                mascara = f", com mascara de transparencia {r.mascara.largura}x{r.mascara.altura}" if r.mascara else ""
+                print(
+                    f"    [{r.indice}] {img.largura}x{img.altura} px, {img.espaco_de_cor} "
+                    f"({img.bits_por_pixel} bpp), {img.resolucao_x_dpi:.0f}x{img.resolucao_y_dpi:.0f} dpi"
+                    f"{mascara}"
+                )
+
+        itens = doc.pagina(1)
+        if itens is not None:
+            print(f"  page1.dat: {len(itens)} nome(s) encontrado(s) (layers e/ou objetos)")
+            for item in itens:
+                cor = ""
+                if item.estilo and "fill" in item.estilo:
+                    cor = f", cor: {item.estilo['fill'].get('primaryColor', '')}"
+                print(f"    {item.nome!r}{cor}")
+            estilos = doc.estilos_da_pagina(1) or []
+            if len(estilos) != sum(1 for i in itens if i.estilo is not None):
+                print(
+                    f"  aviso: {len(estilos)} bloco(s) de estilo no total, mas so "
+                    f"{sum(1 for i in itens if i.estilo is not None)} pareado(s) com um nome "
+                    f"— documento tem objetos sem nome, use estilos_da_pagina() para ve-los todos"
+                )
     return 0
 
 

@@ -1,10 +1,15 @@
 # Fase 3 — Parser incremental (`zcfreader`)
 
-Biblioteca Python que abre um `.cdr` moderno (formato ZCF) e extrai as imagens de
-`content/data/Bitmaps.dat` **sem depender do CorelDRAW instalado**. Primeira fatia do
-parser incremental da Fase 3 — cobre só bitmaps por enquanto (a estrutura mais bem
-confirmada até aqui); objetos vetoriais, texto e páginas (`root.dat`, `page*.dat`) ainda
-não têm parser.
+Biblioteca Python que abre um `.cdr` moderno (formato ZCF) **sem depender do CorelDRAW
+instalado** e extrai:
+
+- as imagens de `content/data/Bitmaps.dat` (RGB, CMYK, máscara de transparência);
+- nomes de layers/objetos e seus estilos de preenchimento/contorno/transparência de
+  `content/data/page*.dat` (sem geometria ainda — ver limitações abaixo).
+
+Objetos vetoriais (posição, tamanho, curvas) e texto ainda não têm parser — a árvore de
+"chunks" binários de `page*.dat` só foi parcialmente decodificada, ver
+`docs/descobertas-fase3-page1.md`.
 
 Zero dependências externas — usa só `zipfile`, `struct` e `zlib` da biblioteca padrão
 (inclusive o escritor de PNG é próprio, ver `zcfreader/png_writer.py`).
@@ -30,6 +35,18 @@ Linha de comando:
 ```
 python -m zcfreader.cli listar arquivo.cdr
 python -m zcfreader.cli extrair arquivo.cdr --saida pasta/
+```
+
+Nomes e estilos de `page1.dat`:
+
+```python
+with abrir_cdr("arquivo.cdr") as doc:
+    for item in doc.pagina(1) or []:
+        print(item.nome, item.estilo)  # estilo=None se o objeto/layer nao tiver um
+
+    # mais completo: TODOS os blocos de estilo, mesmo sem nome associado
+    for offset, estilo in doc.estilos_da_pagina(1) or []:
+        print(offset, estilo["fill"]["primaryColor"])
 ```
 
 ## O que está confirmado e implementado
@@ -60,6 +77,8 @@ quando a validação manual "parece" bater.
 
 ## Limitações conhecidas
 
+### Bitmaps (`content/data/Bitmaps.dat`)
+
 - **Conversão CMYK→RGB é ingênua** (fórmula padrão sem gestão de cor / perfil ICC). Boa
   para preview e extração de conteúdo; as cores podem divergir um pouco do que o
   CorelDRAW renderiza com o perfil de cor do documento.
@@ -74,9 +93,22 @@ quando a validação manual "parece" bater.
   grandes (dezenas de milhões de pixels) ou processamento em lote. Se isso virar gargalo
   real, a especificação original do projeto já previa Rust como alternativa; um caminho
   mais simples seria vetorizar com `numpy` como dependência opcional.
-- **Objetos vetoriais, texto e estrutura de páginas não são lidos** — só bitmaps.
 - Campos ainda não identificados no cabeçalho do `RI` (ver D3 em
   `docs/descobertas-fase1b.md`) são ignorados, não interpretados.
+
+### Página (`content/data/page*.dat`)
+
+- **Nenhuma geometria é extraída** (posição, tamanho, ângulo, pontos de curva) — só
+  nomes e estilo de preenchimento/contorno/transparência. A árvore de "chunks" binários
+  que guarda a geometria não foi decodificada ainda (ver `docs/descobertas-fase3-page1.md`).
+- **`doc.pagina()` não diferencia layer de shape** — os dois usam o mesmo padrão de nome.
+- **O pareamento nome↔estilo de `doc.pagina()` só é confiável quando todo objeto tem
+  nome.** A maioria dos objetos em documentos reais não é nomeada pelo usuário — nesse
+  caso, use `doc.estilos_da_pagina()`, que devolve todos os blocos de estilo sem tentar
+  associá-los a um nome. Verificado no `helo.cdr`: 24 blocos de estilo, só 2 nomes.
+- Documentos com texto artístico podem ter dados binários (kerning, curvas de glifo) que
+  colidem com o padrão heurístico de nome; um filtro (proporção de letras) reduz mas não
+  elimina falsos positivos.
 
 ## Testes
 
