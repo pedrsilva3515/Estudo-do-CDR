@@ -221,37 +221,89 @@ nunca transformado), só ele aparece nessa região — consistente com todas as 
 apareceu e mudou exatamente nos 3 casos que *transformaram* `RetanguloBase`, e não
 apareceu para `RetanguloDois`, que nunca foi transformado.
 
-**Se essa hipótese estiver certa**, a geometria *permanente* de cada objeto (a que
-realmente é usada para desenhar, independente de qual foi selecionado por último) deve
-estar em outro lugar — provavelmente dentro do "chunk nomeado" de cada objeto (P3/P4),
-talvez nos mesmos 4 floats que descartei como candidatos a geometria numa rodada
-anterior (eles podem não ser posição pura, mas ainda fazer parte da representação da
-curva do objeto). Não fechado.
+### P9. Hipótese do cache (P8) REFUTADA — a região do offset 16 é fixa do primeiro objeto criado, não do último transformado (n=1, teste decisivo)
+
+A Fase 1e trouxe o teste decisivo: `caso_27` move **`RetanguloDois`** (não
+`RetanguloBase`) por um delta conhecido e confirmado no manifesto (+7cm X, −3cm Y).
+Resultado — **os campos X/Y do offset 16 não mudaram nada**, continuam idênticos ao
+`caso_00` (posição de `RetanguloBase`, que nunca se moveu neste caso):
+
+```
+campo X [16/32/48]:  -750713 em todos os casos (caso_00, caso_26, caso_27) — inalterado
+campo Y [28/44/60]: -1185053 em todos os casos — inalterado
+```
+
+Isso **refuta a hipótese P8** ("cache do último objeto transformado"): se fosse isso, o
+campo deveria ter passado a refletir `RetanguloDois` depois de movê-lo. Não mudou. A
+explicação mais simples agora: **essa região é fixa para o primeiro objeto criado no
+documento** (`RetanguloBase`, criado pela própria macro de geração do `caso_00`), não
+relacionada a seleção nem a "última transformação" — algo como um slot de índice fixo
+(objeto #0), não um cache dinâmico.
+
+**Achado colateral inesperado:** embora X/Y não tenham mudado, **outros dois campos do
+mesmo bloco de 16 bytes mudaram muito** entre `caso_00`/`caso_26` e `caso_27`:
+
+```
+campo em [20/36/52] (antes sempre constante "2"):        2 -> 814.947   (delta +814.945)
+campo em [24/40/56] (antes "2" ou mudava so com RetBase): 2 -> 2.349.287 (delta +2.349.285)
+```
+
+Esses dois campos **não** mudaram em `caso_26` (só criar `RetanguloDois`, sem mover) —
+só mudaram em `caso_27` (criar **e mover**). Não são coordenadas de nenhum objeto
+conhecido (valores grandes demais e sem relação clara com nenhum delta de posição
+esperado). Hipótese solta, não testada: podem ser contadores/IDs internos que
+incrementam a cada operação de transformação registrada no documento (não amarrados a
+qual objeto foi transformado), possivelmente ligados ao histórico de undo/redo que o
+CorelDRAW mantém dentro do arquivo salvo.
+
+**Confirmação adicional (comparando `caso_26` vs `caso_27` no "chunk" do próprio
+`RetanguloDois`):** os 3 floats no chunk nomeado de `RetanguloDois` (o mesmo tipo de
+campo que já tínhamos descartado como não-posição para `RetanguloBase`) **também não
+mudaram** com o movimento (`11.430511474609375, 11.33514404296875, 1.875` — idênticos
+em `caso_26` e `caso_27`). Confirma, agora para os DOIS objetos testados, que esses
+floats não são posição. Curiosamente, o terceiro valor (`1.875`) é **igual** para
+`RetanguloBase` e `RetanguloDois`, apesar de terem tamanhos bem diferentes (6×4cm vs.
+15×14cm) — sugere que não é específico do objeto, pode ser uma constante do documento
+(tolerância de grade, raio padrão de algo) não relacionada à geometria da forma.
+
+**Conclusão honesta desta rodada:** avançamos em entender o que a geometria **não é**
+(não é Bézier, não é um cache por seleção, os floats do chunk não são posição), mas
+**ainda não sabemos onde fica a posição permanente de um objeto que não é o primeiro
+criado no documento.** `RetanguloDois` foi movido de forma real e confirmada pelo
+CorelDRAW, mas sua nova posição (19,23cm) não foi localizada em nenhum lugar do arquivo
+com as técnicas de busca usadas até aqui.
 
 **Resumo do nível de confiança:**
-- Unidade (100.000/cm) e campos X/Y = canto esquerdo/topo da bounding box — **confirmado
-  com alta precisão** (move, resize de altura, rotação).
+- Unidade (100.000/cm) e campos X/Y do offset 16 = canto esquerdo/topo da bounding box
+  de `RetanguloBase` especificamente — **confirmado com alta precisão**.
 - Hipótese Bézier — **refutada**.
-- Região do offset 16 = cache do último objeto transformado (não um slot por objeto) —
-  **hipótese forte, não fechada**, precisa de um teste que MOVA o segundo objeto para
-  confirmar (se a região passar a refletir `RetanguloDois`, confirma).
-- Onde vive a geometria *permanente* de cada objeto (para desenhar objetos nunca
-  selecionados) — **em aberto**, provável próximo alvo de investigação.
-- `caso_23` (resize de largura) — **necessita re-execução** com o manifesto corrigido
-  antes de ser reutilizado como evidência.
+- Hipótese do cache do último objeto transformado — **refutada**.
+- Região do offset 16 = slot fixo do primeiro objeto (índice 0?) — **hipótese mais
+  simples que sobrevive às evidências atuais, não fechada**.
+- Onde vive a posição de um objeto que não é o primeiro (`RetanguloDois`) — **em
+  aberto**. Os 2 campos que mudaram bastante em `caso_27` não parecem ser posição, mas
+  não foram decodificados.
+- `caso_23` (resize de largura) — **ainda precisa de re-execução** com o manifesto
+  corrigido.
 
-### Próximos casos de teste sugeridos (Fase 1e)
+### Próximos passos (em aberto — sem teste único óbvio desta vez)
 
-- **Mover `RetanguloDois`** (não `RetanguloBase`) por um delta conhecido — teste decisivo
-  para a hipótese P8: se a região do offset 16 passar a refletir `RetanguloDois`, ou se
-  aparecer uma segunda região em outro lugar, ou se nada mudar (a geometria permanente
-  estar em outro lugar, com esta região realmente amarrada só ao objeto #1).
-- **Re-rodar o equivalente do `caso_23`** (resize de largura) com o manifesto corrigido,
-  para ter um gabarito confiável e revisitar a anomalia dos 133.333.
-- Uma vez a hipótese do cache confirmada ou refutada, procurar a geometria permanente
-  dentro do "chunk nomeado" de cada objeto — provavelmente reexaminando os 4 floats após
-  o JSON de estilo (P3/P4) com a mesma rigor usado aqui (delta previsto vs. observado),
-  em vez de tentar adivinhar o significado deles isoladamente.
+Diferente das rodadas anteriores, não há um caso de teste único e claramente decisivo
+para o próximo passo — a busca por "onde fica a posição de um objeto que não é o
+primeiro" precisa de uma abordagem diferente (provavelmente examinar o arquivo inteiro
+de forma mais sistemática, não só os pontos já mapeados). Candidatos, em ordem de
+esforço crescente:
+
+- Fazer uma varredura completa de `caso_27` procurando qualquer par de `int32` (ou
+  `float32`) cujo delta bata com o movimento real de `RetanguloDois` (+700.000 X,
+  ±300.000 Y), em vez de assumir onde procurar — mais trabalhoso, mas não depende de
+  hipótese prévia sobre a estrutura.
+- Investigar `masterPage.dat` e `content/root.dat` (ainda não abertos nesta
+  investigação) — é possível que a geometria "de verdade" de cada objeto fique
+  referenciada a partir de outro arquivo, não só dentro de `page1.dat`.
+- Reexaminar os valores ainda não identificados da tabela de offsets do "chunk" de cada
+  objeto (P3/P4) — vários offsets da tabela nunca foram checados contra nenhuma
+  âncora conhecida.
 
 ## HIPÓTESES / OBSERVAÇÕES (não confirmadas — precisam de mais amostras)
 

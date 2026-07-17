@@ -164,3 +164,11 @@ segundo objeto.
 | Arquivo | Base | O que testa |
 |---|---|---|
 | `caso_27_move_segundo_retangulo.cdr` | caso_00 | Cria `RetanguloDois` e move só ele (delta diferente do `caso_22`, para não confundir os dois) — `RetanguloBase` fica parado |
+
+Resultado: a hipótese do cache **caiu**. Os campos X/Y continuaram travados na posição
+de `RetanguloBase`, mesmo com `RetanguloDois` confirmadamente movido (+7cm X, −3cm Y,
+conferido pelo manifesto). Explicação mais simples agora: essa região é um slot fixo do
+*primeiro* objeto criado no documento, não um cache do último transformado. A posição
+real de `RetanguloDois` não foi encontrada em nenhum lugar do arquivo ainda — ver P9 em
+`docs/descobertas-fase3-page1.md`. Sem um próximo teste único óbvio desta vez; a seção
+"Próximos passos" do documento lista os caminhos candidatos.
