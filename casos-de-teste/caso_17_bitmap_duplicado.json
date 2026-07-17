@@ -1,0 +1,10 @@
+{
+  "caso": "caso_17_bitmap_duplicado",
+  "arquivo": "caso_17_bitmap_duplicado.cdr",
+  "arquivo_base": "caso_01_add_bitmap_jpeg.cdr",
+  "tipo_alteracao": "duplica_bitmap",
+  "descricao": "Abre o caso_01 e duplica o bitmap existente. Se Bitmaps.dat nao crescer, ha deduplicacao de imagens (H2).",
+  "parametros": { "operacao": "Duplicate", "delta_x_cm": 2, "delta_y_cm": -2 },
+  "gerado_em": "2026-07-17 13:41:48",
+  "corel_versao": "26.0 build 101"
+}

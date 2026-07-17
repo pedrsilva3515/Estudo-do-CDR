@@ -1,0 +1,10 @@
+{
+  "caso": "caso_16_dois_bitmaps_diferentes",
+  "arquivo": "caso_16_dois_bitmaps_diferentes.cdr",
+  "arquivo_base": "caso_01_add_bitmap_jpeg.cdr",
+  "tipo_alteracao": "add_segundo_bitmap",
+  "descricao": "Abre o caso_01 e importa uma segunda imagem, diferente da primeira. Testa multiplos registros UI no Bitmaps.dat (H1/H2).",
+  "parametros": { "formato_origem": "JPEG", "arquivo_fonte": "fonte_alt.jpg", "observacao": "imagem DIFERENTE da ja presente" },
+  "gerado_em": "2026-07-17 13:41:47",
+  "corel_versao": "26.0 build 101"
+}

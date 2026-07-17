@@ -1,0 +1,10 @@
+{
+  "caso": "caso_19_bitmap_cmyk",
+  "arquivo": "caso_19_bitmap_cmyk.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "add_bitmap_cmyk",
+  "descricao": "Importa TIFF CMYK no base. Comparar cabecalho do Bitmaps.dat (bpp/stride/campos de cor) com o caso RGB (caso_03).",
+  "parametros": { "formato_origem": "TIFF", "arquivo_fonte": "fonte_cmyk.tif", "espaco_cor": "CMYK" },
+  "gerado_em": "2026-07-17 13:41:50",
+  "corel_versao": "26.0 build 101"
+}
