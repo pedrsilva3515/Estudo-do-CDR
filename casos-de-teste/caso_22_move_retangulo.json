@@ -1,0 +1,10 @@
+{
+  "caso": "caso_22_move_retangulo",
+  "arquivo": "caso_22_move_retangulo.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "move_objeto_vetorial",
+  "descricao": "Abre o caso_00 e move RetanguloBase (unico objeto vetorial) por um delta conhecido e assimetrico. Objetivo: achar os campos de POSICAO na arvore de chunks de page1.dat, comparando com o caso_00 (so deve mudar posicao, nao tamanho nem estilo).",
+  "parametros": { "objeto": "RetanguloBase", "delta_x_cm": 5, "delta_y_cm": -1, "posicao_antes_x_cm": 0, "posicao_antes_y_cm": 0, "posicao_depois_x_cm": 0, "posicao_depois_y_cm": 0, "tamanho_x_cm": 0, "tamanho_y_cm": 0 },
+  "gerado_em": "2026-07-17 18:45:11",
+  "corel_versao": "26.1 build 143"
+}

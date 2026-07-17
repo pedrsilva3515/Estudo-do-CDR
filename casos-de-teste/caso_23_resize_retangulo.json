@@ -1,0 +1,10 @@
+{
+  "caso": "caso_23_resize_retangulo",
+  "arquivo": "caso_23_resize_retangulo.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "redimensiona_objeto_vetorial",
+  "descricao": "Abre o caso_00 e aumenta so a largura de RetanguloBase em 4 cm (altura fica igual). Objetivo: isolar o(s) campo(s) de TAMANHO na arvore de chunks de page1.dat, distinguindo-os dos campos de posicao achados no caso_22.",
+  "parametros": { "objeto": "RetanguloBase", "tamanho_antes_x_cm": 0, "tamanho_antes_y_cm": 0, "tamanho_depois_x_cm": 0, "tamanho_depois_y_cm": 0, "posicao_antes_x_cm": 0, "posicao_antes_y_cm": 0, "posicao_depois_x_cm": 0, "posicao_depois_y_cm": 0 },
+  "gerado_em": "2026-07-17 18:45:12",
+  "corel_versao": "26.1 build 143"
+}

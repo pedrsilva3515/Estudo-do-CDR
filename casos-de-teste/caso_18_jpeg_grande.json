@@ -5,6 +5,6 @@
   "tipo_alteracao": "add_bitmap_grande",
   "descricao": "Importa JPEG de 2400x2400 px no base. Testa se imagens grandes sao guardadas como JPEG embutido em vez de raw (H2).",
   "parametros": { "formato_origem": "JPEG", "arquivo_fonte": "fonte_grande.jpg", "pixels": "2400x2400" },
-  "gerado_em": "2026-07-17 17:15:35",
-  "corel_versao": "26.0 build 101"
+  "gerado_em": "2026-07-17 18:45:06",
+  "corel_versao": "26.1 build 143"
 }

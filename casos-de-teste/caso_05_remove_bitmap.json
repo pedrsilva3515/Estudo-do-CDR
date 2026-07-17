@@ -5,6 +5,6 @@
   "tipo_alteracao": "remove_bitmap",
   "descricao": "Abre o caso_01 e apaga o bitmap. Comparar com caso_01 (o que some) e com caso_00 (que residuo fica).",
   "parametros": { "bitmap_removido": "o unico bitmap do caso_01" },
-  "gerado_em": "2026-07-17 12:51:32",
-  "corel_versao": "26.0 build 101"
+  "gerado_em": "2026-07-17 18:44:53",
+  "corel_versao": "26.1 build 143"
 }

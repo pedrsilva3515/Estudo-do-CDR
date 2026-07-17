@@ -5,6 +5,6 @@
   "tipo_alteracao": "nova_layer",
   "descricao": "Cria uma layer vazia chamada CamadaTeste no documento base.",
   "parametros": { "nome_layer": "CamadaTeste" },
-  "gerado_em": "2026-07-17 12:51:35",
-  "corel_versao": "26.0 build 101"
+  "gerado_em": "2026-07-17 18:44:55",
+  "corel_versao": "26.1 build 143"
 }

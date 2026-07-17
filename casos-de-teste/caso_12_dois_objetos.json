@@ -5,6 +5,6 @@
   "tipo_alteracao": "add_objeto",
   "descricao": "Adiciona uma elipse verde ao base. Base intermediaria dos casos 13 (grupo) e 15 (PowerClip).",
   "parametros": { "objeto": "elipse", "nome": "ElipseTeste", "cor": "CMYK 100,0,100,0" },
-  "gerado_em": "2026-07-17 12:51:37",
-  "corel_versao": "26.0 build 101"
+  "gerado_em": "2026-07-17 18:44:57",
+  "corel_versao": "26.1 build 143"
 }

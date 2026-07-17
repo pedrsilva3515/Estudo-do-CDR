@@ -5,6 +5,6 @@
   "tipo_alteracao": "add_segundo_bitmap",
   "descricao": "Abre o caso_01 e importa uma segunda imagem, diferente da primeira. Testa multiplos registros UI no Bitmaps.dat (H1/H2).",
   "parametros": { "formato_origem": "JPEG", "arquivo_fonte": "fonte_alt.jpg", "observacao": "imagem DIFERENTE da ja presente" },
-  "gerado_em": "2026-07-17 17:15:33",
-  "corel_versao": "26.0 build 101"
+  "gerado_em": "2026-07-17 18:45:05",
+  "corel_versao": "26.1 build 143"
 }

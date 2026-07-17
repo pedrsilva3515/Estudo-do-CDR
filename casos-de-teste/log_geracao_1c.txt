@@ -1,0 +1,6 @@
+2026-07-17 18:45:11  ==================================================
+2026-07-17 18:45:11  Inicio da geracao Fase 1c
+2026-07-17 18:45:11  CorelDRAW: 26.1 build 143
+2026-07-17 18:45:11  OK: caso_22_move_retangulo
+2026-07-17 18:45:12  OK: caso_23_resize_retangulo
+2026-07-17 18:45:12  Fim da geracao 1c: 2 casos OK, 0 falhas

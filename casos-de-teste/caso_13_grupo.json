@@ -5,6 +5,6 @@
   "tipo_alteracao": "grupo",
   "descricao": "Abre o caso_12 e agrupa o retangulo com a elipse. Unica diferenca em relacao ao caso_12 e o grupo.",
   "parametros": { "objetos_agrupados": ["RetanguloBase", "ElipseTeste"] },
-  "gerado_em": "2026-07-17 12:51:38",
-  "corel_versao": "26.0 build 101"
+  "gerado_em": "2026-07-17 18:44:58",
+  "corel_versao": "26.1 build 143"
 }

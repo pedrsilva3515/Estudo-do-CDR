@@ -5,6 +5,6 @@
   "tipo_alteracao": "add_bitmap_alpha",
   "descricao": "Importa PNG com transparencia no base. Comparar bpp/stride do cabecalho com o caso sem alfa (caso_02).",
   "parametros": { "formato_origem": "PNG", "arquivo_fonte": "fonte_alpha.png", "canal_alfa": true },
-  "gerado_em": "2026-07-17 17:15:37",
-  "corel_versao": "26.0 build 101"
+  "gerado_em": "2026-07-17 18:45:07",
+  "corel_versao": "26.1 build 143"
 }

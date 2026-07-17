@@ -1,76 +1,15 @@
-2026-07-17 13:41:45  ==================================================
-2026-07-17 13:41:45  Inicio da geracao Fase 1b
-2026-07-17 13:41:45  CorelDRAW: 26.0 build 101
-2026-07-17 13:41:45  Exportado: fonte_alt.jpg
-2026-07-17 13:41:45  Exportado: fonte_grande.jpg
-2026-07-17 13:41:46  Exportado: fonte_cmyk.tif
-2026-07-17 13:41:46  Exportado (com alfa): fonte_alpha.png
-2026-07-17 13:41:46  Imagens-fonte 1b geradas com sucesso
-2026-07-17 13:41:47  OK: caso_16_dois_bitmaps_diferentes
-2026-07-17 13:41:48  OK: caso_17_bitmap_duplicado
-2026-07-17 13:41:49  OK: caso_18_jpeg_grande
-2026-07-17 13:41:50  OK: caso_19_bitmap_cmyk
-2026-07-17 13:41:51  OK: caso_20_bitmap_alpha
-2026-07-17 13:41:51  PULADO: caso_21_foto_real (foto_real.jpg nao encontrada na pasta — opcional)
-2026-07-17 13:41:51  Fim da geracao 1b: 5 casos OK, 0 falhas, 1 pulados
-2026-07-17 17:01:36  ==================================================
-2026-07-17 17:01:36  Inicio da geracao Fase 1b
-2026-07-17 17:01:36  CorelDRAW: 26.0 build 101
-2026-07-17 17:01:36  Exportado: fonte_alt.jpg
-2026-07-17 17:01:37  Exportado: fonte_grande.jpg
-2026-07-17 17:01:37  Exportado: fonte_cmyk.tif
-2026-07-17 17:01:37  Exportado (com alfa): fonte_alpha.png
-2026-07-17 17:01:37  Imagens-fonte 1b geradas com sucesso
-2026-07-17 17:01:38  OK: caso_16_dois_bitmaps_diferentes
-2026-07-17 17:01:39  OK: caso_17_bitmap_duplicado
-2026-07-17 17:01:40  OK: caso_18_jpeg_grande
-2026-07-17 17:01:41  OK: caso_19_bitmap_cmyk
-2026-07-17 17:01:42  OK: caso_20_bitmap_alpha
-2026-07-17 17:01:42  PULADO: caso_21_foto_real (foto_real.jpg nao encontrada na pasta — opcional)
-2026-07-17 17:01:42  Fim da geracao 1b: 5 casos OK, 0 falhas, 1 pulados
-2026-07-17 17:08:23  ==================================================
-2026-07-17 17:08:23  Inicio da geracao Fase 1b
-2026-07-17 17:08:23  CorelDRAW: 26.0 build 101
-2026-07-17 17:08:23  Exportado: fonte_alt.jpg
-2026-07-17 17:08:24  Exportado: fonte_grande.jpg
-2026-07-17 17:08:24  Exportado: fonte_cmyk.tif
-2026-07-17 17:08:24  Exportado (com alfa): fonte_alpha.png
-2026-07-17 17:08:24  Imagens-fonte 1b geradas com sucesso
-2026-07-17 17:08:25  OK: caso_16_dois_bitmaps_diferentes
-2026-07-17 17:08:26  OK: caso_17_bitmap_duplicado
-2026-07-17 17:08:27  OK: caso_18_jpeg_grande
-2026-07-17 17:08:28  OK: caso_19_bitmap_cmyk
-2026-07-17 17:08:29  OK: caso_20_bitmap_alpha
-2026-07-17 17:08:29  PULADO: caso_21_foto_real (foto_real.jpg nao encontrada na pasta — opcional)
-2026-07-17 17:08:29  Fim da geracao 1b: 5 casos OK, 0 falhas, 1 pulados
-2026-07-17 17:11:53  ==================================================
-2026-07-17 17:11:53  Inicio da geracao Fase 1b
-2026-07-17 17:11:53  CorelDRAW: 26.0 build 101
-2026-07-17 17:11:53  Exportado: fonte_alt.jpg
-2026-07-17 17:11:53  Exportado: fonte_grande.jpg
-2026-07-17 17:11:53  Exportado: fonte_cmyk.tif
-2026-07-17 17:11:53  Exportado (com alfa): fonte_alpha.png
-2026-07-17 17:11:54  Imagens-fonte 1b geradas com sucesso
-2026-07-17 17:11:55  OK: caso_16_dois_bitmaps_diferentes
-2026-07-17 17:11:56  OK: caso_17_bitmap_duplicado
-2026-07-17 17:11:57  OK: caso_18_jpeg_grande
-2026-07-17 17:11:58  OK: caso_19_bitmap_cmyk
-2026-07-17 17:11:59  OK: caso_20_bitmap_alpha
-2026-07-17 17:11:59  PULADO: caso_21_foto_real (foto_real.jpg nao encontrada na pasta — opcional)
-2026-07-17 17:11:59  Fim da geracao 1b: 5 casos OK, 0 falhas, 1 pulados
-2026-07-17 17:15:31  ==================================================
-2026-07-17 17:15:31  Inicio da geracao Fase 1b
-2026-07-17 17:15:31  CorelDRAW: 26.0 build 101
-2026-07-17 17:15:31  Exportado: fonte_alt.jpg
-2026-07-17 17:15:32  Exportado: fonte_grande.jpg
-2026-07-17 17:15:32  Exportado: fonte_cmyk.tif
-2026-07-17 17:15:32  Exportado (com alfa): fonte_alpha.png
-2026-07-17 17:15:32  Imagens-fonte 1b geradas com sucesso
-2026-07-17 17:15:33  OK: caso_16_dois_bitmaps_diferentes
-2026-07-17 17:15:34  OK: caso_17_bitmap_duplicado
-2026-07-17 17:15:35  OK: caso_18_jpeg_grande
-2026-07-17 17:15:36  OK: caso_19_bitmap_cmyk
-2026-07-17 17:15:37  OK: caso_20_bitmap_alpha
-2026-07-17 17:15:37  caso_21_foto_real: usando arquivo foto_real.jpeg
-2026-07-17 17:15:38  OK: caso_21_foto_real
-2026-07-17 17:15:38  Fim da geracao 1b: 6 casos OK, 0 falhas, 0 pulados
+2026-07-17 18:45:03  ==================================================
+2026-07-17 18:45:03  Inicio da geracao Fase 1b
+2026-07-17 18:45:03  CorelDRAW: 26.1 build 143
+2026-07-17 18:45:03  Exportado: fonte_alt.jpg
+2026-07-17 18:45:04  Exportado: fonte_grande.jpg
+2026-07-17 18:45:04  Exportado: fonte_cmyk.tif
+2026-07-17 18:45:04  Exportado (com alfa): fonte_alpha.png
+2026-07-17 18:45:04  Imagens-fonte 1b geradas com sucesso
+2026-07-17 18:45:05  OK: caso_16_dois_bitmaps_diferentes
+2026-07-17 18:45:05  OK: caso_17_bitmap_duplicado
+2026-07-17 18:45:06  OK: caso_18_jpeg_grande
+2026-07-17 18:45:07  OK: caso_19_bitmap_cmyk
+2026-07-17 18:45:07  OK: caso_20_bitmap_alpha
+2026-07-17 18:45:07  PULADO: caso_21_foto_real (nenhum arquivo foto_real.* encontrado na pasta — opcional)
+2026-07-17 18:45:07  Fim da geracao 1b: 5 casos OK, 0 falhas, 1 pulados

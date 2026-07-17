@@ -5,6 +5,6 @@
   "tipo_alteracao": "bitmap_dpi",
   "descricao": "Importa JPEG de 400x400 px a 300 DPI. Comparar com caso_07 (mesmos pixels, 96 DPI) para isolar o efeito do DPI.",
   "parametros": { "formato_origem": "JPEG", "arquivo_fonte": "fonte_dpi300.jpg", "dpi": 300, "pixels": "400x400" },
-  "gerado_em": "2026-07-17 12:51:34",
-  "corel_versao": "26.0 build 101"
+  "gerado_em": "2026-07-17 18:44:55",
+  "corel_versao": "26.1 build 143"
 }
