@@ -23,7 +23,7 @@ de confiança explícito (`confirmado por N casos` vs. `hipótese não testada`)
 | Fase | Entregável | Status |
 |------|-----------|--------|
 | 1 | Gerador de casos de teste (macro VBA para CorelDRAW 2025 OEM) | **Concluída** — 16/16 casos gerados sem falhas (Corel 26.0 build 101) |
-| 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | Proposta (ver fim de `docs/descobertas-fase2.md`) |
+| 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Entregue — aguardando execução no CorelDRAW** (`GeradorCasosZCF_1b.bas`) |
 | 2 | Motor de diferenças binárias (Python) | **Concluída** — 15 pares comparados, relatórios versionados |
 | 3 | Parser incremental (Python) | Não iniciada — próximo alvo: `Bitmaps.dat` (estrutura já mapeada) e depois `pageN.dat` |
 | 4 | Especificação pública + biblioteca instalável com testes | Não iniciada |

@@ -73,8 +73,26 @@ demais. Os pontos com maior chance de precisar de ajuste fino na sua build do Co
 Me devolva o `log_geracao.txt` (ou só as linhas de erro) que a gente corrige pontualmente
 antes de seguir para a Fase 2.
 
-## Próxima fase
+## Fase 1b — casos extras (`GeradorCasosZCF_1b.bas`)
 
-Com os `.cdr` gerados e validados, a Fase 2 será um script Python que extrai os `.dat`
-internos de cada par (base vs. variante) e reporta offsets, tamanho e hexdump de cada
-trecho alterado.
+Segunda macro, criada depois que a Fase 2 levantou as hipóteses H1/H2 (múltiplos
+registros `UI`, deduplicação e JPEGs embutidos — ver `docs/descobertas-fase2.md`).
+**Pré-requisito:** os arquivos da Fase 1 (`caso_00_base.cdr` e
+`caso_01_add_bitmap_jpeg.cdr`) precisam continuar na `PASTA_SAIDA`.
+
+Instalação idêntica à Fase 1 (colar o módulo e rodar `GerarCasosDeTeste1b`).
+Log separado em `log_geracao_1b.txt`.
+
+| Arquivo | Base | O que testa |
+|---|---|---|
+| `caso_16_dois_bitmaps_diferentes.cdr` | caso_01 | 2 imagens distintas → 2 registros `UI`? |
+| `caso_17_bitmap_duplicado.cdr` | caso_01 | Mesma imagem 2× → deduplicação? |
+| `caso_18_jpeg_grande.cdr` | caso_00 | JPEG 2400×2400 → armazenamento muda p/ JPEG embutido? |
+| `caso_19_bitmap_cmyk.cdr` | caso_00 | TIFF CMYK → bpp/stride/cor no cabeçalho |
+| `caso_20_bitmap_alpha.cdr` | caso_00 | PNG com alfa → 32 bpp? |
+| `caso_21_foto_real.cdr` | caso_00 | **Opcional**: coloque `foto_real.jpg` (foto de câmera) na pasta antes de rodar; sem o arquivo o caso é pulado |
+
+Fontes novas geradas: `fonte_alt.jpg` (composição diferente), `fonte_grande.jpg`
+(2400×2400), `fonte_cmyk.tif`, `fonte_alpha.png`, `fonte_master_1b.cdr`.
+Ponto com maior chance de ajuste: `ExportarBitmapAlpha` (exportação com canal alfa
+usa 3 argumentos a mais no `ExportBitmap`).
