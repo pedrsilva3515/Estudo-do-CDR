@@ -23,9 +23,9 @@ de confiança explícito (`confirmado por N casos` vs. `hipótese não testada`)
 | Fase | Entregável | Status |
 |------|-----------|--------|
 | 1 | Gerador de casos de teste (macro VBA para CorelDRAW 2025 OEM) | **Concluída** — 16/16 casos gerados sem falhas (Corel 26.0 build 101) |
-| 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Entregue — aguardando execução no CorelDRAW** (`GeradorCasosZCF_1b.bas`) |
-| 2 | Motor de diferenças binárias (Python) | **Concluída** — 15 pares comparados, relatórios versionados |
-| 3 | Parser incremental (Python) | Não iniciada — próximo alvo: `Bitmaps.dat` (estrutura já mapeada) e depois `pageN.dat` |
+| 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Concluída** — 5/5 casos gerados sem falhas (caso_21 opcional segue pendente) |
+| 2 | Motor de diferenças binárias (Python) | **Concluída** — 20 pares comparados, relatórios versionados |
+| 3 | Parser incremental (Python) | Não iniciada — `Bitmaps.dat` já está mapeado o suficiente para começar |
 | 4 | Especificação pública + biblioteca instalável com testes | Não iniciada |
 
 ## Estrutura do repositório
@@ -34,7 +34,8 @@ de confiança explícito (`confirmado por N casos` vs. `hipótese não testada`)
 docs/
   evidencias-amostra-helo.md   Evidências do arquivo de exemplo real (helo.cdr)
   descobertas-fase2.md         Descobertas confirmadas + hipóteses, com nível de confiança
-casos-de-teste/                16 .cdr gerados pela Fase 1 + manifestos JSON + imagens-fonte
+  descobertas-fase1b.md        Descobertas dos casos 16-20 (multi-bitmap, dedup, CMYK, alfa)
+casos-de-teste/                21 .cdr gerados pelas Fases 1/1b + manifestos JSON + imagens-fonte
 fase1-gerador-casos/
   GeradorCasosZCF.bas          Macro VBA que gera os casos de teste + manifestos JSON
   README.md                    Instruções de instalação/execução da macro
@@ -46,17 +47,24 @@ fase2-diff-binario/
 
 ## Estado atual (resumo das descobertas)
 
-Detalhes e contagem de amostras em [docs/descobertas-fase2.md](docs/descobertas-fase2.md):
+Detalhes e contagem de amostras em [docs/descobertas-fase2.md](docs/descobertas-fase2.md)
+e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
 
-- **`Bitmaps.dat` decodificado em grande parte**: registros TLV `UI` (tag + tamanho
-  uint32 LE + payload), com regra especial confirmada para o último registro; cabeçalho
-  de imagem com largura, altura, bpp, stride, tamanho dos pixels e resolução
-  (armazenada como px/metro × 1000); pixels gravados **descomprimidos** — o arquivo de
-  origem (JPEG/PNG/TIFF/BMP) é descartado na importação (neste cenário).
-- **Objetos e relações (posição, grupo, PowerClip) vivem em `pageN.dat`** — mover um
-  bitmap não altera um byte do `Bitmaps.dat`.
+- **`Bitmaps.dat` decodificado em grande parte**: sequência plana de registros `UI`
+  (um por imagem única — deduplicado, ver abaixo), cada um com um sub-registro `RI`
+  aninhado (tag 2 bytes + tamanho, sem padding) contendo largura, altura, bpp, stride,
+  tamanho dos pixels e resolução (px/metro × 1000). Pixels gravados **descomprimidos**
+  em todos os casos sintéticos testados, inclusive JPEG de 2400×2400 px.
+- **Deduplicação confirmada**: o mesmo bitmap usado 2× no documento gera 1 único
+  registro `UI` — a 2ª instância é só uma referência em `page1.dat`. Explica em grande
+  parte o "24 bitmaps reportados vs. poucos registros UI" do helo.cdr.
+- **Transparência (alfa) é um 2º `RI`** (máscara em escala de cinza) aninhado dentro do
+  mesmo `UI`, não um 4º canal RGBA. CMYK usa 32 bpp (4 × 8 bits) num único `RI`.
+- **Objetos e relações (posição, grupo, PowerClip) vivem em `pageN.dat`** — mover ou
+  duplicar um bitmap não altera um byte do `Bitmaps.dat`.
 - Texto embute a fonte (`font/fontTable.dat` + `embed/embedding0`); página nova cria
   `page2.dat` + preview + entrada no `dataFileList.dat`.
-- Pendência principal: conciliar "24 bitmaps vs. 4 registros UI com JPEGs embutidos"
-  do arquivo real helo.cdr (hipótese de deduplicação/segundo modo de armazenamento) —
-  precisa dos casos 16–19 propostos.
+- Pendência principal: os JPEGs embutidos do helo.cdr não foram reproduzidos com imagens
+  sintéticas (nem mesmo 2400×2400 px) — resta testar com uma foto real de câmera
+  (`caso_21`, opcional e ainda pendente) para saber se o modo de armazenamento depende
+  da origem/metadados da imagem, não só do tamanho.

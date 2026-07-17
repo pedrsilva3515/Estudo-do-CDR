@@ -134,10 +134,18 @@ consistente e o alvo natural do parser da Fase 3.
   Delta observado no caso_06: +200.032 em X, −198.976 em Y para um movimento nominal de
   (+2, −2) cm.
 
-## Próximos casos de teste sugeridos (Fase 1b — para fechar H2/H1)
+## Casos de teste da Fase 1b (16-20) — resultado
 
-- caso_16: DOIS bitmaps diferentes → 2 registros `UI`? offsets do 2º registro fecham C4?
-- caso_17: o MESMO bitmap duplicado 2× → 1 ou 2 registros `UI`? (deduplicação)
-- caso_18: bitmap grande/fotográfico importado de JPEG → o original é preservado como
-  JPEG embutido (como no helo) ou re-rasterizado?
-- caso_19: bitmap CMYK e bitmap com canal alfa (32 bpp) → como bpp/stride mudam.
+H1 e H2 foram testadas e majoritariamente resolvidas com os casos 16–20. Ver
+[descobertas-fase1b.md](descobertas-fase1b.md) para o detalhe completo:
+
+- H1 confirmada: bitmaps diferentes → 1 registro `UI` por imagem, sequenciais.
+- H2 confirmada (deduplicação): o mesmo bitmap usado 2× no documento gera 1 único
+  registro `UI` — a 2ª instância é só uma referência em `page1.dat`. Explica o
+  descompasso "24 bitmaps reportados vs. poucos registros UI" do helo.cdr.
+- H2 (imagem grande → JPEG embutido) **refutada** nesse eixo: JPEG de 2400×2400
+  continua vindo como pixels brutos. A hipótese que sobra é que os JPEGs embutidos do
+  helo.cdr vêm de fotos reais de câmera (metadado/origem diferente), ainda não testado
+  (caso_21, opcional, pendente).
+- Descoberta nova: transparência (canal alfa) é um 2º registro `RI` (máscara em escala
+  de cinza) aninhado dentro do mesmo `UI`, não um 4º canal RGBA.
