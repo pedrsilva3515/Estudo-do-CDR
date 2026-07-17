@@ -119,3 +119,26 @@ Os manifestos JSON desses dois casos gravam posição e tamanho exatos (via
 `GetPosition`/`GetSize` do próprio CorelDRAW) antes e depois da alteração — servem de
 gabarito preciso para o diff binário, mesmo sem saber de antemão a semântica exata dos
 parâmetros usados para criar o retângulo.
+
+Resultado (já analisado): confirmou a unidade de coordenada (100.000 unid/cm, exato) e
+localizou a região de geometria do objeto — ver seções P5/P6 em
+`docs/descobertas-fase3-page1.md`. **Bug encontrado e corrigido**: a primeira rodada
+gravou os manifestos com posição/tamanho zerados por causa do padrão `CDbl(x0)` em
+`GetPosition x0, y0` — `CDbl()` cria um valor temporário e não recebe o `ByRef` de
+volta; os parâmetros devem ir direto (`GetPosition x0, y0`, sem `CDbl`). Já corrigido no
+arquivo `.bas` deste repositório.
+
+## Fase 1d — testa hipóteses de Bézier, rotação e segundo objeto (`GeradorCasosZCF_1d.bas`)
+
+Quarta macro, criada para fechar duas hipóteses fortes (mas não confirmadas) que
+sobraram da Fase 1c, mais uma pergunta nova (rotação). Ver "P6" em
+`docs/descobertas-fase3-page1.md` para o raciocínio completo.
+
+**Pré-requisito:** `caso_00_base.cdr` precisa continuar em `PASTA_SAIDA`. Instalação
+idêntica às fases anteriores. Log em `log_geracao_1d.txt`.
+
+| Arquivo | Base | O que testa |
+|---|---|---|
+| `caso_24_resize_altura.cdr` | caso_00 | Aumenta só a **altura** em 4cm (mesmo delta do `caso_23`, eixo oposto) — se o campo X reagir a ~1/3 do delta, espelhando o que o campo Y fez no `caso_23`, confirma a hipótese de ponto de controle Bézier |
+| `caso_25_rotaciona_retangulo.cdr` | caso_00 | Rotaciona `RetanguloBase` em 30° em torno do próprio centro, sem mover/redimensionar — localiza onde a rotação é armazenada |
+| `caso_26_segundo_retangulo.cdr` | caso_00 | Cria um segundo retângulo nomeado (`RetanguloDois`) em posição conhecida, sem tocar no primeiro — testa se cada objeto tem sua própria região de geometria e onde ela fica |
