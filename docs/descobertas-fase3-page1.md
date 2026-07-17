@@ -221,89 +221,124 @@ nunca transformado), só ele aparece nessa região — consistente com todas as 
 apareceu e mudou exatamente nos 3 casos que *transformaram* `RetanguloBase`, e não
 apareceu para `RetanguloDois`, que nunca foi transformado.
 
-### P9. Hipótese do cache (P8) REFUTADA — a região do offset 16 é fixa do primeiro objeto criado, não do último transformado (n=1, teste decisivo)
+### P9. Hipótese do cache do "último objeto transformado" REFUTADA — mas corrigida em seguida: é um cache de 2 slots, populado por leitura OU escrita via API (n=1 teste decisivo + varredura exaustiva)
 
 A Fase 1e trouxe o teste decisivo: `caso_27` move **`RetanguloDois`** (não
-`RetanguloBase`) por um delta conhecido e confirmado no manifesto (+7cm X, −3cm Y).
-Resultado — **os campos X/Y do offset 16 não mudaram nada**, continuam idênticos ao
-`caso_00` (posição de `RetanguloBase`, que nunca se moveu neste caso):
+`RetanguloBase`) por um delta conhecido e confirmado no manifesto (+7cm X, −3cm Y). à
+primeira vista, os campos `[16/32/48]` (X) e `[28/44/60]` (Y) não mudaram nada,
+continuando idênticos à posição de `RetanguloBase` — o que parecia refutar qualquer
+relação com `RetanguloDois`.
+
+**Uma varredura exaustiva (comparando TODOS os valores de `caso_26` contra TODOS os
+valores de `caso_27`, sem assumir onde procurar) corrigiu essa leitura.** Os outros 2
+campos do mesmo bloco de 16 bytes — em `[20/36/52]` e `[24/40/56]`, que eu tinha
+descartado como "flag" e "checksum" numa rodada anterior — na verdade **mudaram
+exatamente com o movimento de `RetanguloDois`**:
 
 ```
-campo X [16/32/48]:  -750713 em todos os casos (caso_00, caso_26, caso_27) — inalterado
-campo Y [28/44/60]: -1185053 em todos os casos — inalterado
+campo [20/36/52]:  1.114.947 -> 814.947   (delta = -300.000 = exatamente -3cm de RetanguloDois)
+campo [24/40/56]:  1.649.287 -> 2.349.287 (delta = +700.000 = exatamente +7cm de RetanguloDois)
 ```
 
-Isso **refuta a hipótese P8** ("cache do último objeto transformado"): se fosse isso, o
-campo deveria ter passado a refletir `RetanguloDois` depois de movê-lo. Não mudou. A
-explicação mais simples agora: **essa região é fixa para o primeiro objeto criado no
-documento** (`RetanguloBase`, criado pela própria macro de geração do `caso_00`), não
-relacionada a seleção nem a "última transformação" — algo como um slot de índice fixo
-(objeto #0), não um cache dinâmico.
+Ou seja, **o bloco de 16 bytes guarda DOIS objetos entrelaçados**:
+`[RetanguloBase_X, RetanguloDois_Y, RetanguloDois_X, RetanguloBase_Y]` — não um objeto
+só com 2 campos de metadado, como parecia antes. Isso corrige (não sobrevive) a leitura
+anterior de que campos "2" fossem só flags.
 
-**Achado colateral inesperado:** embora X/Y não tenham mudado, **outros dois campos do
-mesmo bloco de 16 bytes mudaram muito** entre `caso_00`/`caso_26` e `caso_27`:
+**Por que só esses dois objetos, e por que às vezes aparecem como `"2"` (placeholder)?**
+Comparando `caso_12` (cria `ElipseTeste`, mas o manifesto da macro **nunca chama**
+`GetPosition`/`GetSize` nela) contra `caso_26` (cria `RetanguloDois` e chama
+`GetPosition`/`GetSize` logo em seguida, só para preencher o manifesto): o slot de
+`ElipseTeste` fica `"2"` (valor-sentinela de "vazio") em `caso_12`, mas o slot de
+`RetanguloDois` já vem preenchido com valores reais em `caso_26` — **antes mesmo de
+`RetanguloDois` ser movido**, só por ter sido lido uma vez via `GetPosition`/`GetSize`.
+
+**Conclusão:** essa região é um **cache de (pelo menos) 2 objetos, populado por
+qualquer chamada de API que leia OU escreva a posição/tamanho de um objeto**
+(`GetPosition`, `GetSize`, `Move`, `SetSize`, `Rotate`) — não um slot fixo por índice de
+criação, e não exclusivo de "escrita"/transformação. Provavelmente alimenta algum
+elemento de UI do CorelDRAW (Barra de Propriedades ou similar) que também é atualizado
+quando o VBA simplesmente *consulta* uma propriedade, não só quando modifica.
+
+### P10. RESOLVIDO — encontrado um segundo cache com a bounding box COMPLETA (esquerda, baixo, direita, topo), confirmado com largura E altura exatas para os dois objetos testados
+
+Insistindo na varredura exaustiva (comparar cada valor de um arquivo contra todos os
+valores do outro, sem assumir posição, em vez de checar só os pontos já mapeados),
+apareceram **acertos fora da região já conhecida do offset 16** — em `caso_00`, o valor
+de X de `RetanguloBase` (`-750713`) também ocorre no offset **622** (não alinhado em 4
+bytes: `622 = 620 + 2`), formando um segundo conjunto de "3 blocos de 16 bytes":
 
 ```
-campo em [20/36/52] (antes sempre constante "2"):        2 -> 814.947   (delta +814.945)
-campo em [24/40/56] (antes "2" ou mudava so com RetBase): 2 -> 2.349.287 (delta +2.349.285)
+offset 622: X=-750713  f1=-785053  f2=-150713  Y=-1185053
 ```
 
-Esses dois campos **não** mudaram em `caso_26` (só criar `RetanguloDois`, sem mover) —
-só mudaram em `caso_27` (criar **e mover**). Não são coordenadas de nenhum objeto
-conhecido (valores grandes demais e sem relação clara com nenhum delta de posição
-esperado). Hipótese solta, não testada: podem ser contadores/IDs internos que
-incrementam a cada operação de transformação registrada no documento (não amarrados a
-qual objeto foi transformado), possivelmente ligados ao histórico de undo/redo que o
-CorelDRAW mantém dentro do arquivo salvo.
+Testando `f2 - X` e `Y - f1` como se fossem os outros dois lados da bounding box:
 
-**Confirmação adicional (comparando `caso_26` vs `caso_27` no "chunk" do próprio
-`RetanguloDois`):** os 3 floats no chunk nomeado de `RetanguloDois` (o mesmo tipo de
-campo que já tínhamos descartado como não-posição para `RetanguloBase`) **também não
-mudaram** com o movimento (`11.430511474609375, 11.33514404296875, 1.875` — idênticos
-em `caso_26` e `caso_27`). Confirma, agora para os DOIS objetos testados, que esses
-floats não são posição. Curiosamente, o terceiro valor (`1.875`) é **igual** para
-`RetanguloBase` e `RetanguloDois`, apesar de terem tamanhos bem diferentes (6×4cm vs.
-15×14cm) — sugere que não é específico do objeto, pode ser uma constante do documento
-(tolerância de grade, raio padrão de algo) não relacionada à geometria da forma.
+```
+f2 - X = -150713 - (-750713) =  600.000 unidades =  6,000 cm  (largura real: 6cm — EXATO)
+Y - f1  = -1185053 - (-785053) = -400.000 unidades = -4,000 cm  (altura real: 4cm — EXATO)
+```
 
-**Conclusão honesta desta rodada:** avançamos em entender o que a geometria **não é**
-(não é Bézier, não é um cache por seleção, os floats do chunk não são posição), mas
-**ainda não sabemos onde fica a posição permanente de um objeto que não é o primeiro
-criado no documento.** `RetanguloDois` foi movido de forma real e confirmada pelo
-CorelDRAW, mas sua nova posição (19,23cm) não foi localizada em nenhum lugar do arquivo
-com as técnicas de busca usadas até aqui.
+**Isso não depende de saber a origem do sistema de coordenadas** (diferente da checagem
+por delta) — a largura/altura *calculada* bate exatamente com o tamanho real do objeto,
+o que é uma confirmação forte por si só. Layout: `[esquerda, baixo, direita, topo]` —
+uma bounding box completa, não só 2 cantos soltos como no cache do offset 16.
+
+**Confirmado de novo para `RetanguloDois`** (`caso_26`): buscando pela assinatura
+"largura = 1.500.000 unidades exatos" (15cm) em qualquer offset do arquivo (não só
+alinhado em 4 bytes), aparece em offset 670:
+
+```
+offset 670: X=149287  f1=1114947  f2=1649287  Y=-285053
+f2 - X = 1649287 - 149287 = 1.500.000 unidades = 15,000 cm  (largura real: 15cm — EXATO)
+Y - f1  = -285053 - 1114947 = -1.400.000 unidades = -14,000 cm  (altura real: 14cm — EXATO)
+```
+
+Os mesmos valores `f1=1114947` e `f2=1649287` já tinham aparecido na Fase 1e como os
+campos "misteriosos" do cache do offset 16 (P9) — ou seja, **os dois caches guardam
+pedaços sobrepostos da mesma informação**: o cache do offset 16 guarda só 2 valores por
+objeto (interpretação ainda não 100% fechada — parecem ser X e Y, mas não bate com um
+sistema de coordenadas compartilhado entre objetos), enquanto este segundo cache guarda
+os 4 valores da bounding box completa, de forma auto-contida (dá pra calcular largura e
+altura sem precisar de nenhuma outra referência).
+
+**Ressalva importante — isso é ainda um CACHE, não a fonte permanente:** os dois objetos
+testados (`RetanguloBase`, `RetanguloDois`) só têm esse segundo cache preenchido porque
+**ambos foram lidos ou escritos via API** (`GetPosition`/`GetSize`/`Move`/`SetSize`/
+`Rotate`) nas macros de teste — confirmado no P9 que a leitura sozinha já popula o
+cache. Um objeto nunca tocado por nenhuma chamada de API (como `ElipseTeste` no
+`caso_12`, que só recebeu `ApplyUniformFill`) **não aparece em nenhum dos dois caches**.
+Isso significa que, embora agora saibamos calcular a bounding box exata de um objeto
+*recém-manipulado na mesma sessão de edição*, ainda não sabemos onde fica a bounding
+box **permanente e sempre presente** de um objeto qualquer — a que o CorelDRAW usa para
+desenhar um arquivo que nunca teve nenhuma dessas propriedades consultadas via API/UI
+depois de criado. Essa é a peça que falta para tornar isso útil de forma geral na
+biblioteca.
 
 **Resumo do nível de confiança:**
-- Unidade (100.000/cm) e campos X/Y do offset 16 = canto esquerdo/topo da bounding box
-  de `RetanguloBase` especificamente — **confirmado com alta precisão**.
+- Unidade (100.000/cm) — **confirmado com alta precisão** (rotação, translação, resize).
 - Hipótese Bézier — **refutada**.
-- Hipótese do cache do último objeto transformado — **refutada**.
-- Região do offset 16 = slot fixo do primeiro objeto (índice 0?) — **hipótese mais
-  simples que sobrevive às evidências atuais, não fechada**.
-- Onde vive a posição de um objeto que não é o primeiro (`RetanguloDois`) — **em
-  aberto**. Os 2 campos que mudaram bastante em `caso_27` não parecem ser posição, mas
-  não foram decodificados.
+- Cache do offset 16 = slot de 2 objetos populado por leitura/escrita via API, não fixo
+  por índice — **confirmado** (P9, reforçado aqui).
+- Segundo cache (bounding box completa `[esquerda,baixo,direita,topo]`) — **confirmado**
+  com largura E altura exatas para 2 objetos diferentes, localizável pela assinatura de
+  largura/altura sem precisar saber a origem do sistema de coordenadas.
+- **Bounding box permanente de um objeto nunca tocado via API** — **ainda em aberto**,
+  é o alvo real para uma próxima rodada.
 - `caso_23` (resize de largura) — **ainda precisa de re-execução** com o manifesto
   corrigido.
 
-### Próximos passos (em aberto — sem teste único óbvio desta vez)
+### Próximos passos
 
-Diferente das rodadas anteriores, não há um caso de teste único e claramente decisivo
-para o próximo passo — a busca por "onde fica a posição de um objeto que não é o
-primeiro" precisa de uma abordagem diferente (provavelmente examinar o arquivo inteiro
-de forma mais sistemática, não só os pontos já mapeados). Candidatos, em ordem de
-esforço crescente:
-
-- Fazer uma varredura completa de `caso_27` procurando qualquer par de `int32` (ou
-  `float32`) cujo delta bata com o movimento real de `RetanguloDois` (+700.000 X,
-  ±300.000 Y), em vez de assumir onde procurar — mais trabalhoso, mas não depende de
-  hipótese prévia sobre a estrutura.
+- Gerar um caso que **NÃO** chame `GetPosition`/`GetSize`/`Move` em um objeto (só
+  criar e aplicar cor, como o `ElipseTeste` do `caso_12`) e comparar contra um caso
+  onde esse mesmo objeto TENHA sido lido — se a bounding box completa (P10) só aparecer
+  no segundo, confirma que é mesmo um cache transitório, e força a busca da geometria
+  permanente para outro lugar (provavelmente dentro do "chunk nomeado" do objeto,
+  reexaminando os offsets de tabela ainda não identificados do P3/P4 com a mesma técnica
+  de assinatura de largura/altura usada aqui).
 - Investigar `masterPage.dat` e `content/root.dat` (ainda não abertos nesta
-  investigação) — é possível que a geometria "de verdade" de cada objeto fique
-  referenciada a partir de outro arquivo, não só dentro de `page1.dat`.
-- Reexaminar os valores ainda não identificados da tabela de offsets do "chunk" de cada
-  objeto (P3/P4) — vários offsets da tabela nunca foram checados contra nenhuma
-  âncora conhecida.
+  investigação) como possíveis donos da geometria permanente.
 
 ## HIPÓTESES / OBSERVAÇÕES (não confirmadas — precisam de mais amostras)
 
