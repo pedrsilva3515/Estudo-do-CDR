@@ -1,0 +1,10 @@
+{
+  "caso": "caso_21_foto_real",
+  "arquivo": "caso_21_foto_real.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "add_foto_real",
+  "descricao": "Importa uma foto real (de camera/celular) no base. Cenario mais proximo do helo.cdr para testar JPEG embutido (H2).",
+  "parametros": { "formato_origem": "JPEG/foto", "arquivo_fonte": "foto_real.jpeg", "observacao": "foto real fornecida manualmente" },
+  "gerado_em": "2026-07-17 17:15:38",
+  "corel_versao": "26.0 build 101"
+}
