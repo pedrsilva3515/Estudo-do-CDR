@@ -1,0 +1,10 @@
+{
+  "caso": "caso_13_grupo",
+  "arquivo": "caso_13_grupo.cdr",
+  "arquivo_base": "caso_12_dois_objetos.cdr",
+  "tipo_alteracao": "grupo",
+  "descricao": "Abre o caso_12 e agrupa o retangulo com a elipse. Unica diferenca em relacao ao caso_12 e o grupo.",
+  "parametros": { "objetos_agrupados": ["RetanguloBase", "ElipseTeste"] },
+  "gerado_em": "2026-07-17 12:51:38",
+  "corel_versao": "26.0 build 101"
+}

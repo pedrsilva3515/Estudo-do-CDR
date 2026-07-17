@@ -1,0 +1,10 @@
+{
+  "caso": "caso_10_altera_cor",
+  "arquivo": "caso_10_altera_cor.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "altera_cor",
+  "descricao": "Muda o preenchimento do retangulo de vermelho para ciano. Nada mais muda.",
+  "parametros": { "cor_antes": "CMYK 0,100,100,0", "cor_depois": "CMYK 100,0,0,0" },
+  "gerado_em": "2026-07-17 12:51:36",
+  "corel_versao": "26.0 build 101"
+}

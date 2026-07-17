@@ -1,0 +1,10 @@
+{
+  "caso": "caso_08_bitmap_dpi_300",
+  "arquivo": "caso_08_bitmap_dpi_300.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "bitmap_dpi",
+  "descricao": "Importa JPEG de 400x400 px a 300 DPI. Comparar com caso_07 (mesmos pixels, 96 DPI) para isolar o efeito do DPI.",
+  "parametros": { "formato_origem": "JPEG", "arquivo_fonte": "fonte_dpi300.jpg", "dpi": 300, "pixels": "400x400" },
+  "gerado_em": "2026-07-17 12:51:34",
+  "corel_versao": "26.0 build 101"
+}

@@ -1,0 +1,10 @@
+{
+  "caso": "caso_00_base",
+  "arquivo": "caso_00_base.cdr",
+  "arquivo_base": "",
+  "tipo_alteracao": "base",
+  "descricao": "Documento minimo: uma pagina com um retangulo vermelho (CMYK 0,100,100,0) chamado RetanguloBase.",
+  "parametros": { },
+  "gerado_em": "2026-07-17 12:51:27",
+  "corel_versao": "26.0 build 101"
+}

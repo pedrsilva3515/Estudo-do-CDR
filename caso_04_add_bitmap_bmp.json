@@ -1,0 +1,10 @@
+{
+  "caso": "caso_04_add_bitmap_bmp",
+  "arquivo": "caso_04_add_bitmap_bmp.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "add_bitmap",
+  "descricao": "Importa um bitmap BMP no documento base (mesma imagem do caso_01, formato de origem diferente).",
+  "parametros": { "formato_origem": "BMP", "arquivo_fonte": "fonte_base.bmp" },
+  "gerado_em": "2026-07-17 12:51:31",
+  "corel_versao": "26.0 build 101"
+}

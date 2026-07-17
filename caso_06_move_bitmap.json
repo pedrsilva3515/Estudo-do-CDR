@@ -1,0 +1,10 @@
+{
+  "caso": "caso_06_move_bitmap",
+  "arquivo": "caso_06_move_bitmap.cdr",
+  "arquivo_base": "caso_01_add_bitmap_jpeg.cdr",
+  "tipo_alteracao": "move_bitmap",
+  "descricao": "Abre o caso_01 e move o bitmap 2 cm para a direita e 2 cm para baixo. Deve mudar SO a transformacao, nao os dados de pixel.",
+  "parametros": { "delta_x_cm": 2, "delta_y_cm": -2 },
+  "gerado_em": "2026-07-17 12:51:32",
+  "corel_versao": "26.0 build 101"
+}

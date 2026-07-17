@@ -1,0 +1,27 @@
+2026-07-17 12:51:25  ==================================================
+2026-07-17 12:51:25  Inicio da geracao de casos de teste ZCF
+2026-07-17 12:51:25  CorelDRAW: 26.0 build 101
+2026-07-17 12:51:26  Exportado: fonte_base.jpg
+2026-07-17 12:51:26  Exportado: fonte_base.png
+2026-07-17 12:51:26  Exportado: fonte_base.tif
+2026-07-17 12:51:26  Exportado: fonte_base.bmp
+2026-07-17 12:51:26  Exportado: fonte_dpi096.jpg
+2026-07-17 12:51:26  Exportado: fonte_dpi300.jpg
+2026-07-17 12:51:26  Imagens-fonte geradas com sucesso
+2026-07-17 12:51:27  OK: caso_00_base
+2026-07-17 12:51:28  OK: caso_01_add_bitmap_jpeg
+2026-07-17 12:51:29  OK: caso_02_add_bitmap_png
+2026-07-17 12:51:30  OK: caso_03_add_bitmap_tiff
+2026-07-17 12:51:31  OK: caso_04_add_bitmap_bmp
+2026-07-17 12:51:32  OK: caso_05_remove_bitmap
+2026-07-17 12:51:32  OK: caso_06_move_bitmap
+2026-07-17 12:51:33  OK: caso_07_bitmap_dpi_096
+2026-07-17 12:51:34  OK: caso_08_bitmap_dpi_300
+2026-07-17 12:51:35  OK: caso_09_nova_layer
+2026-07-17 12:51:36  OK: caso_10_altera_cor
+2026-07-17 12:51:37  OK: caso_11_texto
+2026-07-17 12:51:37  OK: caso_12_dois_objetos
+2026-07-17 12:51:38  OK: caso_13_grupo
+2026-07-17 12:51:39  OK: caso_14_segunda_pagina
+2026-07-17 12:51:40  OK: caso_15_powerclip
+2026-07-17 12:51:40  Fim da geracao: 16 casos OK, 0 falhas

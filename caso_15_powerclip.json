@@ -1,0 +1,10 @@
+{
+  "caso": "caso_15_powerclip",
+  "arquivo": "caso_15_powerclip.cdr",
+  "arquivo_base": "caso_12_dois_objetos.cdr",
+  "tipo_alteracao": "powerclip",
+  "descricao": "Abre o caso_12 e coloca a elipse dentro do retangulo via PowerClip. Unica diferenca em relacao ao caso_12.",
+  "parametros": { "conteudo": "ElipseTeste", "recipiente": "RetanguloBase" },
+  "gerado_em": "2026-07-17 12:51:40",
+  "corel_versao": "26.0 build 101"
+}

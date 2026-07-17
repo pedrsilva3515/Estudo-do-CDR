@@ -1,0 +1,10 @@
+{
+  "caso": "caso_14_segunda_pagina",
+  "arquivo": "caso_14_segunda_pagina.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "add_pagina",
+  "descricao": "Adiciona uma segunda pagina (vazia) ao documento base. Espera-se um page2.dat novo dentro do ZCF.",
+  "parametros": { "paginas_antes": 1, "paginas_depois": 2 },
+  "gerado_em": "2026-07-17 12:51:39",
+  "corel_versao": "26.0 build 101"
+}

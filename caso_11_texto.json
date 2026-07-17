@@ -1,0 +1,10 @@
+{
+  "caso": "caso_11_texto",
+  "arquivo": "caso_11_texto.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "add_texto",
+  "descricao": "Adiciona um texto artistico 'Teste ZCF 123' no documento base.",
+  "parametros": { "texto": "Teste ZCF 123", "tipo": "artistico" },
+  "gerado_em": "2026-07-17 12:51:37",
+  "corel_versao": "26.0 build 101"
+}
