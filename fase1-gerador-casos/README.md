@@ -90,7 +90,7 @@ Log separado em `log_geracao_1b.txt`.
 | `caso_18_jpeg_grande.cdr` | caso_00 | JPEG 2400×2400 → armazenamento muda p/ JPEG embutido? |
 | `caso_19_bitmap_cmyk.cdr` | caso_00 | TIFF CMYK → bpp/stride/cor no cabeçalho |
 | `caso_20_bitmap_alpha.cdr` | caso_00 | PNG com alfa → 32 bpp? |
-| `caso_21_foto_real.cdr` | caso_00 | **Opcional**: coloque `foto_real.jpg` (foto de câmera) na pasta antes de rodar; sem o arquivo o caso é pulado |
+| `caso_21_foto_real.cdr` | caso_00 | **Opcional**: coloque um arquivo `foto_real.*` (foto de câmera; extensão `.jpg`, `.jpeg`, `.png`, `.tif`/`.tiff` ou `.bmp`, maiúscula ou minúscula) na pasta antes de rodar; sem o arquivo o caso é pulado |
 
 Fontes novas geradas: `fonte_alt.jpg` (composição diferente), `fonte_grande.jpg`
 (2400×2400), `fonte_cmyk.tif`, `fonte_alpha.png`, `fonte_master_1b.cdr`.

@@ -13,8 +13,9 @@ Option Explicit
 '   caso_19  bitmap CMYK (TIFF)             -> bpp/stride no cabecalho
 '   caso_20  bitmap com transparencia (PNG) -> 32 bpp / canal alfa
 '   caso_21  foto real (OPCIONAL)           -> coloque uma foto de camera
-'            chamada foto_real.jpg na pasta de saida antes de rodar;
-'            se nao existir, o caso e pulado sem erro.
+'            chamada "foto_real" na pasta de saida antes de rodar (extensao
+'            livre: .jpg, .jpeg, .png, .tif/.tiff ou .bmp, maiuscula ou
+'            minuscula); se nenhuma existir, o caso e pulado sem erro.
 '
 ' PRE-REQUISITO: os arquivos da Fase 1 (caso_00_base.cdr e
 ' caso_01_add_bitmap_jpeg.cdr) precisam existir na PASTA_SAIDA.
@@ -263,32 +264,54 @@ Falha:
 End Sub
 
 ' OPCIONAL: se voce colocar uma foto real de camera/celular chamada
-' foto_real.jpg na pasta de saida, este caso a importa no base — e o teste
-' mais fiel ao cenario do helo.cdr (fotos grandes). Sem o arquivo, e pulado.
+' "foto_real" na pasta de saida (qualquer extensao comum — .jpg, .jpeg,
+' .png, .tif, .tiff, .bmp — maiuscula ou minuscula), este caso a importa
+' no base. E o teste mais fiel ao cenario do helo.cdr (fotos grandes).
+' Sem o arquivo, e pulado.
 Private Sub Caso21_FotoReal()
     Dim doc As Document
+    Dim nomeArq As String
     On Error GoTo Falha
-    If Dir(PASTA_SAIDA & "foto_real.jpg") = "" Then
+
+    nomeArq = LocalizarFotoReal()
+    If nomeArq = "" Then
         m_pulados = m_pulados + 1
-        LogMsg "PULADO: caso_21_foto_real (foto_real.jpg nao encontrada na pasta — opcional)"
+        LogMsg "PULADO: caso_21_foto_real (nenhum arquivo foto_real.* encontrado na pasta — opcional)"
         Exit Sub
     End If
+    LogMsg "caso_21_foto_real: usando arquivo " & nomeArq
 
     Set doc = AbrirCdr("caso_00_base.cdr")
-    doc.ActiveLayer.Import PASTA_SAIDA & "foto_real.jpg"
+    doc.ActiveLayer.Import PASTA_SAIDA & nomeArq
     On Error Resume Next
     doc.ActiveShape.SetPosition 1, 9
     On Error GoTo Falha
 
     SalvarCaso doc, "caso_21_foto_real"
     EscreverManifesto "caso_21_foto_real", "caso_00_base.cdr", "add_foto_real", _
-        "{ ""formato_origem"": ""JPEG"", ""arquivo_fonte"": ""foto_real.jpg"", ""observacao"": ""foto real fornecida manualmente"" }", _
-        "Importa uma foto real (JPEG de camera) no base. Cenario mais proximo do helo.cdr para testar JPEG embutido (H2)."
+        "{ ""formato_origem"": ""JPEG/foto"", ""arquivo_fonte"": """ & nomeArq & """, ""observacao"": ""foto real fornecida manualmente"" }", _
+        "Importa uma foto real (de camera/celular) no base. Cenario mais proximo do helo.cdr para testar JPEG embutido (H2)."
     RegistrarOk "caso_21_foto_real"
     Exit Sub
 Falha:
     TratarFalhaCaso doc, "caso_21_foto_real", Err.Number, Err.Description
 End Sub
+
+' Procura por foto_real.jpg / .jpeg / .png / .tif / .tiff / .bmp na pasta
+' de saida (Dir() no Windows nao diferencia maiuscula/minuscula). Devolve
+' o nome do primeiro arquivo encontrado, ou "" se nenhum existir.
+Private Function LocalizarFotoReal() As String
+    Dim extensoes As Variant
+    Dim i As Integer
+    extensoes = Array("jpg", "jpeg", "png", "tif", "tiff", "bmp")
+    For i = LBound(extensoes) To UBound(extensoes)
+        If Dir(PASTA_SAIDA & "foto_real." & extensoes(i)) <> "" Then
+            LocalizarFotoReal = "foto_real." & extensoes(i)
+            Exit Function
+        End If
+    Next i
+    LocalizarFotoReal = ""
+End Function
 
 '==========================================================================
 ' INFRAESTRUTURA (mesmos padroes validados na Fase 1)
