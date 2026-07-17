@@ -1,12 +1,14 @@
-# Descobertas — Fase 1b (múltiplos bitmaps, deduplicação, CMYK, alfa)
+# Descobertas — Fase 1b (múltiplos bitmaps, deduplicação, CMYK, alfa, foto real)
 
-Fonte: casos 16–20 gerados pela macro `GeradorCasosZCF_1b.bas` no CorelDRAW 2025 OEM
+Fonte: casos 16–21 gerados pela macro `GeradorCasosZCF_1b.bas` no CorelDRAW 2025 OEM
 (26.0 build 101, mesma instalação da Fase 1/2), comparados par a par com
-`fase2-diff-binario/zcf_diff.py`. Caso 21 (foto real) não foi gerado — nenhuma
-`foto_real.jpg` foi fornecida, e o caso foi pulado como projetado. Relatórios completos em
-`fase2-diff-binario/relatorios/diff_caso_1[6-9]*.md` e `diff_caso_20*.md`.
+`fase2-diff-binario/zcf_diff.py`. O caso_21 (foto real) foi gerado numa segunda rodada,
+depois de um ajuste na macro para aceitar `foto_real.*` com qualquer extensão comum
+(a foto fornecida estava em `.jpeg`, não `.jpg`). Relatórios completos em
+`fase2-diff-binario/relatorios/diff_caso_1[6-9]*.md` e `diff_caso_2[01]*.md`.
 
-Isso fecha (ou refina) as hipóteses H1 e H2 abertas em `descobertas-fase2.md`.
+Isso fecha as hipóteses H1 e H2 abertas em `descobertas-fase2.md` — **incluindo a questão
+dos JPEGs embutidos no helo.cdr, que se resolveu como falso positivo (ver D9)**.
 
 ## CONFIRMADO
 
@@ -83,20 +85,51 @@ dimensões) relataram o mesmo `tamanho` exato (2.693.346), consistente com "dist
 o fim do escopo que os contém", que é do mesmo tamanho para as duas imagens idênticas em
 dimensão.
 
-### D5. Imagem grande (2400×2400) continua armazenada como pixels brutos — H2 original refutada nesse eixo (n=1)
+### D5. Imagem grande (2400×2400) continua armazenada como pixels brutos (n=1)
 
 `caso_18` (JPEG de 2400×2400 px, ~17,3 MB de pixels brutos) **não tem nenhuma assinatura
 JPEG** dentro do `Bitmaps.dat` — é 1 único registro `UI`/`RI` com pixels descomprimidos,
 mesmo padrão dos casos menores. Isso **refuta** a hipótese de que "imagem grande o
 suficiente" por si só faz o CorelDRAW preservar o arquivo original comprimido.
 
-A explicação mais provável agora para os JPEGs embutidos observados no `helo.cdr` é
-outra: fotos reais de câmera (com metadados EXIF, perfil de cor incorporado, ou
-originadas de um caminho de importação diferente — ex. "colar da área de transferência"
-vs. "Importar arquivo") podem seguir um código de armazenamento diferente das imagens
-sintéticas exportadas pelo próprio Corel usadas nestes testes. **O caso_21 (opcional, com
-uma foto real) continua sendo o teste decisivo para essa hipótese** — ainda não foi
-gerado nesta rodada.
+### D9. RESOLVIDO — os "JPEGs embutidos" do helo.cdr eram coincidência estatística, não um segundo modo de armazenamento (n=2: caso_21 + reanálise do helo.cdr)
+
+`caso_21` (foto real de câmera, 900×1600 px, importada como `.jpeg`) foi gerado depois de
+corrigir a macro para aceitar a extensão `.jpeg` (o arquivo fornecido não era `.jpg`
+exato — ver histórico da conversa). Resultado:
+
+- O `Bitmaps.dat` do `caso_21` tem **1 único registro `UI`/`RI`**, com pixels RGB
+  descomprimidos: `900×1600×3 = 4.320.000` bytes, batendo exatamente com o campo de
+  tamanho de dados do cabeçalho. **Nenhum modo de armazenamento diferente foi ativado**,
+  mesmo sendo uma foto real (não sintética) — refutando de vez a hipótese de que a
+  origem/metadados da imagem mudam o armazenamento.
+- Entretanto, 3 assinaturas `FF D8 FF` apareceram dentro dos dados de pixel do
+  `caso_21` — à primeira vista, parecia repetir o fenômeno do helo.cdr. Verificação:
+  nenhuma delas é seguida por um marcador de segmento JPEG válido (o byte logo depois de
+  `FF D8 FF` deveria ser algo como `E0`/`E1`/`DB`/`C0`/`C4`; nos 3 casos veio `FB`, `FA`
+  ou `F3` — não são marcadores JPEG reais) e nenhuma tem um marcador de fim de imagem
+  (`FF D9`) num raio de 2.000 bytes. Ou seja: **ruído fotográfico de alta entropia
+  produz a sequência de 3 bytes `FF D8 FF` por acaso** — não é incomum em ~4 MB de dados
+  de pixel de foto real (imagens sintéticas/vetoriais, como as da Fase 1/1b, têm baixa
+  entropia e por isso não geram esse tipo de coincidência).
+- Isso motivou reexaminar o **helo.cdr original** com o mesmo rigor: decodificando o
+  cabeçalho dos 4 registros `UI`, os campos de largura/altura/stride declarados batem
+  **quase exatamente** (proporção 1,000–1,001) com o tamanho bruto esperado
+  (`largura × altura × 3 bytes`, com pequeno arredondamento de stride para múltiplo de 4
+  — ex. UI#4: 1330×1182, stride declarado 3.992 = `1330×3=3.990` arredondado para cima).
+  **Isso vale para os 4 blocos, incluindo o 4º (o que tem as assinaturas JPEG)** — ou
+  seja, o 4º bloco também é pixel bruto, do tamanho exato esperado para uma imagem sem
+  compressão. E, tal como no `caso_21`, o byte após as 4 assinaturas `FF D8 FF` do
+  helo.cdr não é um marcador JPEG válido nos 3 primeiros casos (é `FF` de novo — outro
+  padrão incompatível com um segmento JPEG real).
+
+**Conclusão: não existe um segundo modo de armazenamento no `Bitmaps.dat`. Todo bitmap
+observado até agora (sintético ou foto real, de qualquer formato de origem, com ou sem
+transparência, em RGB ou CMYK, pequeno ou grande) é armazenado como pixels
+descomprimidos em um registro `RI`.** A hipótese H2 original (que motivou toda a Fase 1b)
+partiu de um falso positivo na primeira leitura do helo.cdr — um lembrete útil de por que
+o critério de validação do projeto exige confirmar em múltiplas amostras antes de
+declarar algo como fato.
 
 ### D6. Mover/duplicar bitmap só toca `page1.dat`, nunca `Bitmaps.dat` (n=2)
 
@@ -140,13 +173,17 @@ Hipótese: esse campo é um **ponteiro/offset relativo para o início do próxim
 amostra — precisa de outro caso com alfa e dimensões diferentes para confirmar se é um
 offset (variaria com o tamanho da imagem) ou uma contagem/flag fixa.
 
-## Casos de teste ainda recomendados (Fase 1c)
+## Casos de teste ainda recomendados (Fase 1c — opcional, baixa prioridade)
 
-- **caso_21 — foto real** (ainda pendente, é opcional): decisivo para D5/H2 — se uma
-  foto de câmera aparecer como JPEG embutido no `Bitmaps.dat`, confirma que o modo de
-  armazenamento depende da origem/metadados da imagem, não só do tamanho.
+Com H1 e H2 fechadas (inclusive a questão do JPEG embutido, resolvida em D9), o que resta
+é refinamento de detalhe do cabeçalho `RI`, não mais central para avançar para a Fase 3:
+
 - **Duas imagens diferentes, uma delas com alfa**: fecha D8 combinando com D1 (testa se o
   campo do offset 24 realmente varia como offset, e se um 2º `UI` também pode ter seu
   próprio 2º `RI` de máscara).
 - **Bitmap com apenas 1 bit de profundidade (bitmap ao estilo "1 bit", preto e branco)**:
   testaria os limites do campo bpp e se stride é arredondado para múltiplo de byte.
+- Os campos ainda não identificados no cabeçalho `RI` (offsets 46-61 e 86-117 relativos
+  ao início do `UI`, ver D3) — provavelmente checksums, flags de compressão (sempre
+  "sem compressão" nas amostras) ou reserva para metadados de cor. Baixa prioridade: não
+  bloqueiam o parser da Fase 3, que já pode extrair dimensões, bpp e pixels corretamente.

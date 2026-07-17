@@ -23,9 +23,9 @@ de confiança explícito (`confirmado por N casos` vs. `hipótese não testada`)
 | Fase | Entregável | Status |
 |------|-----------|--------|
 | 1 | Gerador de casos de teste (macro VBA para CorelDRAW 2025 OEM) | **Concluída** — 16/16 casos gerados sem falhas (Corel 26.0 build 101) |
-| 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Concluída** — 5/5 casos gerados sem falhas (caso_21 opcional segue pendente) |
-| 2 | Motor de diferenças binárias (Python) | **Concluída** — 20 pares comparados, relatórios versionados |
-| 3 | Parser incremental (Python) | Não iniciada — `Bitmaps.dat` já está mapeado o suficiente para começar |
+| 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Concluída** — 6/6 casos gerados sem falhas, incluindo a foto real (caso_21) |
+| 2 | Motor de diferenças binárias (Python) | **Concluída** — 21 pares comparados, relatórios versionados |
+| 3 | Parser incremental (Python) | Não iniciada — `Bitmaps.dat` está mapeado o suficiente para começar |
 | 4 | Especificação pública + biblioteca instalável com testes | Não iniciada |
 
 ## Estrutura do repositório
@@ -64,7 +64,8 @@ e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
   duplicar um bitmap não altera um byte do `Bitmaps.dat`.
 - Texto embute a fonte (`font/fontTable.dat` + `embed/embedding0`); página nova cria
   `page2.dat` + preview + entrada no `dataFileList.dat`.
-- Pendência principal: os JPEGs embutidos do helo.cdr não foram reproduzidos com imagens
-  sintéticas (nem mesmo 2400×2400 px) — resta testar com uma foto real de câmera
-  (`caso_21`, opcional e ainda pendente) para saber se o modo de armazenamento depende
-  da origem/metadados da imagem, não só do tamanho.
+- **Pendência resolvida:** os "JPEGs embutidos" do helo.cdr eram coincidência estatística
+  em dados de pixel bruto de alta entropia, não um segundo modo de armazenamento —
+  confirmado importando uma foto real de câmera (`caso_21`) e reanalisando os 4 blocos do
+  helo.cdr com verificação de marcador JPEG válido. **Todo bitmap testado até agora,
+  sintético ou real, é armazenado como pixels descomprimidos.**

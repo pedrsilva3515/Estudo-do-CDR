@@ -71,6 +71,10 @@ Vale comparar com a especificação pública do ODF container como ponto de part
   (`89 50 4E 47...`) no arquivo inteiro.
 - O CorelDRAW reporta 24 bitmaps neste documento; portanto 20 bitmaps **não** estão
   armazenados como JPEG reconhecível.
+- **Atualização (Fase 1b, resolvido):** essas 4 assinaturas JPEG são coincidência
+  estatística em dados de pixel bruto, não um segundo modo de armazenamento — ver D9 em
+  [descobertas-fase1b.md](descobertas-fase1b.md). Os 4 blocos `UI` do helo.cdr, incluindo
+  o 4º, são pixels RGB descomprimidos como todos os outros.
 
 ### Descoberta nova: registros `UI` são TLV (hipótese forte, n=1)
 
@@ -98,12 +102,15 @@ Ver C1 em [descobertas-fase2.md](descobertas-fase2.md).
   sub-cabeçalho comum. Logo adiante (offset 40 do arquivo) aparece a sequência `52 49 06 06`
   (`RI` + 2 bytes) seguida de outros campos — possível registro aninhado, ainda não decodificado.
 
-### Hipótese de trabalho (herdada da investigação anterior, ainda não testada)
+### Hipótese de trabalho (herdada da investigação anterior — REFUTADA na Fase 1b)
 
-Nem todo bitmap é armazenado como JPEG: bitmaps importados de outros formatos (PNG, TIFF,
-BMP, clipboard) provavelmente são guardados em formato interno de compressão próprio, o que
-explicaria 24 bitmaps reportados vs. 4 assinaturas JPEG. Será testada com os casos da Fase 1
-(`caso_01` a `caso_04` importam a mesma imagem em 4 formatos de origem diferentes).
+A hipótese original era que bitmaps importados de formatos diferentes (PNG, TIFF, BMP)
+seriam guardados em formato interno de compressão próprio, o que explicaria 24 bitmaps
+reportados vs. 4 assinaturas JPEG. Os casos `caso_01`–`caso_04` (Fase 1) e o `caso_21`
+(Fase 1b, foto real) mostraram que **todo bitmap testado é armazenado como pixels RGB
+descomprimidos**, independente do formato de origem ou de ser uma foto real de câmera.
+O descompasso "24 bitmaps vs. poucos registros `UI`" é explicado por deduplicação
+(D2 em [descobertas-fase1b.md](descobertas-fase1b.md)), não por formato de armazenamento.
 
 ## O que ainda não foi investigado
 
