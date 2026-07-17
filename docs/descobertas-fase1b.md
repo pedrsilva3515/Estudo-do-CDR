@@ -44,7 +44,8 @@ bitmap 947×947 24bpp):
 12   uint32 LE   tamanho        regra de tamanho: ver C1 (não-final = payload; final = distância até o fim do escopo)
 16   24 bytes    sub-cabeçalho comum (ver D5)
 40   tag         "RI"           registro aninhado (2 bytes, SEM padding — ver D4)
-42   uint32 LE   tamanho        mesma regra de "distância até o fim do escopo" que o UI
+42   uint32 LE   tamanho        regra PRÓPRIA e mais simples que a do UI: sempre
+                                fim = offset_da_tag + tamanho (ver D4, corrigido na Fase 3)
 46   6 bytes     desconhecido (constante "00 00 4e 00 00 00" nas amostras)
 52   uint32 LE   ?              65536 em todas as amostras (flag/versão?)
 56   uint32 LE   ?              65536 em todas as amostras
@@ -67,23 +68,41 @@ O campo 60 precisa de mais amostras para confirmar se é um segundo campo de lar
 altura ou outra coisa (nas amostras de teste é numericamente igual ao campo 62 na
 maioria dos casos, mas isso pode ser coincidência de dimensões).
 
-### D4. Tag `RI`: 2 bytes de tag, sem padding — header de 6 bytes, não 8 (n=6)
+### D4. Tag `RI`: 2 bytes de tag, sem padding, header de 6 bytes — CORRIGIDO na Fase 3
 
-Diferente do `UI` (`tag[2] + reservado[2] + tamanho[4]` = 8 bytes de header), o `RI`
-usa `tag[2] + tamanho[4]` = **6 bytes de header**. Verificado em 6 amostras (caso_01,
-02, 07, 18, 19, e os dois `RI` de caso_16): em todas, a fórmula
-`offset_da_tag + 6 + tamanho = fim_do_escopo_do_RI` fecha exatamente (mesma regra de
-"tamanho mede até o fim do escopo, no registro final" do `UI`, aplicada de forma
-consistente e recursiva por nível de aninhamento — não é um caso especial, é a regra
-geral do formato TLV usado em todo o `Bitmaps.dat`).
+**Esta seção foi reescrita.** A primeira versão (escrita durante a Fase 1b, validada só
+manualmente) afirmava que o `RI` seguia a mesma regra dupla final/não-final do `UI`. Ao
+implementar o parser de verdade (Fase 3) e testá-lo contra os 21 casos de teste com
+`unittest`, essa regra quebrou em 2 dos 21 arquivos — o que a validação manual não tinha
+pego por examinar poucos casos "a mão". A regra real, descoberta depurando a falha:
 
-Verificado também que essa regra é relativa ao **escopo do contêiner imediato**, não ao
-arquivo inteiro: em `caso_16`, o `RI` dentro do 1º `UI` (não-final, seguido por um 2º
-`UI`) usa `tamanho` = distância até o fim do **payload do seu próprio `UI`**, não até o
-fim do arquivo — e os dois registros `RI` de `caso_16` (imagens diferentes, mas mesmas
-dimensões) relataram o mesmo `tamanho` exato (2.693.346), consistente com "distância até
-o fim do escopo que os contém", que é do mesmo tamanho para as duas imagens idênticas em
-dimensão.
+- **`RI` usa uma regra única e mais simples que a do `UI`:** o campo de tamanho sempre
+  mede a distância da tag até o fim do registro (`fim = offset_da_tag + tamanho`), sem
+  nenhum ajuste de cabeçalho e sem distinguir "é o último do escopo ou não". Vale tanto
+  para o único `RI` de um `UI` sem máscara quanto para o primeiro `RI` de um `UI` com
+  máscara (`RI` da imagem, seguido pelo `RI` da máscara).
+- **Existe um campo de 8 bytes entre o fim dos dados de um `RI` e a tag do próximo `UI`,
+  quando há um próximo `UI`** — só aparece nessa posição, nunca dentro do escopo de um
+  `UI` que é o último do arquivo. Esses 8 bytes têm o mesmo formato dos 8 bytes que abrem
+  o arquivo (dois `uint32` LE) e, no `caso_16`, os valores batem exatamente com um
+  contador incrementado em 1 entre uma imagem e a seguinte (`caso_16` tem esse contador
+  em `20` no início do arquivo e `21` nesse campo entre UI#1 e UI#2 — o mesmo valor `20`
+  observado como os 4 primeiros bytes do `caso_21`, gerado na mesma sessão do CorelDRAW,
+  sugerindo um contador global de imagens importadas na sessão, não por documento).
+  Hipótese (n=1, não totalmente fechada): é um contador incremental por imagem
+  armazenada, mantido pelo processo do CorelDRAW e persistido no arquivo; não afeta a
+  extração de pixels, mas explica por que uma leitura ingênua do tamanho do `UI` "sobra"
+  8 bytes que não pertencem a nenhum `RI`.
+- O parser (`fase3-parser/zcfreader/bitmaps.py`) trata esses 8 bytes como algo a ignorar:
+  depois de decodificar o `RI` da imagem, só tenta ler um segundo `RI` (máscara) se a
+  sobra de bytes **realmente começar com a tag `RI`** — caso contrário, assume que é esse
+  contador de 8 bytes e avança direto para o fim do `UI` (já conhecido de forma
+  independente, pela regra do `UI`).
+
+Essa correção foi descoberta com uma bateria de testes automatizados (`unittest`) rodando
+os 21 casos de teste da Fase 1/1b, não por inspeção manual — reforça por que o parser
+precisa de testes de regressão cobrindo múltiplos casos reais antes de confiar em
+qualquer regra de formato "fechada".
 
 ### D5. Imagem grande (2400×2400) continua armazenada como pixels brutos (n=1)
 

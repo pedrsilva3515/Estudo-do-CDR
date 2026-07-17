@@ -25,7 +25,7 @@ de confiança explícito (`confirmado por N casos` vs. `hipótese não testada`)
 | 1 | Gerador de casos de teste (macro VBA para CorelDRAW 2025 OEM) | **Concluída** — 16/16 casos gerados sem falhas (Corel 26.0 build 101) |
 | 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Concluída** — 6/6 casos gerados sem falhas, incluindo a foto real (caso_21) |
 | 2 | Motor de diferenças binárias (Python) | **Concluída** — 21 pares comparados, relatórios versionados |
-| 3 | Parser incremental (Python) | Não iniciada — `Bitmaps.dat` está mapeado o suficiente para começar |
+| 3 | Parser incremental (Python) | **Em andamento** — `zcfreader` extrai bitmaps (RGB/CMYK/alfa) de qualquer `.cdr`, com testes automatizados; objetos/texto/páginas ainda não têm parser |
 | 4 | Especificação pública + biblioteca instalável com testes | Não iniciada |
 
 ## Estrutura do repositório
@@ -43,6 +43,11 @@ fase2-diff-binario/
   zcf_diff.py                  Motor de diff binário entre pares de .cdr (ZCF)
   relatorios/                  Um relatório Markdown por caso de teste
   README.md                    Uso e limitações do motor
+fase3-parser/
+  zcfreader/                   Biblioteca Python (zero dependências) que extrai bitmaps
+                                de um .cdr sem precisar do CorelDRAW instalado
+  tests/                       Testes automatizados usando casos-de-teste/ como fixtures
+  README.md                    Uso, o que está confirmado e limitações conhecidas
 ```
 
 ## Estado atual (resumo das descobertas)
@@ -69,3 +74,8 @@ e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
   confirmado importando uma foto real de câmera (`caso_21`) e reanalisando os 4 blocos do
   helo.cdr com verificação de marcador JPEG válido. **Todo bitmap testado até agora,
   sintético ou real, é armazenado como pixels descomprimidos.**
+- **Fase 3 iniciada:** a biblioteca `zcfreader` (`fase3-parser/`) já extrai bitmaps de
+  qualquer `.cdr` real como PNG, sem o CorelDRAW instalado — validada contra os 21 casos
+  de teste e contra o `helo.cdr` original (4 imagens extraídas corretamente). No processo,
+  uma regra de formato documentada na Fase 1b (tamanho do registro `RI`) se mostrou
+  errada sob teste automatizado e foi corrigida — ver `docs/descobertas-fase1b.md`.
