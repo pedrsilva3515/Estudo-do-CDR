@@ -87,10 +87,10 @@ exatamente no offset da tag seguinte:
 
 Estrutura hipotética do registro: `tag (4 bytes ASCII+padding) + tamanho (uint32 LE) + payload`.
 
-**Anomalia a investigar:** o último registro declara terminar 8 bytes *depois* do fim do
-arquivo. Hipóteses: (a) o campo do último registro é medido de outro ponto de referência;
-(b) o arquivo é truncado por design no save; (c) os 8 bytes de cabeçalho do arquivo entram
-na conta de alguma forma. Precisa de mais amostras.
+**Atualização (Fase 2):** o "excesso de 8 bytes" do último registro se repetiu em TODOS os
+7 casos de teste com bitmap — é regra do formato, não anomalia: no registro final,
+`tamanho` = bytes da tag até o EOF (equivale a medir a partir do início da tag).
+Ver C1 em [descobertas-fase2.md](descobertas-fase2.md).
 
 - **Endianness:** os campos de tamanho são little-endian (consistente com formato Windows/x86).
 - Os payloads dos 4 registros `UI` começam com os **mesmos 24 bytes**
