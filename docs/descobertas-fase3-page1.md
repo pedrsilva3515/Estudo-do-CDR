@@ -155,51 +155,103 @@ C5, que já suspeitava disso a partir do movimento de um bitmap). Confirmado ago
   posição não altera nada aqui. Ou seja, não é um bounding-box agregado da página; é
   algo específico do primeiro objeto (a confirmar se é "por índice de criação" ou "por
   algum outro critério" com mais objetos nomeados).
-- **Layout de cada bloco de 16 bytes** (`int32` LE, 4 campos): `[X, flag=2, campo?, Y]`.
-  - Campo 0 (**X**): delta exato de +500.000 no `caso_22` (move +5cm X); **inalterado**
-    no `caso_23` (resize sem mover X) — confirma que é a coordenada X.
-  - Campo 1 (constante `2` em todos os casos testados): não muda com posição nem
-    tamanho — provável tipo/flag, não geometria.
-  - Campo 2 (**hipótese, não confirmado**): muda de forma não-linear no `caso_22`
-    (+349.285 a +350.285, não é múltiplo limpo de 100.000) mas fica **inalterado** no
-    `caso_23` (resize sem mudar posição). Padrão consistente com um **checksum/valor
-    derivado de (X,Y)** recalculado a cada mudança de posição, não uma coordenada bruta
-    — hipótese razoável, não fechada.
-  - Campo 3 (**Y**): delta exato de −100.000 no `caso_22` (move −1cm Y) — confirma que é
-    a coordenada Y. **Mas também muda no `caso_23`** (resize só de largura): +133.333,
-    o que **não é compatível com "Y simples"**, já que a altura não mudou. 133.333 ≈
-    400.000 (delta de largura em unidades) ÷ 3 — condizente com um **ponto de controle
-    de curva Bézier cúbica** (regra clássica "1/3 e 2/3 do segmento" usada para
-    representar uma aresta reta como Bézier), não uma posição pura. **Hipótese forte,
-    não fechada**: os retângulos podem ser armazenados internamente como curvas
-    fechadas (4 cantos + pontos de controle), não como um bounding box simples — comum
-    em formatos vetoriais, e explicaria por que um campo "parece Y" mas reage a mudança
-    de largura.
-  - **3º bloco de 16 bytes** difere dos outros 2 por uma constante fixa: campo X é
-    1.000 unidades mais negativo (`-751713` vs `-750713`). 1.000 unidades = 0,01 cm =
-    **exatamente metade da largura do contorno** (`"width":"2000"` no JSON de estilo,
-    P1, na mesma escala de 100.000 unid/cm → 2000 unid = 0,02cm, metade = 1.000
-    unidades). Hipótese: blocos 1–2 = bounding box só do preenchimento; bloco 3 =
-    bounding box incluindo a expansão do contorno (que se estende para fora do
-    caminho, centrado nele).
+- **Layout de cada bloco de 16 bytes** (`int32` LE, 4 campos): `[X, flag, campo?, Y]`.
 
-**Resumo do nível de confiança:** unidade (100.000/cm) e a existência de campos X/Y
-nessa região — **confirmados**. Layout exato dos 4 campos por bloco, significado do
-campo 2 (checksum?) e do padrão 1/3 do campo Y sob resize (Bézier?), e diferença do
-3º bloco (contorno?) — **hipóteses fortes, consistentes com todas as evidências
-coletadas, mas não fechadas**. Não testado ainda: rotação, um objeto com altura
-alterada (só testamos largura), e se esse padrão se repete para outros objetos além do
-primeiro criado no documento.
+### P7. Hipótese Bézier REFUTADA — campos X/Y são o canto esquerdo/topo do bounding box, confirmado com alta precisão via rotação (n=3 casos da Fase 1d)
 
-### Próximos casos de teste sugeridos (Fase 1d)
+A Fase 1d trouxe 3 casos novos (`caso_24`: redimensiona só a altura; `caso_25`: rotaciona
+30°; `caso_26`: cria um segundo objeto nomeado), desta vez com o bug do manifesto
+(`CDbl()`) já corrigido — então os valores de "antes/depois" gravados pelo próprio
+CorelDRAW são confiáveis, ao contrário do `caso_23` da rodada anterior.
 
-- Redimensionar só a **altura** (complementa `caso_23`, que só mexeu na largura) — se a
-  hipótese Bézier estiver certa, deve mexer no campo X (não no Y) de forma fracionada.
-- Rotacionar o retângulo por um ângulo conhecido — para ver se aparece em algum lugar
-  próximo dessa mesma região, ou se vive em outro lugar (matriz de transformação?).
-- Criar um SEGUNDO objeto nomeado e movê-lo (não o primeiro) — para confirmar se cada
-  objeto tem sua própria região de 3 blocos, e onde ela fica localizada em relação ao
-  primeiro objeto (logo depois? em outro lugar determinado pela ordem de criação?).
+**Achado decisivo: `caso_25` (rotação 30°) bate com a matemática de bounding box
+rotacionado com precisão de ~0,1%.** Calculando manualmente a nova bbox de um retângulo
+6×4cm (canto esquerdo=3, topo=7, centro em (6,5)) rotacionado 30° em torno do centro:
+
+```
+canto esquerdo previsto:  2.401924 cm  (delta = -0.598076 cm = -59.807,6 unidades)
+topo previsto:            8.232051 cm  (delta = +1.232051 cm = +123.205,1 unidades)
+
+observado no binario (blocos 1-2):  campo X delta = -59.808   campo Y delta = -123.205
+```
+
+Campo X bate com o previsto **quase exatamente** (erro de 0,4 unidades = 0,4 µm,
+arredondamento de ponto flutuante). Campo Y bate em **magnitude exata**, com o sinal
+invertido — indício de que o eixo Y é armazenado internamente com a direção oposta à
+convenção Y-para-cima da interface do CorelDRAW (comum em formatos que usam Y crescendo
+para baixo internamente).
+
+**Isso derruba a hipótese Bézier (1/3 do delta) proposta na rodada anterior** — o campo
+não é um ponto de controle de curva; é a coordenada bruta do canto esquerdo/topo da
+bounding box, num sistema de coordenadas interno cuja origem não é a mesma do valor em
+cm exibido no CorelDRAW (só os *deltas* batem diretamente; o valor absoluto tem um
+deslocamento de origem ainda não identificado — ver P8).
+
+`caso_24` (altura +4cm, mesmo delta do `caso_23` mas no eixo oposto) também confirma:
+campo X **inalterado** (esquerda não mexe), campo Y muda o delta **completo** (-400.000,
+não 1/3) — consistente com "topo fica fixo, base desce" quando só a altura cresce
+(confirmado pelo manifesto: `GetPosition` ficou em (3,7) antes e depois).
+
+**`caso_23` (largura, rodada anterior) permanece sem explicação e precisa ser re-rodado**
+com o manifesto corrigido antes de tentar explicar por que o campo Y mudou 1/3 do delta
+de largura ali — não dá pra descartar que aquele resultado específico tenha vindo de um
+comportamento de `SetSize` diferente do que assumi (ex.: ancoragem não é sempre
+canto-superior-esquerdo), já que não tenho o gabarito real daquele caso.
+
+### P8. A região do offset 16 provavelmente é um CACHE do último objeto transformado, não um registro fixo por objeto (n=1, hipótese nova)
+
+`caso_26` criou um segundo retângulo nomeado (`RetanguloDois`, posição conhecida
+12×26cm, tamanho 15×14cm) **sem mover nem redimensionar** nenhum dos dois objetos após
+a criação. Resultado:
+
+- A região do offset 16 continua com os **mesmos valores exatos** de `RetanguloBase`
+  (idêntico a `caso_00`) — confirma de novo que não é afetada por outro objeto existir.
+- **Nenhum valor compatível com a posição de `RetanguloDois` foi encontrado em nenhum
+  lugar do arquivo** (testado com os deltas esperados, em cm reais e com o eixo Y
+  invertido, com tolerância de 0,02cm) — ou seja, `RetanguloDois` **não tem** uma região
+  equivalente de "3 blocos" em lugar nenhum óbvio.
+
+Hipótese mais simples que explica tudo observado até aqui: a região do offset 16 **não
+é "a geometria do objeto #1"**, é um **cache do último objeto que sofreu uma operação de
+transformação interativa (mover/redimensionar/rotacionar)** dentro daquela sessão de
+edição — provavelmente o dado que alimenta a Barra de Propriedades do CorelDRAW (que
+mostra X/Y/Largura/Altura do objeto selecionado). Como só `RetanguloBase` foi movido/
+redimensionado/rotacionado em todos os casos até agora (`RetanguloDois` só foi criado,
+nunca transformado), só ele aparece nessa região — consistente com todas as evidências:
+apareceu e mudou exatamente nos 3 casos que *transformaram* `RetanguloBase`, e não
+apareceu para `RetanguloDois`, que nunca foi transformado.
+
+**Se essa hipótese estiver certa**, a geometria *permanente* de cada objeto (a que
+realmente é usada para desenhar, independente de qual foi selecionado por último) deve
+estar em outro lugar — provavelmente dentro do "chunk nomeado" de cada objeto (P3/P4),
+talvez nos mesmos 4 floats que descartei como candidatos a geometria numa rodada
+anterior (eles podem não ser posição pura, mas ainda fazer parte da representação da
+curva do objeto). Não fechado.
+
+**Resumo do nível de confiança:**
+- Unidade (100.000/cm) e campos X/Y = canto esquerdo/topo da bounding box — **confirmado
+  com alta precisão** (move, resize de altura, rotação).
+- Hipótese Bézier — **refutada**.
+- Região do offset 16 = cache do último objeto transformado (não um slot por objeto) —
+  **hipótese forte, não fechada**, precisa de um teste que MOVA o segundo objeto para
+  confirmar (se a região passar a refletir `RetanguloDois`, confirma).
+- Onde vive a geometria *permanente* de cada objeto (para desenhar objetos nunca
+  selecionados) — **em aberto**, provável próximo alvo de investigação.
+- `caso_23` (resize de largura) — **necessita re-execução** com o manifesto corrigido
+  antes de ser reutilizado como evidência.
+
+### Próximos casos de teste sugeridos (Fase 1e)
+
+- **Mover `RetanguloDois`** (não `RetanguloBase`) por um delta conhecido — teste decisivo
+  para a hipótese P8: se a região do offset 16 passar a refletir `RetanguloDois`, ou se
+  aparecer uma segunda região em outro lugar, ou se nada mudar (a geometria permanente
+  estar em outro lugar, com esta região realmente amarrada só ao objeto #1).
+- **Re-rodar o equivalente do `caso_23`** (resize de largura) com o manifesto corrigido,
+  para ter um gabarito confiável e revisitar a anomalia dos 133.333.
+- Uma vez a hipótese do cache confirmada ou refutada, procurar a geometria permanente
+  dentro do "chunk nomeado" de cada objeto — provavelmente reexaminando os 4 floats após
+  o JSON de estilo (P3/P4) com a mesma rigor usado aqui (delta previsto vs. observado),
+  em vez de tentar adivinhar o significado deles isoladamente.
 
 ## HIPÓTESES / OBSERVAÇÕES (não confirmadas — precisam de mais amostras)
 

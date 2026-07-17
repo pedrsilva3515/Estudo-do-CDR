@@ -142,3 +142,25 @@ idêntica às fases anteriores. Log em `log_geracao_1d.txt`.
 | `caso_24_resize_altura.cdr` | caso_00 | Aumenta só a **altura** em 4cm (mesmo delta do `caso_23`, eixo oposto) — se o campo X reagir a ~1/3 do delta, espelhando o que o campo Y fez no `caso_23`, confirma a hipótese de ponto de controle Bézier |
 | `caso_25_rotaciona_retangulo.cdr` | caso_00 | Rotaciona `RetanguloBase` em 30° em torno do próprio centro, sem mover/redimensionar — localiza onde a rotação é armazenada |
 | `caso_26_segundo_retangulo.cdr` | caso_00 | Cria um segundo retângulo nomeado (`RetanguloDois`) em posição conhecida, sem tocar no primeiro — testa se cada objeto tem sua própria região de geometria e onde ela fica |
+
+Resultado (já analisado): a hipótese Bézier caiu — a rotação bateu com a matemática de
+bounding box rotacionado com ~0,1% de precisão, confirmando que os campos X/Y são o
+canto esquerdo/topo puro, não pontos de controle de curva. O `caso_26` revelou algo
+inesperado: o segundo objeto **não apareceu em lugar nenhum do arquivo** com sua própria
+versão da região de geometria — nova hipótese: essa região é um *cache do último objeto
+transformado*, não um slot fixo por objeto. Ver seções P7/P8 em
+`docs/descobertas-fase3-page1.md`. O `caso_23` (Fase 1c) precisa ser re-rodado — o
+manifesto dele ainda tem o bug do `CDbl()`, então não serve de gabarito confiável.
+
+## Fase 1e — teste decisivo do cache de geometria (`GeradorCasosZCF_1e.bas`)
+
+Quinta macro, com um único caso desenhado para confirmar ou refutar a hipótese P8:
+se a região de geometria é mesmo um cache do último objeto transformado, mover o
+*segundo* objeto (em vez do primeiro) deve fazer essa região passar a refletir o
+segundo objeto.
+
+**Pré-requisito:** `caso_00_base.cdr` em `PASTA_SAIDA`. Log em `log_geracao_1e.txt`.
+
+| Arquivo | Base | O que testa |
+|---|---|---|
+| `caso_27_move_segundo_retangulo.cdr` | caso_00 | Cria `RetanguloDois` e move só ele (delta diferente do `caso_22`, para não confundir os dois) — `RetanguloBase` fica parado |
