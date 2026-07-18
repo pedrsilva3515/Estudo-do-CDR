@@ -11,6 +11,13 @@ Objetos vetoriais (posição, tamanho, curvas) e texto ainda não têm parser �
 "chunks" binários de `page*.dat` só foi parcialmente decodificada, ver
 `docs/descobertas-fase3-page1.md`.
 
+> ⚠️ **Antes de implementar qualquer leitura/escrita de coordenada geométrica:** o
+> CorelDRAW usa Y crescendo para CIMA (origem inferior esquerda) na API VBA, mas os
+> campos de coordenada já decodificados no binário de `page1.dat` mostraram sinal
+> **invertido** em relação a isso (confirmado via rotação — ver o aviso no topo de
+> `docs/descobertas-fase3-page1.md`). Não assuma a convenção; deixe o sentido do eixo
+> Y em comentário explícito em qualquer código novo que manipule coordenadas.
+
 Zero dependências externas — usa só `zipfile`, `struct` e `zlib` da biblioteca padrão
 (inclusive o escritor de PNG é próprio, ver `zcfreader/png_writer.py`).
 

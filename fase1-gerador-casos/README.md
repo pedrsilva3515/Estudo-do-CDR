@@ -4,6 +4,13 @@ Macro para CorelDRAW 2025 OEM que gera os arquivos `.cdr` de teste da Fase 1, ca
 **uma única característica** em relação a um documento base, com um manifesto JSON ao lado de
 cada arquivo descrevendo exatamente o que mudou.
 
+> ⚠️ **Eixo Y**: a API VBA do CorelDRAW (`GetPosition`, `Move`, etc., usadas a partir da
+> Fase 1c) usa Y crescendo para CIMA, origem no canto inferior esquerdo da página — o
+> oposto do que a maioria dos frameworks gráficos assume por padrão. Qualquer macro nova
+> que leia/escreva coordenadas deve deixar isso explícito em comentário. Detalhe completo
+> e um segundo cuidado (o binário interno de `page1.dat` inverte esse sinal de novo) em
+> `docs/descobertas-fase3-page1.md`.
+
 ## Instalação
 
 1. Abra o CorelDRAW e pressione `Alt+F11` para abrir o editor VBA.

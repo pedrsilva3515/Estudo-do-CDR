@@ -7,6 +7,48 @@ rodada** — é uma árvore de "chunks" binários bem mais complexa. O que segue
 confirmado o suficiente para já virar código (`fase3-parser/zcfreader/page.py`), mais o
 que ficou registrado como observação para retomar depois.
 
+> ## ⚠️ ATENÇÃO — convenção de eixo Y (leia antes de escrever qualquer código de geometria)
+>
+> O CorelDRAW usa **origem no canto inferior esquerdo da página, com o eixo Y crescendo
+> para CIMA** — o oposto da convenção mais comum em bibliotecas gráficas e formatos de
+> imagem (Y crescendo para baixo, origem no canto superior esquerdo), que é o que
+> qualquer pessoa (ou LLM) tende a assumir por padrão se não for avisada.
+>
+> Isso aparece em **dois lugares diferentes deste projeto, com comportamentos
+> diferentes — não confunda um com o outro**:
+>
+> 1. **API VBA do CorelDRAW** (`GetPosition`, `SetPosition`, `Move`, etc.): usa Y-para-cima
+>    de forma direta e consistente. Confirmado em toda a Fase 1c/1d/1e — mover um objeto
+>    com `dy` positivo aumenta o Y retornado por `GetPosition`.
+> 2. **Codificação binária interna em `page1.dat`** (os campos de coordenada que já
+>    decodificamos): o campo que representa o eixo Y responde ao delta de **rotação**
+>    com o **sinal invertido** em relação ao Y-para-cima da API (magnitude bateu exata,
+>    sinal trocado — ver P7 abaixo). Ou seja, o arquivo binário parece usar Y-para-baixo
+>    internamente, mesmo a API VBA expondo Y-para-cima. **Ainda não testamos se essa
+>    inversão vale também para translação pura** (nos testes de `Move`, o delta bateu
+>    direto, sem inverter — só a rotação mostrou a inversão claramente até agora).
+>
+> **Regra prática para qualquer código novo (VBA, Python, ou prompt pra gerar um dos
+> dois) que manipule coordenadas neste projeto:** deixe o sentido do eixo Y explícito
+> em comentário, sempre, no ponto onde a coordenada é lida ou escrita — não assuma que
+> quem for ler o código (humano ou LLM) vai lembrar disso sozinho. Exemplo do padrão a
+> seguir:
+>
+> ```vba
+> ' Y cresce para CIMA no CorelDRAW (API VBA) — NAO inverter aqui.
+> sh.SetPosition x, y
+> ```
+>
+> ```python
+> # Campo Y do binario de page1.dat: sinal invertido em relacao ao Y-para-cima
+> # da API VBA (confirmado via rotacao, P7) — inverter antes de comparar com
+> # GetPosition/GetSize.
+> y_real_cm = -y_bruto / 100000
+> ```
+>
+> Isso é o tipo de detalhe que não gera erro de compilação nem exceção — só produz uma
+> imposição, matriz de corte, ou coordenada extraída de cabeça para baixo, silenciosamente.
+
 ## CONFIRMADO
 
 ### P1. As propriedades de estilo (preenchimento/contorno/transparência) são gravadas como JSON em texto puro (n=4 documentos, 6 objetos)
