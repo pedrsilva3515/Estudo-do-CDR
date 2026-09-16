@@ -32,10 +32,12 @@ A transparência graduada tem uma camada externa com `startTransparency` e
 mesmos códigos de degradê do preenchimento. Os casos 76–79 confirmam os tipos
 linear, radial, cônico e quadrado, todos de 0 (opaco) para 1 (transparente).
 
-No padrão vetorial de duas cores escolhido manualmente, o JSON contém
-`patternId="5"`, as duas cores e as dimensões de repetição `tilingWidth` e
-`tilingHeight`. Como esse estilo começa pelo campo `StackedBitmapEffects`, o
-leitor aceita esse prefixo além do prefixo simples `fill`.
+Os dois padrões vetoriais de duas cores escolhidos manualmente confirmam
+`patternId`, as duas cores e as dimensões de repetição `tilingWidth` e
+`tilingHeight`: a trama linear usa id 5 e repetição de 1.000.000; o xadrez usa
+id 1 e repetição de 100.000. Como esse estilo começa pelo campo
+`StackedBitmapEffects`, o leitor aceita esse prefixo além do prefixo simples
+`fill`.
 
 ## API disponível
 

@@ -215,6 +215,14 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         self.assertEqual(preenchimento.largura_repeticao, 1_000_000)
         self.assertEqual(preenchimento.altura_repeticao, 1_000_000)
 
+    def test_padrao_xadrez_tem_id_e_repeticao_proprios(self):
+        estilo = self._estilo("caso_81_padrao_duas_cores_xadrez.cdr")
+        preenchimento = estilo.preenchimento
+        self.assertEqual(preenchimento.tipo, "padrao")
+        self.assertEqual(preenchimento.id_padrao, 1)
+        self.assertEqual(preenchimento.largura_repeticao, 100_000)
+        self.assertEqual(preenchimento.altura_repeticao, 100_000)
+
 
 if __name__ == "__main__":
     unittest.main()
