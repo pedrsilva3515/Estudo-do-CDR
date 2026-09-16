@@ -80,9 +80,13 @@ class CorObjeto:
 class PreenchimentoObjeto:
     tipo: str
     codigo_tipo: int | None
+    tipo_degrade: str | None
     cor_primaria: CorObjeto | None
     cor_secundaria: CorObjeto | None
     sobreimpressao: bool | None
+    angulo: float | None
+    passos: int | None
+    ponto_medio: float | None
 
 
 @dataclass(frozen=True)
@@ -148,11 +152,17 @@ def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
     preenchimento = None
     if isinstance(fill, dict):
         preenchimento = PreenchimentoObjeto(
-            tipo={0: "nenhum", 1: "uniforme"}.get(codigo_tipo, "desconhecido"),
+            tipo={0: "nenhum", 1: "uniforme", 2: "degrade"}.get(codigo_tipo, "desconhecido"),
             codigo_tipo=codigo_tipo,
+            tipo_degrade={1: "linear", 2: "radial", 3: "conico", 4: "quadrado"}.get(
+                _inteiro(fill.get("fountainType"))
+            ),
             cor_primaria=parse_cor_objeto(fill.get("primaryColor")),
             cor_secundaria=parse_cor_objeto(fill.get("secondaryColor")),
             sobreimpressao={"0": False, "1": True}.get(str(fill.get("overprint"))),
+            angulo=_real(fill.get("angle")),
+            passos=_inteiro(fill.get("numSteps")),
+            ponto_medio=_real(fill.get("rateValue")),
         )
     transparencia_tipado = None
     if isinstance(transparencia, dict) and transparencia:

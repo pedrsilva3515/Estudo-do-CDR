@@ -1,0 +1,1 @@
+{"caso":"caso_72_degrade_linear","arquivo":"caso_72_degrade_linear.cdr","base":"caso_00_base.cdr","alteracao":"degrade_linear","parametros":{"inicio_cmyk":[0,100,100,0],"fim_cmyk":[100,0,0,0]},"descricao":"Retângulo base com degradê linear vermelho para ciano."}

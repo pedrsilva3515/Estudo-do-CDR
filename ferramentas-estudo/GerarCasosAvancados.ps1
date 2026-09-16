@@ -199,6 +199,12 @@ try {
     Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1); $shape.Transparency.ApplyUniformTransparency(50)
     Save-Case 'caso_71_transparencia_uniforme_50.cdr'; Close-Document
 
+    Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1)
+    $inicio = $app.CreateCMYKColor(0, 100, 100, 0); $fim = $app.CreateCMYKColor(100, 0, 0, 0)
+    # cdrLinearFountainFill = 1 na type library do CorelDRAW 26.
+    $shape.Fill.ApplyFountainFill($inicio, $fim, 1)
+    Save-Case 'caso_72_degrade_linear.cdr'; Close-Document
+
     # 62–66: subcaminhos e segmentos de curvas.
     Open-Base $true
     $curve = $app.CreateCurve($doc); $sp = $curve.CreateSubPath(4, 8)

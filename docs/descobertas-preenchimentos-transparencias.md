@@ -14,10 +14,17 @@ a ter um JSON de estilo, já localizado pelo parser de página.
 | Cor RGB 0–255 | `fill.primaryColor = "RGB255,..."` | caso 69 |
 | Sobreimpressão de preenchimento | `fill.overprint = "1"` | caso 70 |
 | Transparência uniforme de 50% | `transparency.uniformTransparency = "0.5"` | caso 71 |
+| Degradê linear | `fill.type = "2"` e `fill.fountainType = "1"` | caso 72 |
 
 Para CMYK, as quatro componentes seguem o modelo e a paleta:
 `CMYK,USER,C,M,Y,K,opacidade,identificador`. Para RGB, as três componentes
 seguem `RGB255,USER,R,G,B,opacidade,identificador`.
+
+No degradê linear, a cor inicial permanece em `primaryColor` e a final em
+`secondaryColor`. O caso 72 também confirmou `angle`, `numSteps` e `rateValue`
+(ponto médio) como campos do preenchimento. Os tipos de degradê enumerados pela
+type library da versão 26 são linear=1, radial=2, cônico=3 e quadrado=4; somente
+o valor linear foi validado em um arquivo controlado até aqui.
 
 ## API disponível
 
@@ -27,6 +34,6 @@ JSON em `ItemNomeado.estilo` para compatibilidade.
 
 ## Limites atuais
 
-Ainda faltam casos e leitura semântica para preenchimento em degradê, padrão,
-textura, cor spot e transparência graduada. Esses formatos não devem ser
-tratados como preenchimento uniforme até haver casos controlados.
+Ainda faltam casos e leitura semântica para degradês radial/cônico/quadrado,
+padrão, textura, cor spot e transparência graduada. Esses formatos não devem
+ser tratados como preenchimento uniforme até haver casos controlados.

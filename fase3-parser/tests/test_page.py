@@ -166,6 +166,14 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         self.assertEqual(estilo.transparencia.uniforme, 0.5)
         self.assertEqual(estilo.transparencia.aplica_a, 2)
 
+    def test_degrade_linear(self):
+        estilo = self._estilo("caso_72_degrade_linear.cdr")
+        preenchimento = estilo.preenchimento
+        self.assertEqual(preenchimento.tipo, "degrade")
+        self.assertEqual(preenchimento.tipo_degrade, "linear")
+        self.assertEqual(preenchimento.cor_primaria.componentes, (0, 100, 100, 0))
+        self.assertEqual(preenchimento.cor_secundaria.componentes, (100, 0, 0, 0))
+
 
 if __name__ == "__main__":
     unittest.main()

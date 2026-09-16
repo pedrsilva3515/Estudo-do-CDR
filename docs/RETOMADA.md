@@ -7,7 +7,7 @@ Este arquivo é o ponto de entrada para continuar o estudo em outro computador.
 - Repositório: `pedrsilva3515/Estudo-do-CDR`
 - Branch de trabalho: `claude/zcf-format-reverse-engineering-hdgcjw`
 - Último marco técnico antes deste documento: preenchimentos e transparência uniforme
-- Casos controlados versionados: `caso_00` a `caso_71`, sempre com `.cdr` e
+- Casos controlados versionados: `caso_00` a `caso_72`, sempre com `.cdr` e
   manifesto `.json`.
 - Testes no encerramento: 85 testes passando.
 
@@ -43,7 +43,7 @@ python -m unittest discover -s fase3-parser/tests -v
 7. Curvas: pontos, segmentos retos/Bézier, pontos de controle, múltiplos
    subcaminhos e detecção de subcaminhos abertos.
 8. Preenchimentos: ausente ou uniforme, cores CMYK/RGB e sobreimpressão;
-   transparência uniforme.
+   transparência uniforme e degradê linear.
 
 Os detalhes e evidências estão separados por assunto em:
 
@@ -100,8 +100,8 @@ python -m zcfreader.cli listar "C:\caminho\arquivo.cdr"
 
 Preenchimentos e transparências por objeto:
 
-1. cor spot;
-2. degradê;
+1. degradês radial, cônico e quadrado;
+2. cor spot;
 3. padrão/textura;
 4. transparência graduada.
 
