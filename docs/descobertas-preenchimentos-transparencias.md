@@ -30,6 +30,8 @@ O caso 82 confirma que a orientação linear de 45 graus é registrada somente e
 `fill.angle="45"`; a orientação padrão do caso 72 é `0`.
 O caso 83 confirma que o ponto médio de 25% é registrado em
 `fill.rateValue="25"`; o valor padrão é `50`.
+O caso 84 confirma que cada parada adicional aparece em `intermediateColors`
+como posição, cor, opacidade, modo de mistura e ponto médio.
 
 A transparência graduada tem uma camada externa com `startTransparency` e
 `endTransparency`. Sua geometria é serializada em `transparency.fill`, com os

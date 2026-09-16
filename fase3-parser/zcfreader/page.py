@@ -90,6 +90,16 @@ class PreenchimentoObjeto:
     id_padrao: int | None
     largura_repeticao: int | None
     altura_repeticao: int | None
+    cores_intermediarias: tuple["ParadaDegrade", ...]
+
+
+@dataclass(frozen=True)
+class ParadaDegrade:
+    posicao: float | None
+    cor: CorObjeto | None
+    opacidade: int | None
+    modo_mistura: int | None
+    ponto_medio: float | None
 
 
 @dataclass(frozen=True)
@@ -152,6 +162,21 @@ def parse_cor_objeto(valor: object) -> CorObjeto | None:
     )
 
 
+def _parse_parada_degrade(valor: object) -> ParadaDegrade | None:
+    if not isinstance(valor, str):
+        return None
+    partes = valor.split(":", 4)
+    if len(partes) != 5:
+        return None
+    return ParadaDegrade(
+        posicao=_real(partes[0]),
+        cor=parse_cor_objeto(partes[1]),
+        opacidade=_inteiro(partes[2]),
+        modo_mistura=_inteiro(partes[3]),
+        ponto_medio=_real(partes[4]),
+    )
+
+
 def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
     """Converte o JSON de estilo encontrado em ``pageN.dat`` em dados tipados."""
     fill = estilo.get("fill") if isinstance(estilo, dict) else None
@@ -159,6 +184,10 @@ def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
     codigo_tipo = _inteiro(fill.get("type")) if isinstance(fill, dict) else None
     preenchimento = None
     if isinstance(fill, dict):
+        cores_intermediarias = tuple(
+            parada for valor in fill.get("intermediateColors", [])
+            if (parada := _parse_parada_degrade(valor)) is not None
+        )
         preenchimento = PreenchimentoObjeto(
             tipo={0: "nenhum", 1: "uniforme", 2: "degrade", 8: "padrao"}.get(codigo_tipo, "desconhecido"),
             codigo_tipo=codigo_tipo,
@@ -174,6 +203,7 @@ def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
             id_padrao=_inteiro(fill.get("patternId")),
             largura_repeticao=_inteiro(fill.get("tilingWidth")),
             altura_repeticao=_inteiro(fill.get("tilingHeight")),
+            cores_intermediarias=cores_intermediarias,
         )
     transparencia_tipado = None
     if isinstance(transparencia, dict) and transparencia:
