@@ -190,6 +190,7 @@ class ContornoObjeto:
     seta_final: str | None
     angulo_caligrafico: float
     aspecto_caligrafico: int
+    limite_mitra: float
     larguras_variaveis: tuple["NoLarguraVariavel", ...]
 
     @property
@@ -414,6 +415,7 @@ def _contorno_de_dict(bruto: dict | None) -> ContornoObjeto | None:
             seta_final=bruto.get("rightArrow") or None,
             angulo_caligrafico=float(bruto.get("angle", 0)),
             aspecto_caligrafico=int(bruto.get("aspect", 0)),
+            limite_mitra=float(bruto.get("miterLimit", 0)),
             larguras_variaveis=nos_variaveis,
         )
     except (TypeError, ValueError):

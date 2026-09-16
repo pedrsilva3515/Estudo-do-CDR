@@ -83,6 +83,8 @@ Todos estão sem contorno (`width=0`), sem tracejado e sem sobreimpressão.
   `variableAttributes` usa grupos separados por `|`: posição normalizada,
   largura dos dois lados (em unidades de 1/10.000 mm) e uma flag. A API
   expõe cada grupo como `NoLarguraVariavel` em `contorno.larguras_variaveis`.
-- Ainda faltam atributos avançados de setas e limites de mitra.
+- O caso 101 confirmou `miterLimit`; ele é convertido para
+  `contorno.limite_mitra` como número decimal.
+- Ainda faltam atributos avançados de setas.
 - A caixa `bbox` observada descreve a geometria do objeto e não mudou com a
   largura nesses casos; não se deve usá-la para inferir a espessura.

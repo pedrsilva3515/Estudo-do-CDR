@@ -88,6 +88,10 @@ class TestContornos(unittest.TestCase):
         self.assertEqual(no.posicao, 0.5)
         self.assertEqual((no.largura_lado_1, no.largura_lado_2), (254000, 254000))
 
+    def test_contorno_limite_mitra(self):
+        contorno = _contorno("caso_101_contorno_limite_mitra.cdr")
+        self.assertEqual(contorno.limite_mitra, 12.0)
+
 
 if __name__ == "__main__":
     unittest.main()
