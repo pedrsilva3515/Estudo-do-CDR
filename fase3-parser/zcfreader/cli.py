@@ -87,6 +87,27 @@ def _listar(caminho: Path) -> int:
                     f"  curvas: {len(curvas_lidas)}/{len(curvas)} decodificada(s), "
                     f"{total_pontos} ponto(s) compactos"
                 )
+            fluxos_texto = doc.textos()
+            objetos_texto = [obj for obj in objetos if obj.tipo_objeto == "texto"]
+            if fluxos_texto or objetos_texto:
+                print(
+                    f"  textos: {len(fluxos_texto)} fluxo(s), "
+                    f"{len(objetos_texto)} objeto(s)"
+                )
+                for indice, fluxo in enumerate(fluxos_texto):
+                    print(f"    fluxo [{indice}]: {fluxo.texto!r}")
+                for objeto in objetos_texto:
+                    estilos = ", ".join(
+                        f"{estilo.fonte or '?'} "
+                        f"{estilo.tamanho_pt:.2f} pt"
+                        if estilo.tamanho_pt is not None
+                        else f"{estilo.fonte or '?'} tamanho desconhecido"
+                        for estilo in objeto.estilos_texto
+                    )
+                    print(
+                        f"    objeto {objeto.tipo_texto or 'texto'}, "
+                        f"pagina {objeto.pagina or '?'}: {estilos or 'sem estilo decodificado'}"
+                    )
 
         paginas = doc.paginas_estruturais()
         for pagina in paginas:

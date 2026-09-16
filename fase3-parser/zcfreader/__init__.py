@@ -38,6 +38,7 @@ from .structure import (
     PaginaEstrutural,
     PontoCurva,
 )
+from .text import EstiloTexto, FluxoTexto, FormatoTextoInvalido, TrechoTexto
 
 __all__ = [
     "abrir_cdr",
@@ -58,4 +59,8 @@ __all__ = [
     "PontoCurva",
     "PaginaEstrutural",
     "OcorrenciaLimitePagina",
+    "EstiloTexto",
+    "FluxoTexto",
+    "TrechoTexto",
+    "FormatoTextoInvalido",
 ]

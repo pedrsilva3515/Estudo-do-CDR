@@ -192,6 +192,18 @@ class ZcfContainer:
         from .metadata import parse_metadata
         return parse_metadata(self.read("META-INF/metadata.xml"))
 
+    def textos(self):
+        """Conteúdo textual agregado de ``META-INF/textinfo.xml``.
+
+        Devolve os fluxos na ordem do XML. Fonte e tamanho por objeto ficam
+        disponíveis em ``objeto.estilos_texto`` na árvore estrutural.
+        """
+        if not self.tem_membro("META-INF/textinfo.xml"):
+            return ()
+        from .text import parse_textinfo
+
+        return parse_textinfo(self.read("META-INF/textinfo.xml"))
+
     def pagina(self, indice: int = 1):
         """Extrai nomes e estilos (fill/outline/transparency) de
         content/data/page{indice}.dat — ver zcfreader.page para o que e

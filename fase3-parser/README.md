@@ -14,6 +14,8 @@ instalado** e extrai:
   matriz/rotação e leitura experimental dos pontos de objetos curva.
 - tamanho individual das páginas, sangria e conferência de objetos fora do corte,
   inclusive conteúdo de PowerClips armazenado em `dataN.dat`.
+- conteúdo textual, idioma e parágrafos de `textinfo.xml`, mais fonte e tamanho
+  por objeto a partir do bloco estrutural `txsm`.
 
 Posição, tamanho e pontos compactos de curvas já são extraídos. Texto e a semântica
 completa das flags/segmentos vetoriais ainda não têm parser; ver
@@ -54,6 +56,11 @@ with abrir_cdr("arquivo.cdr") as doc:
             print(objeto.id_estrutural, objeto.grupo_powerclip)
             if objeto.geometria_curva:
                 print(objeto.geometria_curva.numero_pontos)
+            if objeto.estilos_texto:
+                print(objeto.tipo_texto, objeto.estilos_texto[0].fonte)
+
+    for fluxo in doc.textos():
+        print(fluxo.texto)
 
     print(doc.paginas_estruturais())
     for alerta in doc.conferencia_limites():

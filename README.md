@@ -110,6 +110,10 @@ e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
 - **PowerClip → página:** o campo de vínculo do recipiente aponta para o grupo
   `clpt` de conteúdo. A página agora é propagada também por PowerClips aninhados,
   incluindo objetos armazenados em `dataN.dat`.
+- **Texto e fonte:** `META-INF/textinfo.xml` fornece conteúdo, parágrafos e idioma;
+  o bloco estrutural `txsm` fornece fonte, tamanho e atributos por objeto. Textos
+  artísticos e de parágrafo já são distinguidos — ver
+  `docs/descobertas-texto.md`.
 - **Metadados de pre-flight sem engenharia reversa binária:**
   `META-INF/metadata.xml` fornece tamanho nominal da página, orientação, número de
   páginas/layers, contagens por tipo de objeto e efeito, fontes usadas e versão do

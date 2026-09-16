@@ -1,0 +1,1 @@
+{"caso":"caso_41_texto_paragrafo","arquivo":"caso_41_texto_paragrafo.cdr","base":"caso_00_base.cdr","alteracao":"texto_paragrafo","parametros":{"linhas":["Primeira linha","Segunda linha"],"fonte":"Arial","tamanho_pt":12},"descricao":"Texto de parágrafo com duas linhas para distinguir o código de objeto e os TextRun."}

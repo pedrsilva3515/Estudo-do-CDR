@@ -13,6 +13,7 @@ import re
 import struct
 
 from .references import MatrizAfim
+from .text import EstiloTexto, parse_estilos_texto
 
 
 class FormatoEstruturaInvalido(ValueError):
@@ -127,6 +128,8 @@ class ObjetoEstrutural:
     geometria_curva: GeometriaCurva | None = None
     id_estrutural: int | None = None
     grupo_powerclip: int | None = None
+    tipo_texto: str | None = None
+    estilos_texto: tuple[EstiloTexto, ...] = ()
 
     @property
     def pontos_curva_absolutos(self) -> tuple[tuple[float, float, int], ...] | None:
@@ -150,6 +153,7 @@ TIPOS_OBJETO = {
     3: "curva",
     4: "texto",
     5: "bitmap",
+    6: "texto",
 }
 
 
@@ -395,11 +399,21 @@ def parse_estrutura(
             codigo_tipo_objeto = None
             tipo_objeto = None
             geometria_curva = None
+            tipo_texto = None
+            estilos_texto: tuple[EstiloTexto, ...] = ()
             if no.tipo == "obj " and bruto_loda is not None and len(bruto_loda[1]) >= 20:
                 codigo_tipo_objeto = struct.unpack_from("<I", bruto_loda[1], 16)[0]
                 tipo_objeto = TIPOS_OBJETO.get(codigo_tipo_objeto, "desconhecido")
                 if codigo_tipo_objeto == 3:
                     geometria_curva = _parse_geometria_curva(bruto_loda[1])
+                elif codigo_tipo_objeto in (4, 6):
+                    tipo_texto = "artistico" if codigo_tipo_objeto == 4 else "paragrafo"
+                    bruto_txsm = _ler_referencia(
+                        _referencia(_filho(no, tag="txsm")),
+                        streams,
+                    )
+                    if bruto_txsm is not None:
+                        estilos_texto = parse_estilos_texto(bruto_txsm[1])
 
             id_estrutural = _valor_imediato(_filho(no, tag="spnd"))
             candidatos = (
@@ -438,6 +452,8 @@ def parse_estrutura(
                     pagina=proxima_pagina,
                     geometria_curva=geometria_curva,
                     id_estrutural=id_estrutural,
+                    tipo_texto=tipo_texto,
+                    estilos_texto=estilos_texto,
                 )
             )
             pais_estruturais.append(pai_estrutural)
