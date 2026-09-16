@@ -91,11 +91,16 @@ class PreenchimentoObjeto:
 
 @dataclass(frozen=True)
 class TransparenciaObjeto:
+    tipo: str
+    tipo_degrade: str | None
     uniforme: float | None
     inicio: float | None
     fim: float | None
     aplica_a: int | None
     modo: int | None
+    angulo: float | None
+    passos: int | None
+    ponto_medio: float | None
 
 
 @dataclass(frozen=True)
@@ -166,12 +171,21 @@ def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
         )
     transparencia_tipado = None
     if isinstance(transparencia, dict) and transparencia:
+        fill_transparencia = transparencia.get("fill")
+        codigo_fill = _inteiro(fill_transparencia.get("type")) if isinstance(fill_transparencia, dict) else None
         transparencia_tipado = TransparenciaObjeto(
+            tipo="degrade" if codigo_fill == 2 else "uniforme",
+            tipo_degrade={1: "linear", 2: "radial", 3: "conico", 4: "quadrado"}.get(
+                _inteiro(fill_transparencia.get("fountainType"))
+            ) if isinstance(fill_transparencia, dict) else None,
             uniforme=_real(transparencia.get("uniformTransparency")),
             inicio=_real(transparencia.get("startTransparency")),
             fim=_real(transparencia.get("endTransparency")),
             aplica_a=_inteiro(transparencia.get("appliesTo")),
             modo=_inteiro(transparencia.get("mode")),
+            angulo=_real(fill_transparencia.get("angle")) if isinstance(fill_transparencia, dict) else None,
+            passos=_inteiro(fill_transparencia.get("numSteps")) if isinstance(fill_transparencia, dict) else None,
+            ponto_medio=_real(fill_transparencia.get("rateValue")) if isinstance(fill_transparencia, dict) else None,
         )
     return EstiloObjeto(preenchimento=preenchimento, transparencia=transparencia_tipado)
 

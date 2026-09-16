@@ -7,7 +7,7 @@ Este arquivo é o ponto de entrada para continuar o estudo em outro computador.
 - Repositório: `pedrsilva3515/Estudo-do-CDR`
 - Branch de trabalho: `claude/zcf-format-reverse-engineering-hdgcjw`
 - Último marco técnico antes deste documento: preenchimentos e transparência uniforme
-- Casos controlados versionados: `caso_00` a `caso_75`, sempre com `.cdr` e
+- Casos controlados versionados: `caso_00` a `caso_79`, sempre com `.cdr` e
   manifesto `.json`.
 - Testes no encerramento: 85 testes passando.
 
@@ -103,7 +103,7 @@ Preenchimentos e transparências por objeto:
 1. variações de degradê (cores intermediárias, ponto médio e geometria);
 2. cor spot;
 3. padrão/textura;
-4. transparência graduada.
+4. cor spot requer uma paleta spot instalada neste computador.
 
 Depois disso, as pendências de maior valor são nós cúspide/suave/simétrico,
 atributos avançados de setas, contorno caligráfico/variável e gestão de cor ICC.

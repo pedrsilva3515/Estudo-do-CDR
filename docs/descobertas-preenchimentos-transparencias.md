@@ -15,6 +15,7 @@ a ter um JSON de estilo, já localizado pelo parser de página.
 | Sobreimpressão de preenchimento | `fill.overprint = "1"` | caso 70 |
 | Transparência uniforme de 50% | `transparency.uniformTransparency = "0.5"` | caso 71 |
 | Degradê linear | `fill.type = "2"` e `fill.fountainType = "1"` | caso 72 |
+| Transparência graduada | `transparency.fill.type = "2"` | casos 76–79 |
 
 Para CMYK, as quatro componentes seguem o modelo e a paleta:
 `CMYK,USER,C,M,Y,K,opacidade,identificador`. Para RGB, as três componentes
@@ -25,6 +26,11 @@ Nos degradês, a cor inicial permanece em `primaryColor` e a final em
 (ponto médio) como campos do preenchimento. Os tipos de degradê são linear=1,
 radial=2, cônico=3 e quadrado=4, confirmados respectivamente nos casos 72–75.
 
+A transparência graduada tem uma camada externa com `startTransparency` e
+`endTransparency`. Sua geometria é serializada em `transparency.fill`, com os
+mesmos códigos de degradê do preenchimento. Os casos 76–79 confirmam os tipos
+linear, radial, cônico e quadrado, todos de 0 (opaco) para 1 (transparente).
+
 ## API disponível
 
 `ItemNomeado.estilo_tipado` e `doc.estilos_tipados_da_pagina()` devolvem
@@ -34,6 +40,6 @@ JSON em `ItemNomeado.estilo` para compatibilidade.
 ## Limites atuais
 
 Ainda faltam casos e leitura semântica para variações de degradê (cores
-intermediárias, ponto médio e geometria), padrão, textura, cor spot e
-transparência graduada. Esses formatos não devem ser tratados como
+intermediárias, ponto médio e geometria), padrão, textura e cor spot. Esses
+formatos não devem ser tratados como
 preenchimento uniforme até haver casos controlados.

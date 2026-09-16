@@ -216,6 +216,21 @@ try {
         Save-Case $caso[0]; Close-Document
     }
 
+    Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1)
+    # Transparência linear: início opaco (0) e fim totalmente transparente (1).
+    $shape.Transparency.ApplyFountainTransparency(0, 1, 1)
+    Save-Case 'caso_76_transparencia_degrade_linear.cdr'; Close-Document
+
+    foreach ($caso in @(
+        @('caso_77_transparencia_degrade_radial.cdr', 2),
+        @('caso_78_transparencia_degrade_conica.cdr', 3),
+        @('caso_79_transparencia_degrade_quadrada.cdr', 4)
+    )) {
+        Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1)
+        $shape.Transparency.ApplyFountainTransparency(0, 1, $caso[1])
+        Save-Case $caso[0]; Close-Document
+    }
+
     # 62–66: subcaminhos e segmentos de curvas.
     Open-Base $true
     $curve = $app.CreateCurve($doc); $sp = $curve.CreateSubPath(4, 8)
