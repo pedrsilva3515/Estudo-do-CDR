@@ -194,6 +194,11 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         estilo = self._estilo("caso_85_degrade_linear_10_passos.cdr")
         self.assertEqual(estilo.preenchimento.passos, 10)
 
+    def test_margem_do_degrade_reduz_escala(self):
+        estilo = self._estilo("caso_86_degrade_linear_margem_15.cdr")
+        self.assertEqual(estilo.preenchimento.escala_x, 0.7)
+        self.assertEqual(estilo.preenchimento.escala_y, 0.7)
+
     def test_tipos_de_degrade(self):
         casos = {
             "caso_73_degrade_radial.cdr": "radial",

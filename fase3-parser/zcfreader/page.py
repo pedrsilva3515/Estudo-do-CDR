@@ -91,6 +91,8 @@ class PreenchimentoObjeto:
     largura_repeticao: int | None
     altura_repeticao: int | None
     cores_intermediarias: tuple["ParadaDegrade", ...]
+    escala_x: float | None
+    escala_y: float | None
 
 
 @dataclass(frozen=True)
@@ -204,6 +206,8 @@ def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
             largura_repeticao=_inteiro(fill.get("tilingWidth")),
             altura_repeticao=_inteiro(fill.get("tilingHeight")),
             cores_intermediarias=cores_intermediarias,
+            escala_x=_real(fill.get("xScale")),
+            escala_y=_real(fill.get("yScale")),
         )
     transparencia_tipado = None
     if isinstance(transparencia, dict) and transparencia:
