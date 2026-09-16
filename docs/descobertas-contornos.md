@@ -85,6 +85,9 @@ Todos estão sem contorno (`width=0`), sem tracejado e sem sobreimpressão.
   expõe cada grupo como `NoLarguraVariavel` em `contorno.larguras_variaveis`.
 - O caso 101 confirmou `miterLimit`; ele é convertido para
   `contorno.limite_mitra` como número decimal.
-- Ainda faltam atributos avançados de setas.
+- O caso 102 confirmou ajustes de seta. `leftArrowAttributes` e
+  `rightArrowAttributes` trazem, separados por `|`, comprimento e largura em
+  unidades nativas, deslocamentos, espelhamentos horizontal/vertical e
+  rotação em milionésimos de grau. A API os expõe em `OpcoesSeta`.
 - A caixa `bbox` observada descreve a geometria do objeto e não mudou com a
   largura nesses casos; não se deve usá-la para inferir a espessura.

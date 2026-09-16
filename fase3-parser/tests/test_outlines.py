@@ -92,6 +92,18 @@ class TestContornos(unittest.TestCase):
         contorno = _contorno("caso_101_contorno_limite_mitra.cdr")
         self.assertEqual(contorno.limite_mitra, 12.0)
 
+    def test_opcoes_de_seta_inicial(self):
+        contorno = _contorno("caso_102_seta_opcoes.cdr")
+        opcoes = contorno.opcoes_seta_inicial
+        self.assertIsNotNone(opcoes)
+        self.assertEqual((opcoes.comprimento_unidades, opcoes.largura_unidades),
+                         (48_387_000, 32_258_000))
+        self.assertEqual((opcoes.deslocamento_x, opcoes.deslocamento_y), (0.2, -0.1))
+        self.assertTrue(opcoes.espelhar_horizontal)
+        self.assertFalse(opcoes.espelhar_vertical)
+        self.assertEqual(opcoes.rotacao_graus, 15.0)
+        self.assertIsNone(contorno.opcoes_seta_final)
+
 
 if __name__ == "__main__":
     unittest.main()

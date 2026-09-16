@@ -1,0 +1,1 @@
+{"caso":"caso_102_seta_opcoes","arquivo":"caso_102_seta_opcoes.cdr","base":"caso_60_contorno_setas.cdr","alteracao":"opcoes_seta_inicial","parametros":{"comprimento":3,"largura":2,"deslocamento_x":0.2,"deslocamento_y":-0.1,"rotacao":15,"espelhar_horizontal":true},"descricao":"Linha com seta inicial ajustada."}

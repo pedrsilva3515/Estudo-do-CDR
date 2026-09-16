@@ -191,6 +191,8 @@ class ContornoObjeto:
     angulo_caligrafico: float
     aspecto_caligrafico: int
     limite_mitra: float
+    opcoes_seta_inicial: "OpcoesSeta" | None
+    opcoes_seta_final: "OpcoesSeta" | None
     larguras_variaveis: tuple["NoLarguraVariavel", ...]
 
     @property
@@ -231,6 +233,19 @@ class NoLarguraVariavel:
     largura_lado_1: int
     largura_lado_2: int
     flag: int
+
+
+@dataclass(frozen=True)
+class OpcoesSeta:
+    """Ajustes seriais de uma ponta de seta, preservando as unidades nativas."""
+
+    comprimento_unidades: int
+    largura_unidades: int
+    deslocamento_x: float
+    deslocamento_y: float
+    espelhar_horizontal: bool
+    espelhar_vertical: bool
+    rotacao_graus: float
 
 
 @dataclass(frozen=True)
@@ -402,6 +417,18 @@ def _contorno_de_dict(bruto: dict | None) -> ContornoObjeto | None:
                     posicao=float(partes[1]), largura_lado_1=int(partes[2]),
                     largura_lado_2=int(partes[3]), flag=int(partes[4]),
                 ),)
+        def opcoes_seta(chave: str) -> OpcoesSeta | None:
+            atributos = bruto.get(chave, "")
+            partes = atributos.split("|")
+            if len(partes) != 7:
+                return None
+            return OpcoesSeta(
+                comprimento_unidades=int(partes[0]), largura_unidades=int(partes[1]),
+                deslocamento_x=float(partes[2]), deslocamento_y=float(partes[3]),
+                espelhar_horizontal=partes[4] != "0", espelhar_vertical=partes[5] != "0",
+                rotacao_graus=int(partes[6]) / 1_000_000.0,
+            )
+
         return ContornoObjeto(
             largura_unidades=largura,
             cor=bruto.get("color"),
@@ -416,6 +443,8 @@ def _contorno_de_dict(bruto: dict | None) -> ContornoObjeto | None:
             angulo_caligrafico=float(bruto.get("angle", 0)),
             aspecto_caligrafico=int(bruto.get("aspect", 0)),
             limite_mitra=float(bruto.get("miterLimit", 0)),
+            opcoes_seta_inicial=opcoes_seta("leftArrowAttributes"),
+            opcoes_seta_final=opcoes_seta("rightArrowAttributes"),
             larguras_variaveis=nos_variaveis,
         )
     except (TypeError, ValueError):
