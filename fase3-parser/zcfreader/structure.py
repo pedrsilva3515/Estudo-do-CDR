@@ -190,6 +190,7 @@ class ContornoObjeto:
     seta_final: str | None
     angulo_caligrafico: float
     aspecto_caligrafico: int
+    larguras_variaveis: tuple["NoLarguraVariavel", ...]
 
     @property
     def presente(self) -> bool:
@@ -221,6 +222,14 @@ class ContornoObjeto:
         return {0: "mitra", 1: "arredondada", 2: "chanfrada"}.get(
             self.juncao, "desconhecida"
         )
+
+
+@dataclass(frozen=True)
+class NoLarguraVariavel:
+    posicao: float
+    largura_lado_1: int
+    largura_lado_2: int
+    flag: int
 
 
 @dataclass(frozen=True)
@@ -383,6 +392,15 @@ def _contorno_de_dict(bruto: dict | None) -> ContornoObjeto | None:
         tracejado = () if especificacao in ("", "0") else tuple(
             float(valor) for valor in especificacao.split(",") if valor
         )
+        atributos_variaveis = bruto.get("variableAttributes", "")
+        nos_variaveis = ()
+        if atributos_variaveis:
+            partes = atributos_variaveis.split("|")
+            if len(partes) >= 5:
+                nos_variaveis = (NoLarguraVariavel(
+                    posicao=float(partes[1]), largura_lado_1=int(partes[2]),
+                    largura_lado_2=int(partes[3]), flag=int(partes[4]),
+                ),)
         return ContornoObjeto(
             largura_unidades=largura,
             cor=bruto.get("color"),
@@ -396,6 +414,7 @@ def _contorno_de_dict(bruto: dict | None) -> ContornoObjeto | None:
             seta_final=bruto.get("rightArrow") or None,
             angulo_caligrafico=float(bruto.get("angle", 0)),
             aspecto_caligrafico=int(bruto.get("aspect", 0)),
+            larguras_variaveis=nos_variaveis,
         )
     except (TypeError, ValueError):
         return None

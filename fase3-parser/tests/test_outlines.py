@@ -82,6 +82,12 @@ class TestContornos(unittest.TestCase):
         self.assertEqual(contorno.angulo_caligrafico, 45.0)
         self.assertEqual(contorno.aspecto_caligrafico, 50)
 
+    def test_contorno_largura_variavel(self):
+        contorno = _contorno("caso_100_contorno_largura_variavel.cdr")
+        (no,) = contorno.larguras_variaveis
+        self.assertEqual(no.posicao, 0.5)
+        self.assertEqual((no.largura_lado_1, no.largura_lado_2), (254000, 254000))
+
 
 if __name__ == "__main__":
     unittest.main()

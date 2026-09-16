@@ -77,7 +77,12 @@ Todos estão sem contorno (`width=0`), sem tracejado e sem sobreimpressão.
 
 - `objeto.contorno` expõe presença, largura, cor, tracejado, escala, pontas,
   junção e sobreimpressão.
-- Ainda faltam atributos avançados de setas, contorno caligráfico/variável e
-  limites de mitra.
+- O caso 99 confirmou o contorno caligráfico: `nibAngle` e `nibStretch` são
+  expostos como `angulo_caligrafico` e `aspecto_caligrafico`.
+- O caso 100 confirmou nós de largura variável. O campo
+  `variableAttributes` usa grupos separados por `|`: posição normalizada,
+  largura dos dois lados (em unidades de 1/10.000 mm) e uma flag. A API
+  expõe cada grupo como `NoLarguraVariavel` em `contorno.larguras_variaveis`.
+- Ainda faltam atributos avançados de setas e limites de mitra.
 - A caixa `bbox` observada descreve a geometria do objeto e não mudou com a
   largura nesses casos; não se deve usá-la para inferir a espessura.

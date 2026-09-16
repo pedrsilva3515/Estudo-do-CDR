@@ -6,10 +6,11 @@ Este arquivo é o ponto de entrada para continuar o estudo em outro computador.
 
 - Repositório: `pedrsilva3515/Estudo-do-CDR`
 - Branch de trabalho: `claude/zcf-format-reverse-engineering-hdgcjw`
-- Último marco técnico antes deste documento: preenchimentos e transparência uniforme
-- Casos controlados versionados: `caso_00` a `caso_85`, sempre com `.cdr` e
+- Último marco técnico antes deste documento: preenchimentos, transparências,
+  geometria de nós e contornos avançados
+- Casos controlados versionados: `caso_00` a `caso_100`, sempre com `.cdr` e
   manifesto `.json`.
-- Testes no encerramento: 85 testes passando.
+- Testes no encerramento: 108 testes passando.
 
 Commits técnicos desta rodada, em ordem:
 
@@ -39,11 +40,15 @@ python -m unittest discover -s fase3-parser/tests -v
 4. Texto por objeto: conteúdo, artístico/parágrafo, fonte, tamanho e página.
 5. Layers: nome, visível, imprimível, editável e propagação em PowerClip.
 6. Contornos: presença, largura, linha fina, cor, tracejado, escala, pontas,
-   junções, alinhamento, sobreimpressão e especificações de setas.
+   junções, alinhamento, sobreimpressão, especificações de setas, ponta
+   caligráfica e nós de largura variável.
 7. Curvas: pontos, segmentos retos/Bézier, pontos de controle, múltiplos
    subcaminhos e detecção de subcaminhos abertos.
-8. Preenchimentos: ausente ou uniforme, cores CMYK/RGB e sobreimpressão;
-   transparência uniforme e degradês linear, radial, cônico e quadrado.
+8. Preenchimentos: ausente ou uniforme, cores CMYK/RGB/GRAY/LAB/HSB/HLS/YIQ
+   e sobreimpressão; padrões lineares/xadrez, transparência uniforme e
+   degradês linear, radial, cônico e quadrado com paradas, ponto médio,
+   rotação, escalas, inclinação e modo de mistura.
+9. Nós de curva: ponta, cúspide, suave e simétrico.
 
 Os detalhes e evidências estão separados por assunto em:
 
@@ -100,13 +105,12 @@ python -m zcfreader.cli listar "C:\caminho\arquivo.cdr"
 
 Preenchimentos e transparências por objeto:
 
-1. variações de degradê (cores intermediárias, ponto médio e geometria);
-2. cor spot;
-3. padrão/textura;
-4. cor spot requer uma paleta spot instalada neste computador.
+1. cor spot;
+2. preenchimentos por textura;
+3. gestão de cor ICC.
 
-Depois disso, as pendências de maior valor são nós cúspide/suave/simétrico,
-atributos avançados de setas, contorno caligráfico/variável e gestão de cor ICC.
+Depois disso, as pendências de maior valor são atributos avançados de setas,
+limites de mitra e gestão de cor ICC.
 
 ## Regra de confiabilidade
 
