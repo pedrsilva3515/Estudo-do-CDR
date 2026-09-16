@@ -8,9 +8,9 @@ Este arquivo é o ponto de entrada para continuar o estudo em outro computador.
 - Branch de trabalho: `claude/zcf-format-reverse-engineering-hdgcjw`
 - Último marco técnico antes deste documento: preenchimentos, transparências,
   geometria de nós e contornos avançados
-- Casos controlados versionados: `caso_00` a `caso_100`, sempre com `.cdr` e
+- Casos controlados versionados: `caso_00` a `caso_103`, sempre com `.cdr` e
   manifesto `.json`.
-- Testes no encerramento: 108 testes passando.
+- Testes no encerramento: 111 testes passando.
 
 Commits técnicos desta rodada, em ordem:
 
@@ -105,9 +105,8 @@ python -m zcfreader.cli listar "C:\caminho\arquivo.cdr"
 
 Preenchimentos e transparências por objeto:
 
-1. cor spot;
-2. preenchimentos por textura;
-3. gestão de cor ICC.
+1. preenchimentos por textura;
+2. gestão de cor ICC.
 
 Depois disso, as pendências de maior valor são atributos avançados de setas,
 limites de mitra e gestão de cor ICC.

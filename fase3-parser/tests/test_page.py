@@ -179,6 +179,14 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         estilo = self._estilo("caso_95_preenchimento_yiq.cdr")
         self.assertEqual(estilo.preenchimento.cor_primaria.componentes, (50, 100, 120))
 
+    def test_preenchimento_spot(self):
+        cor = self._estilo("caso_103_preenchimento_spot_toyo.cdr").preenchimento.cor_primaria
+        self.assertEqual(cor.modelo, "SPOT")
+        self.assertEqual((cor.paleta, cor.id_spot, cor.tinta_spot), ("TOYO", 1, 100))
+        self.assertEqual(cor.nome_spot, "TOYO 0001pc*")
+        self.assertEqual(cor.cor_alternativa.modelo, "CMYK255")
+        self.assertEqual(cor.cor_alternativa.componentes, (84, 230, 8, 0))
+
     def test_sobreimpressao_do_preenchimento(self):
         estilo = self._estilo("caso_70_preenchimento_sobreimpressao.cdr")
         self.assertTrue(estilo.preenchimento.sobreimpressao)

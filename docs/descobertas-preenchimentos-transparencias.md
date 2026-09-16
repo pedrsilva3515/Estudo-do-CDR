@@ -59,7 +59,14 @@ JSON em `ItemNomeado.estilo` para compatibilidade.
 
 ## Limites atuais
 
-Ainda faltam casos e leitura semântica para variações de degradê (cores
-intermediárias, ponto médio e geometria), outros padrões, textura e cor spot. Esses
-formatos não devem ser tratados como
-preenchimento uniforme até haver casos controlados.
+Ainda faltam casos e leitura semântica para outros padrões e textura. Esses
+formatos não devem ser tratados como preenchimento uniforme até haver casos
+controlados.
+
+# Cor spot
+
+O caso 103 usa a cor `TOYO 0001pc*`, aberta automaticamente da paleta spot
+instalada com o CorelDRAW. A cadeia `primaryColor` começa com `SPOT` e contém
+o nome curto da paleta, identificador da cor, tinta, identificador da paleta,
+nome da cor e uma cor alternativa. `CorObjeto` expõe esses dados em
+`id_spot`, `tinta_spot`, `nome_spot` e `cor_alternativa`.

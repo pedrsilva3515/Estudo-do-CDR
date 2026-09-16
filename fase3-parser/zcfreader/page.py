@@ -74,6 +74,10 @@ class CorObjeto:
     opacidade: int | None
     identificador: str | None
     bruto: str
+    id_spot: int | None = None
+    tinta_spot: int | None = None
+    nome_spot: str | None = None
+    cor_alternativa: "CorObjeto | None" = None
 
 
 @dataclass(frozen=True)
@@ -151,7 +155,20 @@ def parse_cor_objeto(valor: object) -> CorObjeto | None:
         return None
     partes = valor.split(",")
     modelo = partes[0]
-    quantidade = {"CMYK": 4, "RGB255": 3, "GRAY255": 1, "LAB": 3, "HSB": 3, "HLS": 3, "YIQ255": 3}.get(modelo, 0)
+    if modelo == "SPOT":
+        return CorObjeto(
+            modelo=modelo,
+            paleta=partes[1] if len(partes) > 1 else None,
+            componentes=(),
+            opacidade=None,
+            identificador=partes[4] if len(partes) > 4 else None,
+            bruto=valor,
+            id_spot=_inteiro(partes[2]) if len(partes) > 2 else None,
+            tinta_spot=_inteiro(partes[3]) if len(partes) > 3 else None,
+            nome_spot=partes[6] if len(partes) > 6 else None,
+            cor_alternativa=parse_cor_objeto(",".join(partes[8:])) if len(partes) > 8 else None,
+        )
+    quantidade = {"CMYK": 4, "CMYK255": 4, "RGB255": 3, "GRAY255": 1, "LAB": 3, "HSB": 3, "HLS": 3, "YIQ255": 3}.get(modelo, 0)
     componentes = tuple(
         numero for parte in partes[2:2 + quantidade]
         if (numero := _inteiro(parte)) is not None
