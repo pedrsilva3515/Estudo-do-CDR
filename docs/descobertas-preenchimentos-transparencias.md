@@ -26,6 +26,8 @@ Nos degradês, a cor inicial permanece em `primaryColor` e a final em
 `secondaryColor`. O caso 72 também confirmou `angle`, `numSteps` e `rateValue`
 (ponto médio) como campos do preenchimento. Os tipos de degradê são linear=1,
 radial=2, cônico=3 e quadrado=4, confirmados respectivamente nos casos 72–75.
+O caso 82 confirma que a orientação linear de 45 graus é registrada somente em
+`fill.angle="45"`; a orientação padrão do caso 72 é `0`.
 
 A transparência graduada tem uma camada externa com `startTransparency` e
 `endTransparency`. Sua geometria é serializada em `transparency.fill`, com os
