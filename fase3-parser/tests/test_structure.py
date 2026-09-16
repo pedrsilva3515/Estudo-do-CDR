@@ -261,6 +261,14 @@ class TestEstruturaRoot(unittest.TestCase):
         self.assertEqual(curva_original.pontos[3].tipo_no, "cuspide")
         self.assertEqual(curva_alterada.pontos[3].tipo_no, "suave")
 
+    def test_no_simetrico_adiciona_bit_confirmado(self):
+        caminho = CASOS / "caso_98_curva_bezier_no_simetrico.cdr"
+        if not caminho.exists():
+            self.skipTest("fixture de nó simétrico ausente")
+        with abrir_cdr(caminho) as doc:
+            curva = next(o.geometria_curva for o in doc.estrutura() if o.tipo_objeto == "curva")
+        self.assertEqual(curva.pontos[3].tipo_no, "simetrico")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -76,6 +76,8 @@ class PontoCurva:
         """
         if self.papel not in {"fim_linha", "fim_curva"}:
             return None
+        if self.flag & 0x20:
+            return "simetrico"
         return "suave" if self.flag & 0x10 else "cuspide"
 
 
