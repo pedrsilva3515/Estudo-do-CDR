@@ -1,0 +1,1 @@
+{"caso":"caso_43_texto_duas_paginas","arquivo":"caso_43_texto_duas_paginas.cdr","base":"caso_00_base.cdr","alteracao":"texto_multipagina","parametros":{"pagina_1":"Texto pagina um","pagina_2":"Texto pagina dois"},"descricao":"Um objeto textual em cada página para validar a associação entre TextStream, objeto e página."}

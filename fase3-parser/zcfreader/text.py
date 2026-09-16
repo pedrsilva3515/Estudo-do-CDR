@@ -11,6 +11,10 @@ from dataclasses import dataclass
 import json
 import re
 import xml.etree.ElementTree as ET
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .structure import ObjetoEstrutural
 
 
 class FormatoTextoInvalido(ValueError):
@@ -54,6 +58,12 @@ class EstiloTexto:
         if self.tamanho_unidades is None:
             return None
         return self.tamanho_unidades / 10_000.0 * 72.0 / 25.4
+
+
+@dataclass(frozen=True)
+class TextoEstruturado:
+    objeto: "ObjetoEstrutural"
+    fluxo: FluxoTexto
 
 
 def _nome_local(tag: str) -> str:

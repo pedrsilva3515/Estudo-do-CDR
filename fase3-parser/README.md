@@ -62,6 +62,9 @@ with abrir_cdr("arquivo.cdr") as doc:
     for fluxo in doc.textos():
         print(fluxo.texto)
 
+    for item in doc.textos_por_objeto() or ():
+        print(item.fluxo.texto, item.objeto.pagina, item.objeto.caixa)
+
     print(doc.paginas_estruturais())
     for alerta in doc.conferencia_limites():
         print(alerta.pagina.indice, alerta.ultrapassa_sangria)

@@ -204,6 +204,26 @@ class ZcfContainer:
 
         return parse_textinfo(self.read("META-INF/textinfo.xml"))
 
+    def textos_por_objeto(self):
+        """Associa cada fluxo ao objeto textual na ordem estrutural.
+
+        Devolve ``None`` quando as contagens divergem, evitando uma associação
+        parcial ou adivinhada em variantes ainda não estudadas do formato.
+        """
+        from .text import TextoEstruturado
+
+        fluxos = self.textos()
+        objetos = tuple(
+            objeto for objeto in self.estrutura()
+            if objeto.tipo == "obj" and objeto.tipo_objeto == "texto"
+        )
+        if len(fluxos) != len(objetos):
+            return None
+        return tuple(
+            TextoEstruturado(objeto=objeto, fluxo=fluxo)
+            for objeto, fluxo in zip(objetos, fluxos)
+        )
+
     def pagina(self, indice: int = 1):
         """Extrai nomes e estilos (fill/outline/transparency) de
         content/data/page{indice}.dat — ver zcfreader.page para o que e

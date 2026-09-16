@@ -17,10 +17,11 @@ ou mais elementos `TextRun`. Os atributos observados incluem:
 idioma gravado pelo documento. O `caso_41`, com duas linhas em uma caixa de
 parágrafo, produziu dois `TextRun` dentro do mesmo `TextStream`.
 
-Com dois objetos, a ordem dos `TextStream` coincidiu com a ordem dos objetos
-de texto em `root.dat` (o objeto criado por último apareceu primeiro). Um caso
-não é suficiente para promover essa coincidência a vínculo definitivo; a API
-mantém conteúdo agregado e estilo estrutural separados por enquanto.
+Nos casos com dois objetos na mesma página, duas páginas e texto dentro de
+PowerClip, a ordem dos `TextStream` coincidiu com a ordem dos objetos de texto
+em `root.dat`. `doc.textos_por_objeto()` usa essa correspondência somente
+quando as contagens são idênticas; se divergirem, devolve `None` em vez de
+produzir uma associação parcial.
 
 ## T2. Tipos de objeto
 
@@ -69,8 +70,10 @@ embedding, além de distinguir incorporação completa e subconjunto.
 ## Implementação e limites atuais
 
 - `doc.textos()` lê conteúdo, quebras e idioma de `textinfo.xml`.
+- `doc.textos_por_objeto()` acrescenta página, caixa, matriz e estilo ao conteúdo.
 - Objetos estruturais expõem `tipo_texto` e `estilos_texto`.
 - Fonte e tamanho foram confirmados por mudanças isoladas e no arquivo real.
-- Ainda não associamos formalmente cada `TextStream` ao objeto correspondente.
+- A associação por ordem foi confirmada em três configurações controladas, mas
+  ainda deve ser testada com texto em master page e variantes antigas do CDR.
 - Ainda faltam estilos mistos dentro do mesmo parágrafo, texto excedente,
   kerning, alinhamento e detecção confiável de fonte ausente/substituída.

@@ -66,6 +66,22 @@ class TestTexto(unittest.TestCase):
             [("Times New Roman", 18.0), ("Arial", 12.0)],
         )
 
+    def test_associa_texto_a_pagina_em_documento_multipagina(self):
+        with abrir_cdr(CASOS / "caso_43_texto_duas_paginas.cdr") as doc:
+            associados = doc.textos_por_objeto()
+        self.assertEqual(
+            [(item.fluxo.texto, item.objeto.pagina) for item in associados],
+            [("Texto pagina um", 1), ("Texto pagina dois", 2)],
+        )
+
+    def test_associa_texto_dentro_de_powerclip(self):
+        with abrir_cdr(CASOS / "caso_44_texto_powerclip.cdr") as doc:
+            associados = doc.textos_por_objeto()
+        self.assertEqual(len(associados), 1)
+        self.assertEqual(associados[0].fluxo.texto, "Texto no PowerClip")
+        self.assertEqual(associados[0].objeto.pagina, 1)
+        self.assertEqual(associados[0].objeto.membro, "content/data/data1.dat")
+
 
 if __name__ == "__main__":
     unittest.main()
