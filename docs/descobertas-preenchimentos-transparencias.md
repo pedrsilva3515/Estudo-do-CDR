@@ -16,6 +16,7 @@ a ter um JSON de estilo, já localizado pelo parser de página.
 | Transparência uniforme de 50% | `transparency.uniformTransparency = "0.5"` | caso 71 |
 | Degradê linear | `fill.type = "2"` e `fill.fountainType = "1"` | caso 72 |
 | Transparência graduada | `transparency.fill.type = "2"` | casos 76–79 |
+| Padrão de duas cores | `fill.type = "8"` e `patternId` | caso 80 |
 
 Para CMYK, as quatro componentes seguem o modelo e a paleta:
 `CMYK,USER,C,M,Y,K,opacidade,identificador`. Para RGB, as três componentes
@@ -31,6 +32,11 @@ A transparência graduada tem uma camada externa com `startTransparency` e
 mesmos códigos de degradê do preenchimento. Os casos 76–79 confirmam os tipos
 linear, radial, cônico e quadrado, todos de 0 (opaco) para 1 (transparente).
 
+No padrão vetorial de duas cores escolhido manualmente, o JSON contém
+`patternId="5"`, as duas cores e as dimensões de repetição `tilingWidth` e
+`tilingHeight`. Como esse estilo começa pelo campo `StackedBitmapEffects`, o
+leitor aceita esse prefixo além do prefixo simples `fill`.
+
 ## API disponível
 
 `ItemNomeado.estilo_tipado` e `doc.estilos_tipados_da_pagina()` devolvem
@@ -40,6 +46,6 @@ JSON em `ItemNomeado.estilo` para compatibilidade.
 ## Limites atuais
 
 Ainda faltam casos e leitura semântica para variações de degradê (cores
-intermediárias, ponto médio e geometria), padrão, textura e cor spot. Esses
+intermediárias, ponto médio e geometria), outros padrões, textura e cor spot. Esses
 formatos não devem ser tratados como
 preenchimento uniforme até haver casos controlados.

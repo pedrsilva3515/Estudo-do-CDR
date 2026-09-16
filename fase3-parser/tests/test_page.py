@@ -206,6 +206,15 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
                 self.assertEqual(transparencia.tipo, "degrade")
                 self.assertEqual(transparencia.tipo_degrade, tipo)
 
+    def test_preenchimento_padrao_duas_cores(self):
+        estilo = self._estilo("caso_80_padrao_duas_cores.cdr")
+        preenchimento = estilo.preenchimento
+        self.assertEqual(preenchimento.tipo, "padrao")
+        self.assertEqual(preenchimento.codigo_tipo, 8)
+        self.assertEqual(preenchimento.id_padrao, 5)
+        self.assertEqual(preenchimento.largura_repeticao, 1_000_000)
+        self.assertEqual(preenchimento.altura_repeticao, 1_000_000)
+
 
 if __name__ == "__main__":
     unittest.main()

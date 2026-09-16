@@ -20,7 +20,7 @@ instalado** e extrai:
 - contorno por objeto: presença, largura em milímetros, cor, tracejado, pontas,
   junções, alinhamento, linha fina, setas, escala com o objeto e sobreimpressão;
 - curvas separadas em segmentos retos/Bézier e subcaminhos abertos/fechados.
-- preenchimento ausente, uniforme ou degradê linear/radial/cônico/quadrado, cor CMYK/RGB,
+- preenchimento ausente, uniforme, padrão de duas cores ou degradê linear/radial/cônico/quadrado, cor CMYK/RGB,
   sobreimpressão e transparências uniforme ou graduada por objeto.
 
 Posição, tamanho, pontos compactos, segmentos e fechamento de curvas já são
@@ -178,6 +178,6 @@ quando a validação manual "parece" bater.
 python -m unittest discover -s fase3-parser/tests -v
 ```
 
-Usa os arquivos `caso_00` a `caso_79` em `casos-de-teste/*.cdr` como fixtures; testes
+Usa os arquivos `caso_00` a `caso_80` em `casos-de-teste/*.cdr` como fixtures; testes
 que dependem de um arquivo específico são pulados (`SkipTest`) se o arquivo não existir,
 em vez de falhar.

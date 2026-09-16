@@ -44,7 +44,7 @@ import re
 import struct
 from dataclasses import dataclass
 
-_JSON_MARCADOR = re.compile(rb'\{"fill"')
+_JSON_MARCADOR = re.compile(rb'\{(?="(?:fill|StackedBitmapEffects)")')
 _PROPORCAO_MINIMA_LETRAS = 0.6
 _TAMANHO_MINIMO_NOME = 3
 
@@ -87,6 +87,9 @@ class PreenchimentoObjeto:
     angulo: float | None
     passos: int | None
     ponto_medio: float | None
+    id_padrao: int | None
+    largura_repeticao: int | None
+    altura_repeticao: int | None
 
 
 @dataclass(frozen=True)
@@ -157,7 +160,7 @@ def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
     preenchimento = None
     if isinstance(fill, dict):
         preenchimento = PreenchimentoObjeto(
-            tipo={0: "nenhum", 1: "uniforme", 2: "degrade"}.get(codigo_tipo, "desconhecido"),
+            tipo={0: "nenhum", 1: "uniforme", 2: "degrade", 8: "padrao"}.get(codigo_tipo, "desconhecido"),
             codigo_tipo=codigo_tipo,
             tipo_degrade={1: "linear", 2: "radial", 3: "conico", 4: "quadrado"}.get(
                 _inteiro(fill.get("fountainType"))
@@ -168,6 +171,9 @@ def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
             angulo=_real(fill.get("angle")),
             passos=_inteiro(fill.get("numSteps")),
             ponto_medio=_real(fill.get("rateValue")),
+            id_padrao=_inteiro(fill.get("patternId")),
+            largura_repeticao=_inteiro(fill.get("tilingWidth")),
+            altura_repeticao=_inteiro(fill.get("tilingHeight")),
         )
     transparencia_tipado = None
     if isinstance(transparencia, dict) and transparencia:
