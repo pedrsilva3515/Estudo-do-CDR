@@ -199,6 +199,10 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         self.assertEqual(estilo.preenchimento.escala_x, 0.7)
         self.assertEqual(estilo.preenchimento.escala_y, 0.7)
 
+    def test_modo_de_mistura_do_degrade(self):
+        estilo = self._estilo("caso_87_degrade_linear_mistura_1.cdr")
+        self.assertEqual(estilo.preenchimento.modo_mistura, 1)
+
     def test_tipos_de_degrade(self):
         casos = {
             "caso_73_degrade_radial.cdr": "radial",

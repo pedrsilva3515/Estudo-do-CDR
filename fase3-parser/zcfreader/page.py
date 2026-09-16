@@ -93,6 +93,7 @@ class PreenchimentoObjeto:
     cores_intermediarias: tuple["ParadaDegrade", ...]
     escala_x: float | None
     escala_y: float | None
+    modo_mistura: int | None
 
 
 @dataclass(frozen=True)
@@ -208,6 +209,7 @@ def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
             cores_intermediarias=cores_intermediarias,
             escala_x=_real(fill.get("xScale")),
             escala_y=_real(fill.get("yScale")),
+            modo_mistura=_inteiro(fill.get("mode")),
         )
     transparencia_tipado = None
     if isinstance(transparencia, dict) and transparencia:
