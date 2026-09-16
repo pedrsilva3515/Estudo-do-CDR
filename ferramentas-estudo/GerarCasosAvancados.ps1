@@ -205,6 +205,17 @@ try {
     $shape.Fill.ApplyFountainFill($inicio, $fim, 1)
     Save-Case 'caso_72_degrade_linear.cdr'; Close-Document
 
+    foreach ($caso in @(
+        @('caso_73_degrade_radial.cdr', 2),
+        @('caso_74_degrade_conico.cdr', 3),
+        @('caso_75_degrade_quadrado.cdr', 4)
+    )) {
+        Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1)
+        $inicio = $app.CreateCMYKColor(0, 100, 100, 0); $fim = $app.CreateCMYKColor(100, 0, 0, 0)
+        $shape.Fill.ApplyFountainFill($inicio, $fim, $caso[1])
+        Save-Case $caso[0]; Close-Document
+    }
+
     # 62–66: subcaminhos e segmentos de curvas.
     Open-Base $true
     $curve = $app.CreateCurve($doc); $sp = $curve.CreateSubPath(4, 8)

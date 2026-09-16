@@ -174,6 +174,18 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         self.assertEqual(preenchimento.cor_primaria.componentes, (0, 100, 100, 0))
         self.assertEqual(preenchimento.cor_secundaria.componentes, (100, 0, 0, 0))
 
+    def test_tipos_de_degrade(self):
+        casos = {
+            "caso_73_degrade_radial.cdr": "radial",
+            "caso_74_degrade_conico.cdr": "conico",
+            "caso_75_degrade_quadrado.cdr": "quadrado",
+        }
+        for nome, tipo in casos.items():
+            with self.subTest(nome=nome):
+                estilo = self._estilo(nome)
+                self.assertEqual(estilo.preenchimento.tipo, "degrade")
+                self.assertEqual(estilo.preenchimento.tipo_degrade, tipo)
+
 
 if __name__ == "__main__":
     unittest.main()
