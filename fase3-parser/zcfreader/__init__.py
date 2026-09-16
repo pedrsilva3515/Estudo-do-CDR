@@ -27,7 +27,15 @@ Uso basico:
 from .bitmaps import ArquivoBitmaps, FormatoBitmapsInvalido, ImagemBruta, RegistroBitmap
 from .container import ZcfContainer, abrir_cdr
 from .metadata import FormatoMetadadosInvalido, MetadadosDocumento
-from .page import ItemNomeado
+from .page import (
+    CorObjeto,
+    EstiloObjeto,
+    ItemNomeado,
+    PreenchimentoObjeto,
+    TransparenciaObjeto,
+    parse_cor_objeto,
+    parse_estilo_objeto,
+)
 from .references import InstanciaBitmap, MatrizAfim
 from .structure import (
     CaixaObjeto,
@@ -53,6 +61,12 @@ __all__ = [
     "MetadadosDocumento",
     "FormatoMetadadosInvalido",
     "ItemNomeado",
+    "CorObjeto",
+    "PreenchimentoObjeto",
+    "TransparenciaObjeto",
+    "EstiloObjeto",
+    "parse_cor_objeto",
+    "parse_estilo_objeto",
     "InstanciaBitmap",
     "MatrizAfim",
     "ObjetoEstrutural",

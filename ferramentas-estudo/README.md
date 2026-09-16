@@ -1,7 +1,8 @@
 # Ferramentas do estudo avançado
 
-`GerarCasosAvancados.ps1` reproduz os casos controlados 28–66 usados para
-estudar páginas, PowerClip, texto, layers, contornos e curvas.
+`GerarCasosAvancados.ps1` reproduz os casos controlados 28–71 usados para
+estudar páginas, PowerClip, texto, layers, contornos, curvas, preenchimentos e
+transparências.
 
 Requisitos:
 

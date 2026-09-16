@@ -6,10 +6,10 @@ Este arquivo é o ponto de entrada para continuar o estudo em outro computador.
 
 - Repositório: `pedrsilva3515/Estudo-do-CDR`
 - Branch de trabalho: `claude/zcf-format-reverse-engineering-hdgcjw`
-- Último marco técnico antes deste documento: `aa84523`
-- Casos controlados versionados: `caso_00` a `caso_66`, sempre com `.cdr` e
+- Último marco técnico antes deste documento: preenchimentos e transparência uniforme
+- Casos controlados versionados: `caso_00` a `caso_71`, sempre com `.cdr` e
   manifesto `.json`.
-- Testes no encerramento: 80 testes passando.
+- Testes no encerramento: 85 testes passando.
 
 Commits técnicos desta rodada, em ordem:
 
@@ -42,6 +42,8 @@ python -m unittest discover -s fase3-parser/tests -v
    junções, alinhamento, sobreimpressão e especificações de setas.
 7. Curvas: pontos, segmentos retos/Bézier, pontos de controle, múltiplos
    subcaminhos e detecção de subcaminhos abertos.
+8. Preenchimentos: ausente ou uniforme, cores CMYK/RGB e sobreimpressão;
+   transparência uniforme.
 
 Os detalhes e evidências estão separados por assunto em:
 
@@ -51,6 +53,7 @@ Os detalhes e evidências estão separados por assunto em:
 - `docs/descobertas-layers.md`
 - `docs/descobertas-contornos.md`
 - `docs/descobertas-geometria-vetorial.md`
+- `docs/descobertas-preenchimentos-transparencias.md`
 
 Os geradores dos casos avançados estão em
 `ferramentas-estudo/GerarCasosAvancados.ps1`. Eles dependem do CorelDRAW 2025
@@ -97,11 +100,10 @@ python -m zcfreader.cli listar "C:\caminho\arquivo.cdr"
 
 Preenchimentos e transparências por objeto:
 
-1. sem preenchimento versus preenchimento uniforme;
-2. CMYK/RGB/spot e sobreimpressão;
-3. degradê;
-4. padrão/textura;
-5. transparência uniforme e graduada.
+1. cor spot;
+2. degradê;
+3. padrão/textura;
+4. transparência graduada.
 
 Depois disso, as pendências de maior valor são nós cúspide/suave/simétrico,
 atributos avançados de setas, contorno caligráfico/variável e gestão de cor ICC.

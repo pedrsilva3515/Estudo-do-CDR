@@ -133,5 +133,39 @@ class TestEstiloJson(unittest.TestCase):
             self.assertIsNone(camada.estilo)
 
 
+class TestPreenchimentoETransparencia(unittest.TestCase):
+    def _estilo(self, nome):
+        caminho = _pular_se_sem_fixture(nome)
+        with abrir_cdr(caminho) as doc:
+            item = _por_nome(doc.pagina(1), "RetanguloBase")
+            return item.estilo_tipado
+
+    def test_sem_preenchimento(self):
+        estilo = self._estilo("caso_67_sem_preenchimento.cdr")
+        self.assertEqual(estilo.preenchimento.tipo, "nenhum")
+        self.assertEqual(estilo.preenchimento.codigo_tipo, 0)
+
+    def test_preenchimento_cmyk(self):
+        estilo = self._estilo("caso_68_preenchimento_cmyk_ciano.cdr")
+        self.assertEqual(estilo.preenchimento.tipo, "uniforme")
+        self.assertEqual(estilo.preenchimento.cor_primaria.modelo, "CMYK")
+        self.assertEqual(estilo.preenchimento.cor_primaria.componentes, (100, 0, 0, 0))
+
+    def test_preenchimento_rgb(self):
+        estilo = self._estilo("caso_69_preenchimento_rgb_azul.cdr")
+        self.assertEqual(estilo.preenchimento.cor_primaria.modelo, "RGB255")
+        self.assertEqual(estilo.preenchimento.cor_primaria.componentes, (0, 0, 255))
+
+    def test_sobreimpressao_do_preenchimento(self):
+        estilo = self._estilo("caso_70_preenchimento_sobreimpressao.cdr")
+        self.assertTrue(estilo.preenchimento.sobreimpressao)
+
+    def test_transparencia_uniforme(self):
+        estilo = self._estilo("caso_71_transparencia_uniforme_50.cdr")
+        self.assertIsNotNone(estilo.transparencia)
+        self.assertEqual(estilo.transparencia.uniforme, 0.5)
+        self.assertEqual(estilo.transparencia.aplica_a, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

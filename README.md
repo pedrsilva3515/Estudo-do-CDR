@@ -29,7 +29,7 @@ de confiança explícito (`confirmado por N casos` vs. `hipótese não testada`)
 | 1 | Gerador de casos de teste (macro VBA para CorelDRAW 2025 OEM) | **Concluída** — 16/16 casos gerados sem falhas (Corel 26.0 build 101) |
 | 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Concluída** — 6/6 casos gerados sem falhas, incluindo a foto real (caso_21) |
 | 2 | Motor de diferenças binárias (Python) | **Concluída** — 21 pares comparados, relatórios versionados |
-| 3 | Parser incremental (Python) | **Em andamento** — bitmaps, páginas, PowerClip, layers, texto, contornos e subcaminhos de curvas já têm leitura e testes; preenchimentos/transparências são o próximo bloco |
+| 3 | Parser incremental (Python) | **Em andamento** — bitmaps, páginas, PowerClip, layers, texto, contornos, curvas e preenchimentos uniformes/transparência uniforme já têm leitura e testes; degradês e padrões são o próximo bloco |
 | 4 | Especificação pública + biblioteca instalável com testes | Não iniciada |
 
 ## Estrutura do repositório

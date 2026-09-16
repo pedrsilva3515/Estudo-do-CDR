@@ -180,6 +180,25 @@ try {
     $app.FrameWork.Automation.InvokeItem('1a7d5259-ae16-44e1-9a0c-13a7d4ef26a5')
     Save-Case 'caso_61_contorno_linha_fina.cdr'; Close-Document
 
+    # 67–71: preenchimento e transparencia. Cada caso altera uma propriedade
+    # de cada vez em relacao ao retangulo vermelho CMYK do documento base.
+    Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1); $shape.Fill.ApplyNoFill()
+    Save-Case 'caso_67_sem_preenchimento.cdr'; Close-Document
+
+    Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1)
+    $shape.Fill.ApplyUniformFill($app.CreateCMYKColor(100, 0, 0, 0))
+    Save-Case 'caso_68_preenchimento_cmyk_ciano.cdr'; Close-Document
+
+    Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1)
+    $shape.Fill.ApplyUniformFill($app.CreateRGBColor(0, 0, 255))
+    Save-Case 'caso_69_preenchimento_rgb_azul.cdr'; Close-Document
+
+    Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1); $shape.OverprintFill = $true
+    Save-Case 'caso_70_preenchimento_sobreimpressao.cdr'; Close-Document
+
+    Open-Base; $shape = $doc.ActivePage.Shapes.FindShapes('RetanguloBase').Item(1); $shape.Transparency.ApplyUniformTransparency(50)
+    Save-Case 'caso_71_transparencia_uniforme_50.cdr'; Close-Document
+
     # 62–66: subcaminhos e segmentos de curvas.
     Open-Base $true
     $curve = $app.CreateCurve($doc); $sp = $curve.CreateSubPath(4, 8)

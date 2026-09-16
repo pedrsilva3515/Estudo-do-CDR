@@ -265,6 +265,19 @@ class ZcfContainer:
         from .page import parse_estilos
         return parse_estilos(self.read(membro))
 
+    def estilos_tipados_da_pagina(self, indice: int = 1):
+        """Devolve os estilos da página em campos tipados, com seus offsets.
+
+        A lista conserva todos os objetos, inclusive os sem nome, como
+        ``estilos_da_pagina()``. A leitura confirmada por enquanto cobre
+        preenchimento uniforme/ausente, cores CMYK/RGB e transparência uniforme.
+        """
+        estilos = self.estilos_da_pagina(indice)
+        if estilos is None:
+            return None
+        from .page import parse_estilo_objeto
+        return [(offset, parse_estilo_objeto(estilo)) for offset, estilo in estilos]
+
 
 def abrir_cdr(caminho) -> ZcfContainer:
     """Abre um arquivo `.cdr` (ou `.zip` equivalente) para leitura."""

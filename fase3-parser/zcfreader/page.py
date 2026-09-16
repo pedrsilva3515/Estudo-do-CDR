@@ -58,6 +58,113 @@ class ItemNomeado:
     nome: str
     estilo: dict | None = None
 
+    @property
+    def estilo_tipado(self) -> "EstiloObjeto | None":
+        """Converte o JSON de estilo deste item em campos de leitura."""
+        return parse_estilo_objeto(self.estilo) if self.estilo is not None else None
+
+
+@dataclass(frozen=True)
+class CorObjeto:
+    """Cor serializada pelo CorelDRAW em ``primaryColor``/``secondaryColor``."""
+
+    modelo: str
+    paleta: str | None
+    componentes: tuple[int, ...]
+    opacidade: int | None
+    identificador: str | None
+    bruto: str
+
+
+@dataclass(frozen=True)
+class PreenchimentoObjeto:
+    tipo: str
+    codigo_tipo: int | None
+    cor_primaria: CorObjeto | None
+    cor_secundaria: CorObjeto | None
+    sobreimpressao: bool | None
+
+
+@dataclass(frozen=True)
+class TransparenciaObjeto:
+    uniforme: float | None
+    inicio: float | None
+    fim: float | None
+    aplica_a: int | None
+    modo: int | None
+
+
+@dataclass(frozen=True)
+class EstiloObjeto:
+    preenchimento: PreenchimentoObjeto | None
+    transparencia: TransparenciaObjeto | None
+
+
+def _inteiro(valor) -> int | None:
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
+
+
+def _real(valor) -> float | None:
+    try:
+        return float(valor)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_cor_objeto(valor: object) -> CorObjeto | None:
+    """Decodifica uma cor textual observada nos estilos de ``pageN.dat``.
+
+    Os casos controlados confirmam CMYK (quatro componentes) e RGB255 (três).
+    Modelos ainda nao estudados preservam a cadeia original sem inventar uma
+    quantidade de componentes.
+    """
+    if not isinstance(valor, str) or not valor:
+        return None
+    partes = valor.split(",")
+    modelo = partes[0]
+    quantidade = {"CMYK": 4, "RGB255": 3}.get(modelo, 0)
+    componentes = tuple(
+        numero for parte in partes[2:2 + quantidade]
+        if (numero := _inteiro(parte)) is not None
+    )
+    return CorObjeto(
+        modelo=modelo,
+        paleta=partes[1] if len(partes) > 1 else None,
+        componentes=componentes,
+        opacidade=_inteiro(partes[2 + quantidade]) if quantidade and len(partes) > 2 + quantidade else None,
+        identificador=partes[3 + quantidade] if quantidade and len(partes) > 3 + quantidade else None,
+        bruto=valor,
+    )
+
+
+def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
+    """Converte o JSON de estilo encontrado em ``pageN.dat`` em dados tipados."""
+    fill = estilo.get("fill") if isinstance(estilo, dict) else None
+    transparencia = estilo.get("transparency") if isinstance(estilo, dict) else None
+    codigo_tipo = _inteiro(fill.get("type")) if isinstance(fill, dict) else None
+    preenchimento = None
+    if isinstance(fill, dict):
+        preenchimento = PreenchimentoObjeto(
+            tipo={0: "nenhum", 1: "uniforme"}.get(codigo_tipo, "desconhecido"),
+            codigo_tipo=codigo_tipo,
+            cor_primaria=parse_cor_objeto(fill.get("primaryColor")),
+            cor_secundaria=parse_cor_objeto(fill.get("secondaryColor")),
+            sobreimpressao={"0": False, "1": True}.get(str(fill.get("overprint"))),
+        )
+    transparencia_tipado = None
+    if isinstance(transparencia, dict) and transparencia:
+        transparencia_tipado = TransparenciaObjeto(
+            uniforme=_real(transparencia.get("uniformTransparency")),
+            inicio=_real(transparencia.get("startTransparency")),
+            fim=_real(transparencia.get("endTransparency")),
+            aplica_a=_inteiro(transparencia.get("appliesTo")),
+            modo=_inteiro(transparencia.get("mode")),
+        )
+    return EstiloObjeto(preenchimento=preenchimento, transparencia=transparencia_tipado)
+
 
 def _encontrar_nomes(data: bytes) -> list[tuple[int, str]]:
     """Varre `data` em busca de strings UTF-16LE terminadas em dois bytes
