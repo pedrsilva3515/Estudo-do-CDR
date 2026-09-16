@@ -94,6 +94,7 @@ class PreenchimentoObjeto:
     escala_x: float | None
     escala_y: float | None
     modo_mistura: int | None
+    inclinacao: float | None
 
 
 @dataclass(frozen=True)
@@ -210,6 +211,7 @@ def parse_estilo_objeto(estilo: dict | None) -> EstiloObjeto:
             escala_x=_real(fill.get("xScale")),
             escala_y=_real(fill.get("yScale")),
             modo_mistura=_inteiro(fill.get("mode")),
+            inclinacao=_real(fill.get("skew")),
         )
     transparencia_tipado = None
     if isinstance(transparencia, dict) and transparencia:

@@ -208,6 +208,10 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         self.assertAlmostEqual(estilo.preenchimento.escala_x, 0.7)
         self.assertAlmostEqual(estilo.preenchimento.escala_y, 0.8)
 
+    def test_inclinacao_do_degrade(self):
+        estilo = self._estilo("caso_90_degrade_inclinacao_15.cdr")
+        self.assertAlmostEqual(estilo.preenchimento.inclinacao, 15.0)
+
     def test_tipos_de_degrade(self):
         casos = {
             "caso_73_degrade_radial.cdr": "radial",
