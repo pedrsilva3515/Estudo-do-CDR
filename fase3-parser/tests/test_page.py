@@ -156,6 +156,11 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         self.assertEqual(estilo.preenchimento.cor_primaria.modelo, "RGB255")
         self.assertEqual(estilo.preenchimento.cor_primaria.componentes, (0, 0, 255))
 
+    def test_preenchimento_cinza(self):
+        estilo = self._estilo("caso_91_preenchimento_cinza_128.cdr")
+        self.assertEqual(estilo.preenchimento.cor_primaria.modelo, "GRAY255")
+        self.assertEqual(estilo.preenchimento.cor_primaria.componentes, (128,))
+
     def test_sobreimpressao_do_preenchimento(self):
         estilo = self._estilo("caso_70_preenchimento_sobreimpressao.cdr")
         self.assertTrue(estilo.preenchimento.sobreimpressao)
