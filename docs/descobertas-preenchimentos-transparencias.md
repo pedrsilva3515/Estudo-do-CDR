@@ -28,6 +28,8 @@ Nos degradês, a cor inicial permanece em `primaryColor` e a final em
 radial=2, cônico=3 e quadrado=4, confirmados respectivamente nos casos 72–75.
 O caso 82 confirma que a orientação linear de 45 graus é registrada somente em
 `fill.angle="45"`; a orientação padrão do caso 72 é `0`.
+O caso 83 confirma que o ponto médio de 25% é registrado em
+`fill.rateValue="25"`; o valor padrão é `50`.
 
 A transparência graduada tem uma camada externa com `startTransparency` e
 `endTransparency`. Sua geometria é serializada em `transparency.fill`, com os

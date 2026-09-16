@@ -178,6 +178,6 @@ quando a validação manual "parece" bater.
 python -m unittest discover -s fase3-parser/tests -v
 ```
 
-Usa os arquivos `caso_00` a `caso_82` em `casos-de-teste/*.cdr` como fixtures; testes
+Usa os arquivos `caso_00` a `caso_83` em `casos-de-teste/*.cdr` como fixtures; testes
 que dependem de um arquivo específico são pulados (`SkipTest`) se o arquivo não existir,
 em vez de falhar.

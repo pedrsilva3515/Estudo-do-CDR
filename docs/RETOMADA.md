@@ -7,7 +7,7 @@ Este arquivo é o ponto de entrada para continuar o estudo em outro computador.
 - Repositório: `pedrsilva3515/Estudo-do-CDR`
 - Branch de trabalho: `claude/zcf-format-reverse-engineering-hdgcjw`
 - Último marco técnico antes deste documento: preenchimentos e transparência uniforme
-- Casos controlados versionados: `caso_00` a `caso_82`, sempre com `.cdr` e
+- Casos controlados versionados: `caso_00` a `caso_83`, sempre com `.cdr` e
   manifesto `.json`.
 - Testes no encerramento: 85 testes passando.
 
