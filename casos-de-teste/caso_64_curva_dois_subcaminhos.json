@@ -1,0 +1,1 @@
+{"caso":"caso_64_curva_dois_subcaminhos","arquivo":"caso_64_curva_dois_subcaminhos.cdr","base":"caso_00_base.cdr","alteracao":"multiplos_subcaminhos","parametros":{"subcaminhos":2,"fechados":[false,true]},"descricao":"Um objeto curva com um subcaminho aberto e outro fechado."}

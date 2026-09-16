@@ -1,0 +1,1 @@
+{"caso":"caso_66_curva_bezier_aberta","arquivo":"caso_66_curva_bezier_aberta.cdr","base":"caso_00_base.cdr","alteracao":"segmento_bezier","parametros":{"subcaminhos":1,"fechados":[false],"segmentos_bezier":1,"pontos_controle":2},"descricao":"Curva aberta com um segmento Bezier cubico e dois pontos de controle."}

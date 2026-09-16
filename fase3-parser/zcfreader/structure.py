@@ -53,6 +53,33 @@ class PontoCurva:
     y: int
     flag: int
 
+    @property
+    def papel(self) -> str:
+        """Papel estrutural confirmado pelos dois bits superiores da flag."""
+        return {
+            0x00: "inicio",
+            0x40: "fim_linha",
+            0x80: "fim_curva",
+            0xC0: "controle",
+        }[self.flag & 0xC0]
+
+    @property
+    def marca_fechamento(self) -> bool:
+        return bool(self.flag & 0x08)
+
+
+@dataclass(frozen=True)
+class SubcaminhoCurva:
+    pontos: tuple[PontoCurva, ...]
+
+    @property
+    def fechado(self) -> bool:
+        return (
+            len(self.pontos) >= 2
+            and self.pontos[0].marca_fechamento
+            and self.pontos[-1].marca_fechamento
+        )
+
 
 @dataclass(frozen=True)
 class GeometriaCurva:
@@ -62,6 +89,28 @@ class GeometriaCurva:
     @property
     def numero_pontos(self) -> int:
         return len(self.pontos)
+
+    @property
+    def subcaminhos(self) -> tuple[SubcaminhoCurva, ...]:
+        inicios = [
+            indice for indice, ponto in enumerate(self.pontos)
+            if ponto.papel == "inicio"
+        ]
+        if not inicios or inicios[0] != 0:
+            return ()
+        limites = inicios[1:] + [len(self.pontos)]
+        return tuple(
+            SubcaminhoCurva(self.pontos[inicio:fim])
+            for inicio, fim in zip(inicios, limites)
+        )
+
+    @property
+    def numero_subcaminhos(self) -> int:
+        return len(self.subcaminhos)
+
+    @property
+    def possui_subcaminho_aberto(self) -> bool:
+        return any(not subcaminho.fechado for subcaminho in self.subcaminhos)
 
 
 @dataclass(frozen=True)

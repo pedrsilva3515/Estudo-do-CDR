@@ -160,6 +160,45 @@ class TestEstruturaRoot(unittest.TestCase):
             list(pontos),
         )
 
+    def test_curva_controlada_aberta_e_fechada(self):
+        esperados = {
+            "caso_62_curva_aberta.cdr": (1, [False]),
+            "caso_63_curva_fechada.cdr": (1, [True]),
+            "caso_64_curva_dois_subcaminhos.cdr": (2, [False, True]),
+            "caso_65_curva_dois_subcaminhos_abertos.cdr": (2, [False, False]),
+        }
+        for nome, (quantidade, fechados) in esperados.items():
+            with self.subTest(caso=nome), abrir_cdr(CASOS / nome) as doc:
+                objeto = next(obj for obj in doc.estrutura() if obj.tipo == "obj")
+            geometria = objeto.geometria_curva
+            self.assertEqual(geometria.numero_subcaminhos, quantidade)
+            self.assertEqual([s.fechado for s in geometria.subcaminhos], fechados)
+            self.assertEqual(geometria.possui_subcaminho_aberto, not all(fechados))
+
+    def test_papeis_dos_pontos_de_curva(self):
+        casos = {
+            "caso_62_curva_aberta.cdr": ["inicio", "fim_linha", "fim_linha"],
+            "caso_66_curva_bezier_aberta.cdr": [
+                "inicio", "controle", "controle", "fim_curva"
+            ],
+        }
+        for nome, esperado in casos.items():
+            with self.subTest(caso=nome), abrir_cdr(CASOS / nome) as doc:
+                objeto = next(obj for obj in doc.estrutura() if obj.tipo == "obj")
+            self.assertEqual(
+                [ponto.papel for ponto in objeto.geometria_curva.pontos],
+                esperado,
+            )
+
+    def test_conferencia_de_curvas_abertas(self):
+        for nome, esperado in (
+            ("caso_62_curva_aberta.cdr", 1),
+            ("caso_63_curva_fechada.cdr", 0),
+            ("caso_64_curva_dois_subcaminhos.cdr", 1),
+        ):
+            with self.subTest(caso=nome), abrir_cdr(CASOS / nome) as doc:
+                self.assertEqual(len(doc.curvas_com_subcaminhos_abertos()), esperado)
+
     def test_tamanho_personalizado_por_pagina(self):
         caminho = CASOS / "caso_32_paginas_tamanhos_diferentes.cdr"
         with abrir_cdr(caminho) as doc:

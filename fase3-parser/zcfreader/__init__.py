@@ -39,6 +39,7 @@ from .structure import (
     OcorrenciaLimitePagina,
     PaginaEstrutural,
     PontoCurva,
+    SubcaminhoCurva,
 )
 from .text import EstiloTexto, FluxoTexto, FormatoTextoInvalido, TextoEstruturado, TrechoTexto
 
@@ -61,6 +62,7 @@ __all__ = [
     "FormatoEstruturaInvalido",
     "GeometriaCurva",
     "PontoCurva",
+    "SubcaminhoCurva",
     "PaginaEstrutural",
     "OcorrenciaLimitePagina",
     "EstiloTexto",

@@ -1,0 +1,1 @@
+{"caso":"caso_62_curva_aberta","arquivo":"caso_62_curva_aberta.cdr","base":"caso_00_base.cdr","alteracao":"curva_aberta","parametros":{"subcaminhos":1,"fechados":[false],"segmentos_retos":2},"descricao":"Curva controlada com um subcaminho aberto e dois segmentos retos."}

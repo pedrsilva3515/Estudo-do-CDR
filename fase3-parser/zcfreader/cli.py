@@ -83,9 +83,16 @@ def _listar(caminho: Path) -> int:
             curvas_lidas = [obj for obj in curvas if obj.geometria_curva is not None]
             if curvas:
                 total_pontos = sum(obj.geometria_curva.numero_pontos for obj in curvas_lidas)
+                total_subcaminhos = sum(
+                    obj.geometria_curva.numero_subcaminhos for obj in curvas_lidas
+                )
+                abertas = sum(
+                    obj.geometria_curva.possui_subcaminho_aberto for obj in curvas_lidas
+                )
                 print(
                     f"  curvas: {len(curvas_lidas)}/{len(curvas)} decodificada(s), "
-                    f"{total_pontos} ponto(s) compactos"
+                    f"{total_pontos} ponto(s), {total_subcaminhos} subcaminho(s), "
+                    f"{abertas} objeto(s) com caminho aberto"
                 )
             contornos = [obj.contorno for obj in objetos if obj.contorno is not None]
             presentes = [contorno for contorno in contornos if contorno.presente]

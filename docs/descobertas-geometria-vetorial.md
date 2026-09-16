@@ -1,6 +1,7 @@
 # Descobertas — tipos e geometria vetorial
 
-Fontes: 33 casos controlados (`caso_00` a `caso_32`) e um documento real
+Fontes: 33 casos controlados iniciais (`caso_00` a `caso_32`), cinco casos
+controlados específicos de curvas (`caso_62` a `caso_66`) e um documento real
 externo com 13 objetos, dos quais 6 são curvas.
 
 ## V1. Código de tipo do objeto em `loda`
@@ -55,14 +56,39 @@ uma curva Bézier pode ultrapassar seus nós/controles de maneiras diferentes.
 O parser expõe `geometria_curva`, `numero_pontos`, cada tripla `x/y/flag` e
 `pontos_curva_absolutos`.
 
+## V4. Segmentos, subcaminhos e fechamento
+
+Os casos 62–66 isolam curva aberta, curva fechada, dois subcaminhos mistos,
+dois subcaminhos abertos e um segmento Bézier. Os dois bits superiores de
+`flag` identificam o papel do ponto:
+
+| Máscara `flag & 0xC0` | Papel |
+|---:|---|
+| `0x00` | início de subcaminho |
+| `0x40` | fim de segmento reto |
+| `0x80` | fim de segmento Bézier |
+| `0xC0` | ponto de controle Bézier |
+
+O bit `0x08` aparece no início e no último ponto de um subcaminho fechado. O
+último ponto repete as coordenadas do primeiro. Um subcaminho aberto não usa
+esse bit. Isso também separa vários subcaminhos dentro do mesmo objeto, mesmo
+quando todos estão abertos.
+
+O parser agora expõe `geometria.subcaminhos`, `numero_subcaminhos`,
+`possui_subcaminho_aberto`, `subcaminho.fechado`, `ponto.papel` e
+`ponto.marca_fechamento`. `doc.curvas_com_subcaminhos_abertos()` entrega
+diretamente os objetos problemáticos para uma conferência automatizada.
+
+No arquivo real “Debora ellen fdf.cdr”, as seis curvas somam 12 subcaminhos
+(1, 1, 6, 2, 1 e 1 por objeto), todos fechados. Portanto, esse arquivo não
+tem curva aberta entre os objetos vetoriais decodificados.
+
 ### Nível de confiança e pendências
 
-- O layout e as contagens são estruturalmente fortes, mas os seis exemplos de
-  curva vêm do mesmo documento real. Falta um caso controlado criado como
-  curva simples para validação independente.
-- A semântica dos bits das flags ainda não foi fechada. Portanto, já podemos
-  contar e localizar pontos, mas ainda não classificar com segurança cada
-  ponto como nó, controle, cúspide, suave, início ou fechamento de subcaminho.
+- O layout, a contagem de pontos, os tipos de segmento e o fechamento agora
+  têm casos controlados independentes.
+- Os bits inferiores que diferenciam nó cúspide, suave e simétrico ainda não
+  foram fechados; o parser preserva a flag bruta.
 - A origem da régua/página varia entre documentos. Até o campo dessa origem
   ser localizado, não é seguro decidir “fora da página” comparando o `bbox`
   diretamente com `±largura/2` e `±altura/2`.

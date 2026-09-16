@@ -188,6 +188,15 @@ class ZcfContainer:
                 )
         return ocorrencias
 
+    def curvas_com_subcaminhos_abertos(self):
+        """Lista objetos curva que possuem ao menos um subcaminho aberto."""
+        return [
+            objeto for objeto in self.estrutura()
+            if objeto.tipo == "obj"
+            and objeto.geometria_curva is not None
+            and objeto.geometria_curva.possui_subcaminho_aberto
+        ]
+
     def metadados(self):
         """Le o resumo XMP de ``META-INF/metadata.xml``.
 
