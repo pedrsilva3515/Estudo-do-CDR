@@ -47,6 +47,27 @@ pela interface/propriedade específica antes de definir sua representação.
   `joinType="1"`.
 - Contorno sólido padrão omite esses campos; o parser usa zero/falso.
 
+Casos adicionais fecharam os códigos expostos pela biblioteca de tipos do
+Corel e confirmados no JSON:
+
+| Campo | 0 | 1 | 2 |
+|---|---|---|---|
+| `justification` | centro | interno | externo |
+| `endCaps` | reta | arredondada | quadrada |
+| `joinType` | mitra | arredondada | chanfrada |
+
+Setas não são gravadas apenas por índice. `leftArrow` e `rightArrow` contêm
+uma descrição geométrica iniciada por comandos como `M`, `L` e `C`, seguida
+por um identificador depois de `|`. O parser preserva a especificação inteira.
+
+### Linha fina (hairline)
+
+O comando nativo `OnPenHair` do Corel gera `width=762` no JSON, equivalente
+a `0,0762 mm` ou exatamente `0,003 pol`. Ao reabrir o arquivo, a automação do
+próprio Corel informa contorno presente (`Type=1`) e largura `0.003` em
+polegadas. Portanto, linha fina não é largura zero: `width=0` continua sendo
+ausência de contorno. `ContornoObjeto.linha_fina` expõe essa distinção.
+
 ## Resultado no documento real
 
 Os 13 objetos tiveram estilo de contorno decodificado, incluindo o texto.
@@ -56,7 +77,7 @@ Todos estão sem contorno (`width=0`), sem tracejado e sem sobreimpressão.
 
 - `objeto.contorno` expõe presença, largura, cor, tracejado, escala, pontas,
   junção e sobreimpressão.
-- Ainda faltam hairline real, setas, alinhamento interno/externo, contorno
-  caligráfico/variável e confirmação dos enums de pontas/junções.
+- Ainda faltam atributos avançados de setas, contorno caligráfico/variável e
+  limites de mitra.
 - A caixa `bbox` observada descreve a geometria do objeto e não mudou com a
   largura nesses casos; não se deve usá-la para inferir a espessura.

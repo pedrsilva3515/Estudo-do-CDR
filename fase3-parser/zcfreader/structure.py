@@ -123,6 +123,9 @@ class ContornoObjeto:
     pontas: int
     juncao: int
     sobreimpressao: bool
+    alinhamento: int
+    seta_inicial: str | None
+    seta_final: str | None
 
     @property
     def presente(self) -> bool:
@@ -131,6 +134,29 @@ class ContornoObjeto:
     @property
     def largura_mm(self) -> float:
         return self.largura_unidades / 10_000.0
+
+    @property
+    def linha_fina(self) -> bool:
+        """Indica o hairline nativo do Corel (0,003 pol / 0,0762 mm)."""
+        return self.largura_unidades == 762
+
+    @property
+    def alinhamento_nome(self) -> str:
+        return {0: "centro", 1: "interno", 2: "externo"}.get(
+            self.alinhamento, "desconhecido"
+        )
+
+    @property
+    def pontas_nome(self) -> str:
+        return {0: "reta", 1: "arredondada", 2: "quadrada"}.get(
+            self.pontas, "desconhecida"
+        )
+
+    @property
+    def juncao_nome(self) -> str:
+        return {0: "mitra", 1: "arredondada", 2: "chanfrada"}.get(
+            self.juncao, "desconhecida"
+        )
 
 
 @dataclass(frozen=True)
@@ -301,6 +327,9 @@ def _contorno_de_dict(bruto: dict | None) -> ContornoObjeto | None:
             pontas=int(bruto.get("endCaps", 0)),
             juncao=int(bruto.get("joinType", 0)),
             sobreimpressao=bruto.get("overprint", "0") != "0",
+            alinhamento=int(bruto.get("justification", 0)),
+            seta_inicial=bruto.get("leftArrow") or None,
+            seta_final=bruto.get("rightArrow") or None,
         )
     except (TypeError, ValueError):
         return None

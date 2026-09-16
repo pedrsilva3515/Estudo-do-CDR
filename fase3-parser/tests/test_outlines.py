@@ -39,6 +39,15 @@ class TestContornos(unittest.TestCase):
                 self.assertEqual(contorno.largura_unidades, 0)
                 self.assertFalse(contorno.presente)
 
+    def test_linha_fina_nativa(self):
+        contorno = _contorno("caso_61_contorno_linha_fina.cdr")
+        self.assertEqual(contorno.largura_unidades, 762)
+        self.assertAlmostEqual(contorno.largura_mm, 0.0762)
+        self.assertTrue(contorno.linha_fina)
+        self.assertTrue(contorno.presente)
+
+        self.assertFalse(_contorno("caso_49_contorno_padrao_02mm.cdr").linha_fina)
+
     def test_tracejado(self):
         self.assertEqual(_contorno("caso_55_contorno_tracejado.cdr").tracejado, (2.0, 1.0, 3.0))
 
@@ -48,6 +57,25 @@ class TestContornos(unittest.TestCase):
     def test_pontas_e_juncao(self):
         contorno = _contorno("caso_56_contorno_caps_join_1.cdr")
         self.assertEqual((contorno.pontas, contorno.juncao), (1, 1))
+        self.assertEqual((contorno.pontas_nome, contorno.juncao_nome),
+                         ("arredondada", "arredondada"))
+
+    def test_pontas_quadradas_e_juncao_chanfrada(self):
+        contorno = _contorno("caso_59_contorno_caps_join_2.cdr")
+        self.assertEqual((contorno.pontas_nome, contorno.juncao_nome),
+                         ("quadrada", "chanfrada"))
+
+    def test_alinhamento_interno_e_externo(self):
+        interno = _contorno("caso_57_contorno_alinhamento_interno.cdr")
+        externo = _contorno("caso_58_contorno_alinhamento_externo.cdr")
+        self.assertEqual((interno.alinhamento, interno.alinhamento_nome), (1, "interno"))
+        self.assertEqual((externo.alinhamento, externo.alinhamento_nome), (2, "externo"))
+
+    def test_setas_sao_geometrias_serializadas(self):
+        contorno = _contorno("caso_60_contorno_setas.cdr")
+        self.assertTrue(contorno.seta_inicial.startswith("M"))
+        self.assertTrue(contorno.seta_final.startswith("M"))
+        self.assertNotEqual(contorno.seta_inicial, contorno.seta_final)
 
 
 if __name__ == "__main__":
