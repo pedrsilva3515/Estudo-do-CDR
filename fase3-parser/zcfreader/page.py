@@ -151,7 +151,7 @@ def parse_cor_objeto(valor: object) -> CorObjeto | None:
         return None
     partes = valor.split(",")
     modelo = partes[0]
-    quantidade = {"CMYK": 4, "RGB255": 3, "GRAY255": 1, "LAB": 3, "HSB": 3, "HLS": 3}.get(modelo, 0)
+    quantidade = {"CMYK": 4, "RGB255": 3, "GRAY255": 1, "LAB": 3, "HSB": 3, "HLS": 3, "YIQ255": 3}.get(modelo, 0)
     componentes = tuple(
         numero for parte in partes[2:2 + quantidade]
         if (numero := _inteiro(parte)) is not None

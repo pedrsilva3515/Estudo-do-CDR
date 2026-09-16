@@ -175,6 +175,10 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         estilo = self._estilo("caso_94_preenchimento_hls.cdr")
         self.assertEqual(estilo.preenchimento.cor_primaria.componentes, (240, 50, 60))
 
+    def test_preenchimento_yiq(self):
+        estilo = self._estilo("caso_95_preenchimento_yiq.cdr")
+        self.assertEqual(estilo.preenchimento.cor_primaria.componentes, (50, 100, 120))
+
     def test_sobreimpressao_do_preenchimento(self):
         estilo = self._estilo("caso_70_preenchimento_sobreimpressao.cdr")
         self.assertTrue(estilo.preenchimento.sobreimpressao)
