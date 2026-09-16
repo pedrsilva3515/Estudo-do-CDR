@@ -32,6 +32,8 @@ O caso 83 confirma que o ponto médio de 25% é registrado em
 `fill.rateValue="25"`; o valor padrão é `50`.
 O caso 84 confirma que cada parada adicional aparece em `intermediateColors`
 como posição, cor, opacidade, modo de mistura e ponto médio.
+O caso 85 confirma que um degradê com dez bandas discretas é registrado em
+`fill.numSteps="10"`; o valor `0` dos casos anteriores indica transição suave.
 
 A transparência graduada tem uma camada externa com `startTransparency` e
 `endTransparency`. Sua geometria é serializada em `transparency.fill`, com os

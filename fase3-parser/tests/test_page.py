@@ -190,6 +190,10 @@ class TestPreenchimentoETransparencia(unittest.TestCase):
         self.assertEqual(parada.cor.componentes, (0, 0, 100, 0))
         self.assertEqual(parada.opacidade, 255)
 
+    def test_numero_de_passos_do_degrade(self):
+        estilo = self._estilo("caso_85_degrade_linear_10_passos.cdr")
+        self.assertEqual(estilo.preenchimento.passos, 10)
+
     def test_tipos_de_degrade(self):
         casos = {
             "caso_73_degrade_radial.cdr": "radial",
