@@ -18,11 +18,12 @@ instalado** e extrai:
   por objeto a partir do bloco estrutural `txsm`.
 - layers, associação objeto→layer e propriedades de visibilidade, impressão e bloqueio.
 - contorno por objeto: presença, largura em milímetros, cor, tracejado, pontas,
-  junções, escala com o objeto e sobreimpressão.
+  junções, alinhamento, linha fina, setas, escala com o objeto e sobreimpressão;
+- curvas separadas em segmentos retos/Bézier e subcaminhos abertos/fechados.
 
-Posição, tamanho e pontos compactos de curvas já são extraídos. Texto e a semântica
-completa das flags/segmentos vetoriais ainda não têm parser; ver
-`docs/descobertas-fase3-page1.md` e `docs/descobertas-geometria-vetorial.md`.
+Posição, tamanho, pontos compactos, segmentos e fechamento de curvas já são
+extraídos. Os bits inferiores que distinguem nós cúspide/suave/simétrico ainda
+estão abertos; ver `docs/descobertas-geometria-vetorial.md`.
 
 > ⚠️ **Antes de implementar qualquer leitura/escrita de coordenada geométrica:** o
 > CorelDRAW usa Y crescendo para CIMA (origem inferior esquerda) na API VBA, mas os
@@ -59,6 +60,8 @@ with abrir_cdr("arquivo.cdr") as doc:
             print(objeto.id_estrutural, objeto.grupo_powerclip)
             if objeto.geometria_curva:
                 print(objeto.geometria_curva.numero_pontos)
+                print(objeto.geometria_curva.numero_subcaminhos)
+                print(objeto.geometria_curva.possui_subcaminho_aberto)
             if objeto.estilos_texto:
                 print(objeto.tipo_texto, objeto.estilos_texto[0].fonte)
             if objeto.contorno:
@@ -74,6 +77,9 @@ with abrir_cdr("arquivo.cdr") as doc:
     print(doc.camadas())
     for alerta in doc.conferencia_limites():
         print(alerta.pagina.indice, alerta.ultrapassa_sangria)
+
+    for objeto in doc.curvas_com_subcaminhos_abertos():
+        print("curva aberta", objeto.pagina, objeto.caixa)
 ```
 
 Linha de comando:
@@ -170,6 +176,6 @@ quando a validação manual "parece" bater.
 python -m unittest discover -s fase3-parser/tests -v
 ```
 
-Usa os arquivos em `casos-de-teste/*.cdr` (gerados pela Fase 1/1b) como fixtures; testes
+Usa os arquivos `caso_00` a `caso_66` em `casos-de-teste/*.cdr` como fixtures; testes
 que dependem de um arquivo específico são pulados (`SkipTest`) se o arquivo não existir,
 em vez de falhar.

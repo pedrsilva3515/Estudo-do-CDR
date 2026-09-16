@@ -11,6 +11,10 @@ com o objetivo de produzir:
 3. **Pontos de integração** com a automação existente da gráfica (Kanban de produção,
    manifestos de job, validação de arquivos antes da fila de impressão).
 
+> Para continuar o trabalho em outro computador, comece por
+> [docs/RETOMADA.md](docs/RETOMADA.md). O documento registra branch, comandos,
+> estado dos testes, descobertas fechadas e o próximo estudo recomendado.
+
 ## Princípio metodológico
 
 Nenhuma conclusão sobre o formato é declarada com base em um único arquivo. Um arquivo
@@ -25,7 +29,7 @@ de confiança explícito (`confirmado por N casos` vs. `hipótese não testada`)
 | 1 | Gerador de casos de teste (macro VBA para CorelDRAW 2025 OEM) | **Concluída** — 16/16 casos gerados sem falhas (Corel 26.0 build 101) |
 | 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Concluída** — 6/6 casos gerados sem falhas, incluindo a foto real (caso_21) |
 | 2 | Motor de diferenças binárias (Python) | **Concluída** — 21 pares comparados, relatórios versionados |
-| 3 | Parser incremental (Python) | **Em andamento** — `zcfreader` extrai bitmaps, instâncias com matriz absoluta/bbox/DPI efetivo, árvore de objetos e nomes/estilos; geometria vetorial detalhada e texto ainda não têm parser completo |
+| 3 | Parser incremental (Python) | **Em andamento** — bitmaps, páginas, PowerClip, layers, texto, contornos e subcaminhos de curvas já têm leitura e testes; preenchimentos/transparências são o próximo bloco |
 | 4 | Especificação pública + biblioteca instalável com testes | Não iniciada |
 
 ## Estrutura do repositório
@@ -36,7 +40,8 @@ docs/
   descobertas-fase2.md         Descobertas confirmadas + hipóteses, com nível de confiança
   descobertas-fase1b.md        Descobertas dos casos 16-20 (multi-bitmap, dedup, CMYK, alfa)
   descobertas-fase3-page1.md   Descobertas sobre page1.dat (nomes, estilo JSON, chunks)
-casos-de-teste/                21 .cdr gerados pelas Fases 1/1b + manifestos JSON + imagens-fonte
+casos-de-teste/                67 .cdr controlados (caso_00–66) + manifestos JSON + imagens-fonte
+ferramentas-estudo/            Gerador reproduzível dos casos avançados 28–66
 fase1-gerador-casos/
   GeradorCasosZCF.bas          Macro VBA que gera os casos de teste + manifestos JSON
   README.md                    Instruções de instalação/execução da macro
@@ -99,9 +104,10 @@ e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
   confirma matriz absoluta, tamanho visível e DPI efetivo — ver
   `docs/descobertas-estrutura-root.md`.
 - **Tipos e curvas vetoriais:** o campo de tipo em `loda` distingue retângulo,
-  elipse, curva, texto e bitmap e bate com o resumo XMP em todos os casos
-  controlados. Em objetos curva, o vetor compacto de coordenadas e flags já pode
-  ser extraído — ver `docs/descobertas-geometria-vetorial.md`.
+  elipse, curva, texto e bitmap. O parser separa segmentos retos/Bézier, pontos
+  de controle, múltiplos subcaminhos e caminhos abertos/fechados. A conferência
+  `doc.curvas_com_subcaminhos_abertos()` já sinaliza objetos problemáticos — ver
+  `docs/descobertas-geometria-vetorial.md`.
 - **Página, sangria e objetos fora do corte:** o cabeçalho de `data1.dat`
   fornece tamanho padrão e sangria; páginas com tamanho próprio têm um bloco
   estrutural de 68 bytes em `pageN.dat`. O parser já sinaliza objetos que saem
@@ -117,8 +123,9 @@ e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
 - **Layers e impressão:** `LIST/layr` fornece nome, hierarquia e flags de
   visibilidade, impressão e bloqueio. Objetos dentro de PowerClip também recebem
   a layer do recipiente — ver `docs/descobertas-layers.md`.
-- **Contornos:** largura física, cor, tracejado, pontas, junções, escala e
-  sobreimpressão já são lidos por objeto — ver `docs/descobertas-contornos.md`.
+- **Contornos:** largura física, linha fina, cor, tracejado, pontas, junções,
+  alinhamento, escala, sobreimpressão e setas já são lidos por objeto — ver
+  `docs/descobertas-contornos.md`.
 - **Metadados de pre-flight sem engenharia reversa binária:**
   `META-INF/metadata.xml` fornece tamanho nominal da página, orientação, número de
   páginas/layers, contagens por tipo de objeto e efeito, fontes usadas e versão do
