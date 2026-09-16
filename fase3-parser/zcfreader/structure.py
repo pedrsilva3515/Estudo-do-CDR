@@ -14,6 +14,7 @@ import struct
 
 from .references import MatrizAfim
 from .text import EstiloTexto, parse_estilos_texto
+from .page import parse_estilos
 
 
 class FormatoEstruturaInvalido(ValueError):
@@ -114,6 +115,25 @@ class CamadaEstrutural:
 
 
 @dataclass(frozen=True)
+class ContornoObjeto:
+    largura_unidades: int
+    cor: str | None
+    tracejado: tuple[float, ...]
+    escala_com_objeto: bool
+    pontas: int
+    juncao: int
+    sobreimpressao: bool
+
+    @property
+    def presente(self) -> bool:
+        return self.largura_unidades > 0
+
+    @property
+    def largura_mm(self) -> float:
+        return self.largura_unidades / 10_000.0
+
+
+@dataclass(frozen=True)
 class OcorrenciaLimitePagina:
     objeto: "ObjetoEstrutural"
     pagina: PaginaEstrutural
@@ -143,6 +163,7 @@ class ObjetoEstrutural:
     tipo_texto: str | None = None
     estilos_texto: tuple[EstiloTexto, ...] = ()
     camada: str | None = None
+    contorno: ContornoObjeto | None = None
 
     @property
     def pontos_curva_absolutos(self) -> tuple[tuple[float, float, int], ...] | None:
@@ -261,6 +282,35 @@ def _nome_camada(data: bytes) -> str | None:
     if not nome or any(not caractere.isprintable() for caractere in nome):
         return None
     return nome
+
+
+def _contorno_de_dict(bruto: dict | None) -> ContornoObjeto | None:
+    if not isinstance(bruto, dict):
+        return None
+    try:
+        largura = int(bruto.get("width", 0))
+        especificacao = bruto.get("dashDotSpec", "")
+        tracejado = () if especificacao in ("", "0") else tuple(
+            float(valor) for valor in especificacao.split(",") if valor
+        )
+        return ContornoObjeto(
+            largura_unidades=largura,
+            cor=bruto.get("color"),
+            tracejado=tracejado,
+            escala_com_objeto=bruto.get("scaleWithObject", "0") != "0",
+            pontas=int(bruto.get("endCaps", 0)),
+            juncao=int(bruto.get("joinType", 0)),
+            sobreimpressao=bruto.get("overprint", "0") != "0",
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_contorno(data: bytes) -> ContornoObjeto | None:
+    estilos = parse_estilos(data)
+    if not estilos:
+        return None
+    return _contorno_de_dict(estilos[0][1].get("outline"))
 
 
 def parse_camadas(
@@ -495,6 +545,7 @@ def parse_estrutura(
             geometria_curva = None
             tipo_texto = None
             estilos_texto: tuple[EstiloTexto, ...] = ()
+            contorno = _parse_contorno(bruto_loda[1]) if bruto_loda is not None else None
             if no.tipo == "obj " and bruto_loda is not None and len(bruto_loda[1]) >= 20:
                 codigo_tipo_objeto = struct.unpack_from("<I", bruto_loda[1], 16)[0]
                 tipo_objeto = TIPOS_OBJETO.get(codigo_tipo_objeto, "desconhecido")
@@ -508,6 +559,10 @@ def parse_estrutura(
                     )
                     if bruto_txsm is not None:
                         estilos_texto = parse_estilos_texto(bruto_txsm[1])
+                        if contorno is None and estilos_texto:
+                            contorno = _contorno_de_dict(
+                                estilos_texto[0].bruto.get("character", {}).get("outline")
+                            )
 
             id_estrutural = _valor_imediato(_filho(no, tag="spnd"))
             candidatos = (
@@ -549,6 +604,7 @@ def parse_estrutura(
                     tipo_texto=tipo_texto,
                     estilos_texto=estilos_texto,
                     camada=proxima_camada,
+                    contorno=contorno,
                 )
             )
             pais_estruturais.append(pai_estrutural)

@@ -1,0 +1,1 @@
+{"caso":"caso_50_sem_contorno","arquivo":"caso_50_sem_contorno.cdr","base":"caso_49_contorno_padrao_02mm.cdr","alteracao":"remover_contorno","parametros":{"metodo":"SetNoOutline"},"descricao":"Remove o contorno explicitamente."}

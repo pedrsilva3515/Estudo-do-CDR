@@ -87,6 +87,14 @@ def _listar(caminho: Path) -> int:
                     f"  curvas: {len(curvas_lidas)}/{len(curvas)} decodificada(s), "
                     f"{total_pontos} ponto(s) compactos"
                 )
+            contornos = [obj.contorno for obj in objetos if obj.contorno is not None]
+            presentes = [contorno for contorno in contornos if contorno.presente]
+            if contornos:
+                larguras = sorted({round(contorno.largura_mm, 4) for contorno in presentes})
+                print(
+                    f"  contornos: {len(presentes)}/{len(contornos)} presente(s); "
+                    f"larguras {larguras or '(nenhuma)'} mm"
+                )
             fluxos_texto = doc.textos()
             objetos_texto = [obj for obj in objetos if obj.tipo_objeto == "texto"]
             if fluxos_texto or objetos_texto:

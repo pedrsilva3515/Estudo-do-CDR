@@ -1,0 +1,1 @@
+{"caso":"caso_51_contorno_largura_zero","arquivo":"caso_51_contorno_largura_zero.cdr","base":"caso_49_contorno_padrao_02mm.cdr","alteracao":"largura_zero","parametros":{"largura":0},"descricao":"Largura zero produz o mesmo estado sem contorno, não hairline."}

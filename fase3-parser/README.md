@@ -17,6 +17,8 @@ instalado** e extrai:
 - conteúdo textual, idioma e parágrafos de `textinfo.xml`, mais fonte e tamanho
   por objeto a partir do bloco estrutural `txsm`.
 - layers, associação objeto→layer e propriedades de visibilidade, impressão e bloqueio.
+- contorno por objeto: presença, largura em milímetros, cor, tracejado, pontas,
+  junções, escala com o objeto e sobreimpressão.
 
 Posição, tamanho e pontos compactos de curvas já são extraídos. Texto e a semântica
 completa das flags/segmentos vetoriais ainda não têm parser; ver
@@ -59,6 +61,8 @@ with abrir_cdr("arquivo.cdr") as doc:
                 print(objeto.geometria_curva.numero_pontos)
             if objeto.estilos_texto:
                 print(objeto.tipo_texto, objeto.estilos_texto[0].fonte)
+            if objeto.contorno:
+                print(objeto.contorno.largura_mm, objeto.contorno.tracejado)
 
     for fluxo in doc.textos():
         print(fluxo.texto)
