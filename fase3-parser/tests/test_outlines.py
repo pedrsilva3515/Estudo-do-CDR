@@ -77,6 +77,11 @@ class TestContornos(unittest.TestCase):
         self.assertTrue(contorno.seta_final.startswith("M"))
         self.assertNotEqual(contorno.seta_inicial, contorno.seta_final)
 
+    def test_contorno_caligrafico(self):
+        contorno = _contorno("caso_99_contorno_caligrafico.cdr")
+        self.assertEqual(contorno.angulo_caligrafico, 45.0)
+        self.assertEqual(contorno.aspecto_caligrafico, 50)
+
 
 if __name__ == "__main__":
     unittest.main()

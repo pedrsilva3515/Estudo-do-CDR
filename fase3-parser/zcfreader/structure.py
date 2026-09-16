@@ -188,6 +188,8 @@ class ContornoObjeto:
     alinhamento: int
     seta_inicial: str | None
     seta_final: str | None
+    angulo_caligrafico: float
+    aspecto_caligrafico: int
 
     @property
     def presente(self) -> bool:
@@ -392,6 +394,8 @@ def _contorno_de_dict(bruto: dict | None) -> ContornoObjeto | None:
             alinhamento=int(bruto.get("justification", 0)),
             seta_inicial=bruto.get("leftArrow") or None,
             seta_final=bruto.get("rightArrow") or None,
+            angulo_caligrafico=float(bruto.get("angle", 0)),
+            aspecto_caligrafico=int(bruto.get("aspect", 0)),
         )
     except (TypeError, ValueError):
         return None
