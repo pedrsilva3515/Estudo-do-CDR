@@ -60,6 +60,16 @@ class TestMetadadosObjetos(unittest.TestCase):
         self.assertEqual(meta.contagem_objetos["Group"], 1)
 
 
+class TestContextoCor(unittest.TestCase):
+    def test_intento_de_renderizacao(self):
+        with abrir_cdr(CASOS / "caso_104_contexto_cor_intento_1.cdr") as doc:
+            contexto = doc.contexto_cor()
+        self.assertEqual(contexto.modelo, "Cmyk")
+        self.assertEqual(contexto.intento_renderizacao, "Saturation")
+        self.assertTrue(contexto.possui_objetos_cmyk)
+        self.assertFalse(contexto.possui_objetos_rgb)
+
+
 class TestMetadadosInvalidos(unittest.TestCase):
     def test_xml_invalido_levanta_erro_especifico(self):
         with self.assertRaises(FormatoMetadadosInvalido):

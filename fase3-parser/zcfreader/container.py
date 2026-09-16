@@ -209,6 +209,13 @@ class ZcfContainer:
         from .metadata import parse_metadata
         return parse_metadata(self.read("META-INF/metadata.xml"))
 
+    def contexto_cor(self):
+        """Lê o modelo e o intento ICC em ``color/color.xml``."""
+        if not self.tem_membro("color/color.xml"):
+            return None
+        from .color import parse_contexto_cor
+        return parse_contexto_cor(self.read("color/color.xml"))
+
     def textos(self):
         """Conteúdo textual agregado de ``META-INF/textinfo.xml``.
 

@@ -26,6 +26,7 @@ Uso basico:
 """
 from .bitmaps import ArquivoBitmaps, FormatoBitmapsInvalido, ImagemBruta, RegistroBitmap
 from .container import ZcfContainer, abrir_cdr
+from .color import ContextoCorDocumento, parse_contexto_cor
 from .metadata import FormatoMetadadosInvalido, MetadadosDocumento
 from .page import (
     CorObjeto,
@@ -57,6 +58,8 @@ from .text import EstiloTexto, FluxoTexto, FormatoTextoInvalido, TextoEstruturad
 __all__ = [
     "abrir_cdr",
     "ZcfContainer",
+    "ContextoCorDocumento",
+    "parse_contexto_cor",
     "ArquivoBitmaps",
     "RegistroBitmap",
     "ImagemBruta",

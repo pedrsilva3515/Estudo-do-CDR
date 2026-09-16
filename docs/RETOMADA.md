@@ -8,9 +8,9 @@ Este arquivo é o ponto de entrada para continuar o estudo em outro computador.
 - Branch de trabalho: `claude/zcf-format-reverse-engineering-hdgcjw`
 - Último marco técnico antes deste documento: preenchimentos, transparências,
   geometria de nós e contornos avançados
-- Casos controlados versionados: `caso_00` a `caso_103`, sempre com `.cdr` e
+- Casos controlados versionados: `caso_00` a `caso_104`, sempre com `.cdr` e
   manifesto `.json`.
-- Testes no encerramento: 111 testes passando.
+- Testes no encerramento: 112 testes passando.
 
 Commits técnicos desta rodada, em ordem:
 
@@ -59,6 +59,7 @@ Os detalhes e evidências estão separados por assunto em:
 - `docs/descobertas-contornos.md`
 - `docs/descobertas-geometria-vetorial.md`
 - `docs/descobertas-preenchimentos-transparencias.md`
+- `docs/descobertas-gestao-cor.md`
 
 Os geradores dos casos avançados estão em
 `ferramentas-estudo/GerarCasosAvancados.ps1`. Eles dependem do CorelDRAW 2025
