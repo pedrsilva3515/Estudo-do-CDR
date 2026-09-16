@@ -67,6 +67,17 @@ class PontoCurva:
     def marca_fechamento(self) -> bool:
         return bool(self.flag & 0x08)
 
+    @property
+    def tipo_no(self) -> str | None:
+        """Tipo do nó confirmado nos pontos de extremidade de segmentos.
+
+        O caso controlado de Bézier mostra que ``0x10`` identifica um nó
+        suave. Para pontos de controle e inícios de subcaminho não há tipo.
+        """
+        if self.papel not in {"fim_linha", "fim_curva"}:
+            return None
+        return "suave" if self.flag & 0x10 else "cuspide"
+
 
 @dataclass(frozen=True)
 class SubcaminhoCurva:

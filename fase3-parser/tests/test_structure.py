@@ -246,6 +246,21 @@ class TestEstruturaRoot(unittest.TestCase):
         self.assertEqual(len(ocorrencias), 1)
         self.assertFalse(ocorrencias[0].ultrapassa_sangria)
 
+    def test_no_suave_adiciona_bit_confirmado(self):
+        cuspide = CASOS / "caso_97_curva_bezier_no_cuspide.cdr"
+        suave = CASOS / "caso_96_curva_bezier_no_suave.cdr"
+        if not cuspide.exists() or not suave.exists():
+            self.skipTest("fixtures de nós de Bézier ausentes")
+        with abrir_cdr(cuspide) as original, abrir_cdr(suave) as alterado:
+            curva_original = next(
+                o.geometria_curva for o in original.estrutura() if o.tipo_objeto == "curva"
+            )
+            curva_alterada = next(
+                o.geometria_curva for o in alterado.estrutura() if o.tipo_objeto == "curva"
+            )
+        self.assertEqual(curva_original.pontos[3].tipo_no, "cuspide")
+        self.assertEqual(curva_alterada.pontos[3].tipo_no, "suave")
+
 
 if __name__ == "__main__":
     unittest.main()
