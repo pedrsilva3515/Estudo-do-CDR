@@ -93,6 +93,7 @@ class RegistroBitmap:
     """Um registro UI: uma imagem unica armazenada, com mascara opcional."""
 
     indice: int
+    identificador: int
     offset: int
     imagem: ImagemBruta
     mascara: ImagemBruta | None = None
@@ -205,6 +206,13 @@ def parse_bitmaps(data: bytes) -> ArquivoBitmaps:
         tamanho_campo = struct.unpack_from("<I", data, offset + 4)[0]
         fim_registro = _fim_do_registro(offset, tamanho_campo, _UI_HEADER_LEN, len(data))
 
+        # Cada UI e precedido por dois uint32. O primeiro e o identificador
+        # usado pelos descritores de instancias em page*.dat/data*.dat. No
+        # primeiro registro, o par e o proprio cabecalho inicial do arquivo;
+        # nos demais, fica nos 8 bytes imediatamente anteriores a tag UI.
+        prefixo_offset = 0 if indice == 0 else offset - 8
+        identificador = struct.unpack_from("<I", data, prefixo_offset)[0]
+
         ri_offset = offset + _UI_RI_OFF
         imagem, fim_ri1 = _ler_ri(data, ri_offset, fim_registro)
 
@@ -217,7 +225,13 @@ def parse_bitmaps(data: bytes) -> ArquivoBitmaps:
             mascara, _ = _ler_ri(data, fim_ri1, fim_registro)
 
         registros.append(
-            RegistroBitmap(indice=indice, offset=offset, imagem=imagem, mascara=mascara)
+            RegistroBitmap(
+                indice=indice,
+                identificador=identificador,
+                offset=offset,
+                imagem=imagem,
+                mascara=mascara,
+            )
         )
         indice += 1
         offset = fim_registro

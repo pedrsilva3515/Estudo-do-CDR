@@ -7,6 +7,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import sys
 from pathlib import Path
 
@@ -16,6 +17,25 @@ from .container import abrir_cdr
 def _listar(caminho: Path) -> int:
     with abrir_cdr(caminho) as doc:
         print(f"{caminho}")
+        metadados = doc.metadados()
+        if metadados is not None:
+            largura = metadados.largura_pagina_mm
+            altura = metadados.altura_pagina_mm
+            tamanho = (
+                f"{largura:g} x {altura:g} mm"
+                if largura is not None and altura is not None
+                else "desconhecido"
+            )
+            nome = f" ({metadados.nome_tamanho_pagina})" if metadados.nome_tamanho_pagina else ""
+            print(
+                f"  documento: {metadados.paginas or '?'} pagina(s), "
+                f"{metadados.layers or '?'} layer(s)"
+            )
+            print(f"  pagina: {tamanho}{nome}, orientacao {metadados.orientacao or 'desconhecida'}")
+            if metadados.contagem_objetos:
+                print(f"  objetos: {metadados.contagem_objetos.get('Total', '?')} no total")
+            if metadados.fontes_usadas:
+                print(f"  fontes usadas: {', '.join(metadados.fontes_usadas)}")
         print(f"  arquivos de dados: {', '.join(doc.arquivos_de_dados) or '(nenhum)'}")
         bitmaps = doc.bitmaps()
         if bitmaps is None:
@@ -29,6 +49,69 @@ def _listar(caminho: Path) -> int:
                     f"    [{r.indice}] {img.largura}x{img.altura} px, {img.espaco_de_cor} "
                     f"({img.bits_por_pixel} bpp), {img.resolucao_x_dpi:.0f}x{img.resolucao_y_dpi:.0f} dpi"
                     f"{mascara}"
+                )
+            instancias = doc.instancias_bitmaps(bitmaps)
+            print(f"  instancias de bitmap: {len(instancias)} objeto(s)")
+            for instancia in instancias:
+                dpi_local = ""
+                if instancia.dpi_efetivo_x is not None:
+                    dpi_local = (
+                        f", DPI efetivo {instancia.dpi_efetivo_x:.0f}x"
+                        f"{instancia.dpi_efetivo_y:.0f}, tamanho "
+                        f"{instancia.largura_efetiva_mm:.1f}x"
+                        f"{instancia.altura_efetiva_mm:.1f} mm"
+                    )
+                print(
+                    f"    {instancia.membro}@{instancia.offset}: "
+                    f"imagem [{instancia.registro.indice}] "
+                    f"(id {instancia.identificador_bitmap}){dpi_local}"
+                )
+
+        objetos = [obj for obj in doc.estrutura() if obj.tipo == "obj"]
+        if objetos:
+            contagens = Counter(obj.tipo_objeto or "desconhecido" for obj in objetos)
+            resumo = ", ".join(
+                f"{tipo}={quantidade}" for tipo, quantidade in sorted(contagens.items())
+            )
+            com_caixa = sum(obj.caixa is not None for obj in objetos)
+            com_matriz = sum(obj.matriz is not None for obj in objetos)
+            print(
+                f"  geometria: {len(objetos)} objeto(s) ({resumo}); "
+                f"bbox={com_caixa}, matriz={com_matriz}"
+            )
+            curvas = [obj for obj in objetos if obj.tipo_objeto == "curva"]
+            curvas_lidas = [obj for obj in curvas if obj.geometria_curva is not None]
+            if curvas:
+                total_pontos = sum(obj.geometria_curva.numero_pontos for obj in curvas_lidas)
+                print(
+                    f"  curvas: {len(curvas_lidas)}/{len(curvas)} decodificada(s), "
+                    f"{total_pontos} ponto(s) compactos"
+                )
+
+        paginas = doc.paginas_estruturais()
+        for pagina in paginas:
+            origem = "personalizado" if pagina.tamanho_personalizado else "padrao"
+            print(
+                f"  pagina {pagina.indice}: {pagina.largura_mm:g}x"
+                f"{pagina.altura_mm:g} mm ({origem}), sangria {pagina.sangria_mm:g} mm"
+            )
+        ocorrencias = doc.conferencia_limites()
+        if ocorrencias:
+            print(f"  alerta: {len(ocorrencias)} objeto(s) excedem os limites da pagina")
+            for ocorrencia in ocorrencias:
+                lados = []
+                for nome, valor in (
+                    ("esquerda", ocorrencia.excede_esquerda_mm),
+                    ("direita", ocorrencia.excede_direita_mm),
+                    ("topo", ocorrencia.excede_topo_mm),
+                    ("base", ocorrencia.excede_base_mm),
+                ):
+                    if valor > 0:
+                        lados.append(f"{nome}={valor:.1f} mm")
+                print(
+                    f"    pagina {ocorrencia.pagina.indice}, "
+                    f"{ocorrencia.objeto.tipo_objeto}: {', '.join(lados)} "
+                    f"({'alem da sangria' if ocorrencia.ultrapassa_sangria else 'dentro da sangria'})"
                 )
 
         itens = doc.pagina(1)

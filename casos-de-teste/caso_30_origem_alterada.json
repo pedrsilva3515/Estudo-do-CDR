@@ -1,0 +1,10 @@
+{
+  "caso": "caso_30_origem_alterada",
+  "arquivo": "caso_30_origem_alterada.cdr",
+  "arquivo_base": "caso_29_cruza_quatro_bordas.cdr",
+  "tipo_alteracao": "origem_documento",
+  "descricao": "Mesmos cinco objetos do caso 29, alterando apenas DrawingOriginX/Y.",
+  "parametros": { "origem_x_cm": 5, "origem_y_cm": -7 },
+  "gerado_em": "2026-09-16",
+  "corel_versao": "26.0 build 101"
+}

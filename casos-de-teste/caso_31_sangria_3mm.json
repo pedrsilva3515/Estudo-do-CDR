@@ -1,0 +1,10 @@
+{
+  "caso": "caso_31_sangria_3mm",
+  "arquivo": "caso_31_sangria_3mm.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "sangria",
+  "descricao": "Define sangria de 3 mm e cria um objeto que sai do corte ate a sangria esquerda.",
+  "parametros": { "sangria_mm": 3, "lado": "esquerda" },
+  "gerado_em": "2026-09-16",
+  "corel_versao": "26.0 build 101"
+}

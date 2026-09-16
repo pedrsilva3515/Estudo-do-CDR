@@ -1,0 +1,10 @@
+{
+  "caso": "caso_28_origem_zero",
+  "arquivo": "caso_28_origem_zero.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "origem_documento",
+  "descricao": "Mantem o objeto e zera DrawingOriginX/Y para localizar a origem da regua no ZCF.",
+  "parametros": { "origem_x_cm": 0, "origem_y_cm": 0 },
+  "gerado_em": "2026-09-16",
+  "corel_versao": "26.0 build 101"
+}

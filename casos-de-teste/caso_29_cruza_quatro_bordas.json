@@ -1,0 +1,10 @@
+{
+  "caso": "caso_29_cruza_quatro_bordas",
+  "arquivo": "caso_29_cruza_quatro_bordas.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "limites_pagina",
+  "descricao": "Cinco quadrados sem contorno: um interno e quatro cruzando cada borda da pagina em 5 mm.",
+  "parametros": { "excesso_mm": 5, "lados": ["esquerda", "direita", "topo", "base"] },
+  "gerado_em": "2026-09-16",
+  "corel_versao": "26.0 build 101"
+}

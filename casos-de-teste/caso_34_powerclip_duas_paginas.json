@@ -1,0 +1,12 @@
+{
+  "caso": "caso_34_powerclip_duas_paginas",
+  "arquivo": "caso_34_powerclip_duas_paginas.cdr",
+  "base": "caso_00_base.cdr",
+  "alteracao": "powerclip_multipagina",
+  "parametros": {
+    "paginas": 2,
+    "powerclips": 2,
+    "distribuicao": "um PowerClip em cada pagina"
+  },
+  "descricao": "Um recipiente com elipse via PowerClip em cada pagina. Confirma que o grupo clpt herda a pagina de seu recipiente, inclusive page2.dat."
+}

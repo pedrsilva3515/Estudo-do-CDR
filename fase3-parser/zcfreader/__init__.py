@@ -5,11 +5,10 @@ Biblioteca construida por engenharia reversa incremental, documentada em
 docs/ no repositorio do projeto (nivel de confianca explicito por achado).
 Cobre leitura; a escrita/edicao continua sendo tarefa do CorelDRAW/VBA.
 
-Nesta fase, cobre `content/data/Bitmaps.dat` (extracao de imagens) e uma
-extracao parcial de `content/data/page*.dat` (nomes de layers/objetos e
-seus estilos de preenchimento/contorno — sem geometria ainda). `root.dat`
-ainda nao tem parser — ver docs/descobertas-fase2.md e
-docs/descobertas-fase3-page1.md para o que ja se sabe sobre eles.
+Nesta fase, cobre `content/data/Bitmaps.dat` (extracao de imagens), uma
+extracao parcial de `content/data/page*.dat` (nomes e estilos) e a arvore
+RIFF de `root.dat`, com hierarquia, tipos, bbox, matriz e pontos de curvas.
+Veja os documentos de descobertas em `docs/` para evidencias e limitacoes.
 
 Uso basico:
 
@@ -27,7 +26,18 @@ Uso basico:
 """
 from .bitmaps import ArquivoBitmaps, FormatoBitmapsInvalido, ImagemBruta, RegistroBitmap
 from .container import ZcfContainer, abrir_cdr
+from .metadata import FormatoMetadadosInvalido, MetadadosDocumento
 from .page import ItemNomeado
+from .references import InstanciaBitmap, MatrizAfim
+from .structure import (
+    CaixaObjeto,
+    FormatoEstruturaInvalido,
+    GeometriaCurva,
+    ObjetoEstrutural,
+    OcorrenciaLimitePagina,
+    PaginaEstrutural,
+    PontoCurva,
+)
 
 __all__ = [
     "abrir_cdr",
@@ -36,5 +46,16 @@ __all__ = [
     "RegistroBitmap",
     "ImagemBruta",
     "FormatoBitmapsInvalido",
+    "MetadadosDocumento",
+    "FormatoMetadadosInvalido",
     "ItemNomeado",
+    "InstanciaBitmap",
+    "MatrizAfim",
+    "ObjetoEstrutural",
+    "CaixaObjeto",
+    "FormatoEstruturaInvalido",
+    "GeometriaCurva",
+    "PontoCurva",
+    "PaginaEstrutural",
+    "OcorrenciaLimitePagina",
 ]

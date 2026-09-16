@@ -1,0 +1,13 @@
+{
+  "caso": "caso_36_powerclip_fora_da_pagina",
+  "arquivo": "caso_36_powerclip_fora_da_pagina.cdr",
+  "base": "caso_00_base.cdr",
+  "alteracao": "powerclip_fora_da_pagina",
+  "parametros": {
+    "pagina": 1,
+    "lado": "direita",
+    "recipiente": "retangulo de 40 x 40 mm",
+    "conteudo": "elipse"
+  },
+  "descricao": "Recipiente e conteudo do PowerClip ultrapassam a borda direita. Confirma que a conferencia inclui tanto page1.dat quanto data1.dat."
+}

@@ -25,7 +25,7 @@ de confiança explícito (`confirmado por N casos` vs. `hipótese não testada`)
 | 1 | Gerador de casos de teste (macro VBA para CorelDRAW 2025 OEM) | **Concluída** — 16/16 casos gerados sem falhas (Corel 26.0 build 101) |
 | 1b | Casos extras para fechar hipóteses sobre múltiplos bitmaps | **Concluída** — 6/6 casos gerados sem falhas, incluindo a foto real (caso_21) |
 | 2 | Motor de diferenças binárias (Python) | **Concluída** — 21 pares comparados, relatórios versionados |
-| 3 | Parser incremental (Python) | **Em andamento** — `zcfreader` extrai bitmaps (RGB/CMYK/alfa) e nomes/estilos de objetos de `page1.dat`, com testes automatizados; geometria (posição/curvas) e texto ainda não têm parser |
+| 3 | Parser incremental (Python) | **Em andamento** — `zcfreader` extrai bitmaps, instâncias com matriz absoluta/bbox/DPI efetivo, árvore de objetos e nomes/estilos; geometria vetorial detalhada e texto ainda não têm parser completo |
 | 4 | Especificação pública + biblioteca instalável com testes | Não iniciada |
 
 ## Estrutura do repositório
@@ -66,8 +66,9 @@ e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
   parte o "24 bitmaps reportados vs. poucos registros UI" do helo.cdr.
 - **Transparência (alfa) é um 2º `RI`** (máscara em escala de cinza) aninhado dentro do
   mesmo `UI`, não um 4º canal RGBA. CMYK usa 32 bpp (4 × 8 bits) num único `RI`.
-- **Objetos e relações (posição, grupo, PowerClip) vivem em `pageN.dat`** — mover ou
-  duplicar um bitmap não altera um byte do `Bitmaps.dat`.
+- **Objetos e relações estruturais vivem em `pageN.dat`, `dataN.dat` e `root.dat`** —
+  conteúdo de PowerClip fica em `dataN.dat` e é ligado ao recipiente pelo índice
+  RIFF de `root.dat`; mover ou duplicar um bitmap não altera um byte do `Bitmaps.dat`.
 - Texto embute a fonte (`font/fontTable.dat` + `embed/embedding0`); página nova cria
   `page2.dat` + preview + entrada no `dataFileList.dat`.
 - **Pendência resolvida:** os "JPEGs embutidos" do helo.cdr eram coincidência estatística
@@ -83,5 +84,35 @@ e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
 - **`page1.dat` parcialmente decodificado:** as propriedades de preenchimento/contorno/
   transparência de cada objeto são gravadas como **JSON em texto puro** (não binário),
   e nomes de layers/objetos aparecem em UTF-16LE — ambos já extraíveis pela biblioteca.
-  A geometria (posição, tamanho, curvas) ainda está numa árvore de "chunks" binários não
-  decodificada — ver `docs/descobertas-fase3-page1.md`.
+  A geometria vetorial detalhada (como os pontos das curvas) continua aberta, mas a
+  hierarquia, caixa e matriz dos objetos já são obtidas por `root.dat` — ver
+  `docs/descobertas-fase3-page1.md` e `docs/descobertas-estrutura-root.md`.
+- **Ligação instância → imagem única confirmada:** descritores em `pageN.dat` ou
+  `dataN.dat` carregam largura/altura/bpp e um identificador que aponta para o prefixo
+  do registro `UI` correspondente em `Bitmaps.dat`. `doc.instancias_bitmaps()` já
+  diferencia quantidade de objetos bitmap e quantidade de imagens únicas, inclusive
+  deduplicação e conteúdo dentro de `dataN.dat` — ver
+  `docs/descobertas-referencias-bitmaps.md`.
+- **Árvore de objetos e geometria de bitmap:** `root.dat` foi identificado como um
+  índice RIFF que descreve páginas, layers, grupos e objetos e aponta para `loda`,
+  `bbox` e `trfd` nos membros de dados. Isso liga cada instância ao objeto dono e
+  confirma matriz absoluta, tamanho visível e DPI efetivo — ver
+  `docs/descobertas-estrutura-root.md`.
+- **Tipos e curvas vetoriais:** o campo de tipo em `loda` distingue retângulo,
+  elipse, curva, texto e bitmap e bate com o resumo XMP em todos os casos
+  controlados. Em objetos curva, o vetor compacto de coordenadas e flags já pode
+  ser extraído — ver `docs/descobertas-geometria-vetorial.md`.
+- **Página, sangria e objetos fora do corte:** o cabeçalho de `data1.dat`
+  fornece tamanho padrão e sangria; páginas com tamanho próprio têm um bloco
+  estrutural de 68 bytes em `pageN.dat`. O parser já sinaliza objetos que saem
+  do corte e distingue se permanecem dentro da sangria — ver
+  `docs/descobertas-paginas-limites.md`.
+- **PowerClip → página:** o campo de vínculo do recipiente aponta para o grupo
+  `clpt` de conteúdo. A página agora é propagada também por PowerClips aninhados,
+  incluindo objetos armazenados em `dataN.dat`.
+- **Metadados de pre-flight sem engenharia reversa binária:**
+  `META-INF/metadata.xml` fornece tamanho nominal da página, orientação, número de
+  páginas/layers, contagens por tipo de objeto e efeito, fontes usadas e versão do
+  CorelDRAW. `zcfreader` já lê o núcleo desses campos por `doc.metadados()` — ver
+  `docs/descobertas-metadata.md`. Em documentos com páginas de tamanhos diferentes,
+  o XML ainda precisa de um caso controlado para definir qual página o resumo representa.

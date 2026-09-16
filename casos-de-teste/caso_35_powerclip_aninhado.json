@@ -1,0 +1,12 @@
+{
+  "caso": "caso_35_powerclip_aninhado",
+  "arquivo": "caso_35_powerclip_aninhado.cdr",
+  "base": "caso_00_base.cdr",
+  "alteracao": "powerclip_aninhado",
+  "parametros": {
+    "pagina": 1,
+    "niveis": 2,
+    "estrutura": "retangulo externo > retangulo interno > elipse"
+  },
+  "descricao": "PowerClip aninhado em dois niveis. Confirma a propagacao iterativa da pagina do recipiente externo ate o conteudo do recipiente interno."
+}

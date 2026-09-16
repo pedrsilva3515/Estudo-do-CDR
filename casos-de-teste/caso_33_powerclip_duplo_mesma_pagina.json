@@ -1,0 +1,12 @@
+{
+  "caso": "caso_33_powerclip_duplo_mesma_pagina",
+  "arquivo": "caso_33_powerclip_duplo_mesma_pagina.cdr",
+  "base": "caso_00_base.cdr",
+  "alteracao": "powerclip_duplo",
+  "parametros": {
+    "pagina": 1,
+    "powerclips": 2,
+    "conteudo_por_powerclip": "uma elipse"
+  },
+  "descricao": "Dois recipientes independentes na mesma pagina, cada um contendo uma elipse via PowerClip. Isola IDs distintos apontando para a mesma pagina."
+}

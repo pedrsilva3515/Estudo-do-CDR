@@ -1,0 +1,10 @@
+{
+  "caso": "caso_32_paginas_tamanhos_diferentes",
+  "arquivo": "caso_32_paginas_tamanhos_diferentes.cdr",
+  "arquivo_base": "caso_00_base.cdr",
+  "tipo_alteracao": "tamanho_por_pagina",
+  "descricao": "Duas paginas: pagina 1 A4 e pagina 2 com 100 x 200 mm, contendo um objeto interno e outro cruzando a direita.",
+  "parametros": { "pagina_1_mm": [210, 297], "pagina_2_mm": [100, 200] },
+  "gerado_em": "2026-09-16",
+  "corel_versao": "26.0 build 101"
+}

@@ -6,6 +6,9 @@ XMLs de metadados e previews PNG — ver docs/evidencias-amostra-helo.md.
 from __future__ import annotations
 
 import zipfile
+import re
+import struct
+from dataclasses import replace
 from pathlib import Path
 
 MIMETYPE_ESPERADO = b"application/x-vnd.corel.zcf.draw.document+zip"
@@ -52,6 +55,142 @@ class ZcfContainer:
             return None
         from .bitmaps import parse_bitmaps
         return parse_bitmaps(self.read("content/data/Bitmaps.dat"))
+
+    def instancias_bitmaps(self, bitmaps=None):
+        """Localiza cada uso dos bitmaps unicos dentro do documento.
+
+        Devolve uma lista vazia quando nao ha ``Bitmaps.dat``. As referencias
+        podem estar em ``pageN.dat`` ou ``dataN.dat`` (por exemplo, conteudo
+        interno de PowerClip).
+        """
+        if bitmaps is None:
+            bitmaps = self.bitmaps()
+        if bitmaps is None:
+            return []
+        from .references import parse_instancias_bitmap
+
+        padrao = re.compile(r"^content/data/(?:page\d+|data\d+|masterPage)\.dat$")
+        instancias = []
+        for membro in self.namelist():
+            if padrao.match(membro):
+                instancias.extend(
+                    parse_instancias_bitmap(self.read(membro), membro, bitmaps)
+                )
+        objetos = self.estrutura()
+        enriquecidas = []
+        for instancia in instancias:
+            candidatos = [
+                objeto
+                for objeto in objetos
+                if objeto.membro == instancia.membro
+                and objeto.offset_dados is not None
+                and objeto.tamanho_dados is not None
+                and objeto.offset_dados <= instancia.offset
+                < objeto.offset_dados + objeto.tamanho_dados
+            ]
+            # Em caso de aninhamento/intervalos sobrepostos, o menor blob e o
+            # dono mais especifico da instancia.
+            objeto = min(candidatos, key=lambda o: o.tamanho_dados) if candidatos else None
+            enriquecidas.append(replace(instancia, objeto=objeto))
+        return enriquecidas
+
+    def estrutura(self):
+        """Decodifica a arvore RIFF de ``content/root.dat``."""
+        if not self.tem_membro("content/root.dat"):
+            return []
+        from .structure import parse_estrutura
+
+        return parse_estrutura(self.read("content/root.dat"), self._streams_estrutura())
+
+    def _streams_estrutura(self):
+        # Os IDs usados por root.dat sao os indices zero-based de
+        # dataFileList.dat. Bitmaps.dat ocupa um indice quando aparece na
+        # lista, embora suas imagens usem um indice interno proprio.
+        streams = {}
+        for indice, nome in enumerate(self.arquivos_de_dados):
+            if nome == "Bitmaps.dat":
+                continue
+            membro = f"content/data/{nome}"
+            if self.tem_membro(membro):
+                streams[indice] = (membro, self.read(membro))
+        return streams
+
+    def paginas_estruturais(self):
+        """Tamanhos individuais e sangria das paginas do documento."""
+        if not self.tem_membro("content/root.dat"):
+            return []
+        from .structure import parse_paginas
+
+        largura = altura = sangria = 0
+        if self.tem_membro("content/data/data1.dat"):
+            data1 = self.read("content/data/data1.dat")
+            if len(data1) >= 46:
+                largura, altura = struct.unpack_from("<II", data1, 12)
+                sangria = struct.unpack_from("<I", data1, 42)[0]
+        if largura <= 0 or altura <= 0:
+            metadata = self.metadados()
+            largura = metadata.largura_pagina_unidades if metadata else 0
+            altura = metadata.altura_pagina_unidades if metadata else 0
+        if not largura or not altura:
+            return []
+        return parse_paginas(
+            self.read("content/root.dat"),
+            self._streams_estrutura(),
+            largura,
+            altura,
+            sangria,
+        )
+
+    def conferencia_limites(self, tolerancia_mm: float = 0.1):
+        """Lista objetos que excedem os limites nominais da pagina.
+
+        O formato usa coordenadas locais aproximadamente centradas em zero.
+        A tolerancia padrao de 0,1 mm absorve os pequenos deslocamentos de
+        arredondamento observados nos casos controlados.
+        """
+        from .structure import OcorrenciaLimitePagina
+
+        paginas = {pagina.indice: pagina for pagina in self.paginas_estruturais()}
+        tolerancia = tolerancia_mm * 10_000.0
+        ocorrencias = []
+        for objeto in self.estrutura():
+            if objeto.tipo != "obj" or objeto.caixa is None or objeto.pagina not in paginas:
+                continue
+            pagina = paginas[objeto.pagina]
+            caixa = objeto.caixa
+            esquerda = max(0.0, pagina.limite_esquerdo_nominal - caixa.esquerda)
+            direita = max(0.0, caixa.direita - pagina.limite_direito_nominal)
+            topo = max(0.0, caixa.topo - pagina.limite_superior_nominal)
+            base = max(0.0, pagina.limite_inferior_nominal - caixa.base)
+            if any(valor > tolerancia for valor in (esquerda, direita, topo, base)):
+                ultrapassa_sangria = any(
+                    valor > pagina.sangria_unidades + tolerancia
+                    for valor in (esquerda, direita, topo, base)
+                )
+                ocorrencias.append(
+                    OcorrenciaLimitePagina(
+                        objeto=objeto,
+                        pagina=pagina,
+                        excede_esquerda_mm=esquerda / 10_000.0,
+                        excede_direita_mm=direita / 10_000.0,
+                        excede_topo_mm=topo / 10_000.0,
+                        excede_base_mm=base / 10_000.0,
+                        ultrapassa_sangria=ultrapassa_sangria,
+                    )
+                )
+        return ocorrencias
+
+    def metadados(self):
+        """Le o resumo XMP de ``META-INF/metadata.xml``.
+
+        Inclui tamanho nominal da pagina, contagens de paginas/layers/
+        objetos, fontes usadas e versao do CorelDRAW. Devolve ``None`` em
+        contêineres ZCF que nao tenham esse membro.
+        """
+        if not self.tem_membro("META-INF/metadata.xml"):
+            return None
+        from .metadata import parse_metadata
+        return parse_metadata(self.read("META-INF/metadata.xml"))
 
     def pagina(self, indice: int = 1):
         """Extrai nomes e estilos (fill/outline/transparency) de

@@ -4,12 +4,20 @@ Biblioteca Python que abre um `.cdr` moderno (formato ZCF) **sem depender do Cor
 instalado** e extrai:
 
 - as imagens de `content/data/Bitmaps.dat` (RGB, CMYK, máscara de transparência);
+- cada instância de bitmap e sua ligação com a imagem única correspondente,
+  procurando descritores em `pageN.dat` e `dataN.dat`;
 - nomes de layers/objetos e seus estilos de preenchimento/contorno/transparência de
-  `content/data/page*.dat` (sem geometria ainda — ver limitações abaixo).
+  `content/data/page*.dat`;
+- metadados de pre-flight de `META-INF/metadata.xml`: tamanho nominal da página,
+  orientação, contagens de páginas/layers/objetos, fontes usadas e versão do CorelDRAW.
+- árvore estrutural de `root.dat`, com tipo de objeto, página, hierarquia, `bbox`,
+  matriz/rotação e leitura experimental dos pontos de objetos curva.
+- tamanho individual das páginas, sangria e conferência de objetos fora do corte,
+  inclusive conteúdo de PowerClips armazenado em `dataN.dat`.
 
-Objetos vetoriais (posição, tamanho, curvas) e texto ainda não têm parser — a árvore de
-"chunks" binários de `page*.dat` só foi parcialmente decodificada, ver
-`docs/descobertas-fase3-page1.md`.
+Posição, tamanho e pontos compactos de curvas já são extraídos. Texto e a semântica
+completa das flags/segmentos vetoriais ainda não têm parser; ver
+`docs/descobertas-fase3-page1.md` e `docs/descobertas-geometria-vetorial.md`.
 
 > ⚠️ **Antes de implementar qualquer leitura/escrita de coordenada geométrica:** o
 > CorelDRAW usa Y crescendo para CIMA (origem inferior esquerda) na API VBA, mas os
@@ -35,6 +43,21 @@ with abrir_cdr("arquivo.cdr") as doc:
             img = registro.imagem
             print(registro.indice, img.largura, img.altura, img.espaco_de_cor)
             registro.salvar_png(f"imagem_{registro.indice}.png")
+
+    for instancia in doc.instancias_bitmaps():
+        print(instancia.membro, instancia.offset, instancia.registro.indice)
+        print(instancia.matriz_final, instancia.dpi_efetivo_x)
+
+    for objeto in doc.estrutura():
+        if objeto.tipo == "obj":
+            print(objeto.tipo_objeto, objeto.pagina, objeto.caixa, objeto.matriz)
+            print(objeto.id_estrutural, objeto.grupo_powerclip)
+            if objeto.geometria_curva:
+                print(objeto.geometria_curva.numero_pontos)
+
+    print(doc.paginas_estruturais())
+    for alerta in doc.conferencia_limites():
+        print(alerta.pagina.indice, alerta.ultrapassa_sangria)
 ```
 
 Linha de comando:
@@ -48,6 +71,10 @@ Nomes e estilos de `page1.dat`:
 
 ```python
 with abrir_cdr("arquivo.cdr") as doc:
+    meta = doc.metadados()
+    print(meta.largura_pagina_mm, meta.altura_pagina_mm, meta.orientacao)
+    print(meta.contagem_objetos)
+
     for item in doc.pagina(1) or []:
         print(item.nome, item.estilo)  # estilo=None se o objeto/layer nao tiver um
 
@@ -105,9 +132,13 @@ quando a validação manual "parece" bater.
 
 ### Página (`content/data/page*.dat`)
 
-- **Nenhuma geometria é extraída** (posição, tamanho, ângulo, pontos de curva) — só
-  nomes e estilo de preenchimento/contorno/transparência. A árvore de "chunks" binários
-  que guarda a geometria não foi decodificada ainda (ver `docs/descobertas-fase3-page1.md`).
+- **A semântica completa das flags de curvas ainda está em validação.** A árvore RIFF de `root.dat`, hierarquia,
+  tipo, `bbox` e `trfd` já são lidos; objetos do tipo curva também expõem seu vetor
+  compacto de coordenadas e flags. Ver `docs/descobertas-estrutura-root.md` e
+  `docs/descobertas-geometria-vetorial.md`.
+- O vínculo de página de PowerClips foi validado nas estruturas observadas, inclusive
+  em duas páginas e com aninhamento. Se um arquivo futuro trouxer IDs `spnd` ambíguos
+  ou outra assinatura de vínculo, o parser deixa a página indefinida em vez de inferir.
 - **`doc.pagina()` não diferencia layer de shape** — os dois usam o mesmo padrão de nome.
 - **O pareamento nome↔estilo de `doc.pagina()` só é confiável quando todo objeto tem
   nome.** A maioria dos objetos em documentos reais não é nomeada pelo usuário — nesse
