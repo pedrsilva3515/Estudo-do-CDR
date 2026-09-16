@@ -114,6 +114,9 @@ e [docs/descobertas-fase1b.md](docs/descobertas-fase1b.md):
   o bloco estrutural `txsm` fornece fonte, tamanho e atributos por objeto. Textos
   artísticos e de parágrafo já são distinguidos — ver
   `docs/descobertas-texto.md`.
+- **Layers e impressão:** `LIST/layr` fornece nome, hierarquia e flags de
+  visibilidade, impressão e bloqueio. Objetos dentro de PowerClip também recebem
+  a layer do recipiente — ver `docs/descobertas-layers.md`.
 - **Metadados de pre-flight sem engenharia reversa binária:**
   `META-INF/metadata.xml` fornece tamanho nominal da página, orientação, número de
   páginas/layers, contagens por tipo de objeto e efeito, fontes usadas e versão do

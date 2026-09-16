@@ -1,0 +1,1 @@
+{"caso":"caso_47_layer_nao_imprimivel","arquivo":"caso_47_layer_nao_imprimivel.cdr","base":"caso_45_layer_padrao.cdr","alteracao":"impressao_layer","parametros":{"imprimivel":false},"descricao":"Altera somente Printable para falso."}

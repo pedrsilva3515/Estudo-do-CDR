@@ -141,6 +141,14 @@ class ZcfContainer:
             sangria,
         )
 
+    def camadas(self):
+        """Layers, propriedades de visibilidade/impressão e contagem de objetos."""
+        if not self.tem_membro("content/root.dat"):
+            return []
+        from .structure import parse_camadas
+
+        return parse_camadas(self.read("content/root.dat"), self._streams_estrutura())
+
     def conferencia_limites(self, tolerancia_mm: float = 0.1):
         """Lista objetos que excedem os limites nominais da pagina.
 

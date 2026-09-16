@@ -102,6 +102,18 @@ class PaginaEstrutural:
 
 
 @dataclass(frozen=True)
+class CamadaEstrutural:
+    nome: str | None
+    pagina: int | None
+    membro: str | None
+    flags: int
+    visivel: bool
+    imprimivel: bool
+    editavel: bool
+    quantidade_objetos_diretos: int
+
+
+@dataclass(frozen=True)
 class OcorrenciaLimitePagina:
     objeto: "ObjetoEstrutural"
     pagina: PaginaEstrutural
@@ -130,6 +142,7 @@ class ObjetoEstrutural:
     grupo_powerclip: int | None = None
     tipo_texto: str | None = None
     estilos_texto: tuple[EstiloTexto, ...] = ()
+    camada: str | None = None
 
     @property
     def pontos_curva_absolutos(self) -> tuple[tuple[float, float, int], ...] | None:
@@ -228,6 +241,77 @@ def _candidatos_grupo_powerclip(data: bytes) -> tuple[int, ...]:
             if identificador and (um, zero) == (1, 0) and um_final in (0, 1):
                 candidatos.append(identificador)
     return tuple(dict.fromkeys(candidatos))
+
+
+def _nome_camada(data: bytes) -> str | None:
+    """Lê o campo UTF-16LE final do ``loda`` de uma layer."""
+    if len(data) < 28:
+        return None
+    quantidade = struct.unpack_from("<I", data, 4)[0] + 4
+    if quantidade > 100 or 8 + 4 * quantidade > len(data):
+        return None
+    tabela = struct.unpack_from(f"<{quantidade}I", data, 8)
+    inicio, fim = tabela[-2:]
+    if not (0 <= inicio < fim == len(data)) or (fim - inicio) % 2:
+        return None
+    try:
+        nome = data[inicio:fim].decode("utf-16le").rstrip("\x00")
+    except UnicodeDecodeError:
+        return None
+    if not nome or any(not caractere.isprintable() for caractere in nome):
+        return None
+    return nome
+
+
+def parse_camadas(
+    root_data: bytes,
+    streams: dict[int, tuple[str, bytes]],
+) -> list[CamadaEstrutural]:
+    """Extrai nome e propriedades de impressão das layers."""
+    raiz = _parse_chunks(root_data, 0, len(root_data))
+    if len(raiz) != 1 or raiz[0].tag != "RIFF":
+        raise FormatoEstruturaInvalido("root.dat nao contem um unico RIFF raiz")
+    camadas: list[CamadaEstrutural] = []
+
+    def contar_objetos(no: _Chunk) -> int:
+        return sum(
+            1 if filho.tipo == "obj " else contar_objetos(filho)
+            for filho in no.filhos
+        )
+
+    def visitar(no: _Chunk, pagina: int | None) -> None:
+        proxima_pagina = pagina
+        if no.tipo == "page":
+            ref = _referencia(_filho(no, tag="bbox"))
+            if ref is not None and ref[0] in streams:
+                match = re.search(r"/page(\d+)\.dat$", streams[ref[0]][0])
+                proxima_pagina = int(match.group(1)) if match else None
+        if no.tipo == "layr":
+            lgob = _filho(no, tag="LIST", tipo="lgob")
+            bruto = _ler_referencia(
+                _referencia(_filho(lgob, tag="loda") if lgob else None),
+                streams,
+            )
+            flags = _valor_imediato(_filho(no, tag="flgs")) or 0
+            ref_spid = _referencia(_filho(no, tag="spid"))
+            membro = streams[ref_spid[0]][0] if ref_spid and ref_spid[0] in streams else None
+            camadas.append(
+                CamadaEstrutural(
+                    nome=_nome_camada(bruto[1]) if bruto else None,
+                    pagina=proxima_pagina,
+                    membro=membro,
+                    flags=flags,
+                    visivel=(flags & 0x140) == 0,
+                    imprimivel=(flags & 0x08) == 0,
+                    editavel=(flags & 0x10) == 0,
+                    quantidade_objetos_diretos=contar_objetos(no),
+                )
+            )
+        for filho in no.filhos:
+            visitar(filho, proxima_pagina)
+
+    visitar(raiz[0], None)
+    return camadas
 
 
 def parse_paginas(
@@ -369,17 +453,27 @@ def parse_estrutura(
         pagina: int | None,
         pai_estrutural: int | None,
         em_clpt: bool,
+        camada: str | None,
     ) -> None:
         proximos_ancestrais = ancestrais
         proxima_pagina = pagina
         proximo_pai = pai_estrutural
         dentro_clpt = em_clpt or no.tipo == "clpt"
+        proxima_camada = camada
         if no.tipo == "page":
             ref_pagina = _referencia(_filho(no, tag="bbox"))
             if ref_pagina is not None and ref_pagina[0] in streams:
                 membro_pagina = streams[ref_pagina[0]][0]
                 match = re.search(r"/page(\d+)\.dat$", membro_pagina)
                 proxima_pagina = int(match.group(1)) if match else None
+
+        if no.tipo == "layr":
+            lgob_camada = _filho(no, tag="LIST", tipo="lgob")
+            bruto_camada = _ler_referencia(
+                _referencia(_filho(lgob_camada, tag="loda") if lgob_camada else None),
+                streams,
+            )
+            proxima_camada = _nome_camada(bruto_camada[1]) if bruto_camada else None
 
         if no.tipo in tipos_estruturais:
             lgob = _filho(no, tag="LIST", tipo="lgob")
@@ -454,6 +548,7 @@ def parse_estrutura(
                     id_estrutural=id_estrutural,
                     tipo_texto=tipo_texto,
                     estilos_texto=estilos_texto,
+                    camada=proxima_camada,
                 )
             )
             pais_estruturais.append(pai_estrutural)
@@ -464,9 +559,12 @@ def parse_estrutura(
             proximo_pai = indice_objeto
 
         for filho in no.filhos:
-            visitar(filho, proximos_ancestrais, proxima_pagina, proximo_pai, dentro_clpt)
+            visitar(
+                filho, proximos_ancestrais, proxima_pagina,
+                proximo_pai, dentro_clpt, proxima_camada,
+            )
 
-    visitar(raiz[0], (), None, None, False)
+    visitar(raiz[0], (), None, None, False, None)
 
     # Propaga a pagina atraves da hierarquia normal e dos vinculos de
     # PowerClip. A iteracao e necessaria para recipientes aninhados: primeiro
@@ -480,7 +578,11 @@ def parse_estrutura(
             pai = pais_estruturais[indice]
             if pagina_objeto is None and pai is not None and objetos[pai].pagina is not None:
                 pagina_objeto = objetos[pai].pagina
-                objetos[indice] = replace(objeto, pagina=pagina_objeto)
+                objetos[indice] = replace(
+                    objeto,
+                    pagina=pagina_objeto,
+                    camada=objeto.camada or objetos[pai].camada,
+                )
                 objeto = objetos[indice]
                 alterou = True
             if pagina_objeto is None:
@@ -497,7 +599,11 @@ def parse_estrutura(
             if objetos[destino].pagina is None:
                 grupo_id = objetos[destino].id_estrutural
                 objetos[indice] = replace(objeto, grupo_powerclip=grupo_id)
-                objetos[destino] = replace(objetos[destino], pagina=pagina_objeto)
+                objetos[destino] = replace(
+                    objetos[destino],
+                    pagina=pagina_objeto,
+                    camada=objetos[destino].camada or objeto.camada,
+                )
                 alterou = True
             elif objetos[indice].grupo_powerclip is None:
                 objetos[indice] = replace(

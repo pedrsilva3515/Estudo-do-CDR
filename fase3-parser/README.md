@@ -16,6 +16,7 @@ instalado** e extrai:
   inclusive conteúdo de PowerClips armazenado em `dataN.dat`.
 - conteúdo textual, idioma e parágrafos de `textinfo.xml`, mais fonte e tamanho
   por objeto a partir do bloco estrutural `txsm`.
+- layers, associação objeto→layer e propriedades de visibilidade, impressão e bloqueio.
 
 Posição, tamanho e pontos compactos de curvas já são extraídos. Texto e a semântica
 completa das flags/segmentos vetoriais ainda não têm parser; ver
@@ -66,6 +67,7 @@ with abrir_cdr("arquivo.cdr") as doc:
         print(item.fluxo.texto, item.objeto.pagina, item.objeto.caixa)
 
     print(doc.paginas_estruturais())
+    print(doc.camadas())
     for alerta in doc.conferencia_limites():
         print(alerta.pagina.indice, alerta.ultrapassa_sangria)
 ```

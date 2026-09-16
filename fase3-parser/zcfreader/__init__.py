@@ -31,6 +31,7 @@ from .page import ItemNomeado
 from .references import InstanciaBitmap, MatrizAfim
 from .structure import (
     CaixaObjeto,
+    CamadaEstrutural,
     FormatoEstruturaInvalido,
     GeometriaCurva,
     ObjetoEstrutural,
@@ -54,6 +55,7 @@ __all__ = [
     "MatrizAfim",
     "ObjetoEstrutural",
     "CaixaObjeto",
+    "CamadaEstrutural",
     "FormatoEstruturaInvalido",
     "GeometriaCurva",
     "PontoCurva",

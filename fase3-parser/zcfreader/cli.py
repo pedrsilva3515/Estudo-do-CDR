@@ -116,6 +116,22 @@ def _listar(caminho: Path) -> int:
                 f"  pagina {pagina.indice}: {pagina.largura_mm:g}x"
                 f"{pagina.altura_mm:g} mm ({origem}), sangria {pagina.sangria_mm:g} mm"
             )
+        camadas = [camada for camada in doc.camadas() if camada.pagina is not None]
+        if camadas:
+            print(f"  layers de pagina: {len(camadas)}")
+            for camada in camadas:
+                estados = []
+                if not camada.visivel:
+                    estados.append("oculta")
+                if not camada.imprimivel:
+                    estados.append("nao imprimivel")
+                if not camada.editavel:
+                    estados.append("bloqueada")
+                print(
+                    f"    pagina {camada.pagina}, {camada.nome or '(sistema)'}: "
+                    f"{', '.join(estados) or 'normal'}, "
+                    f"{camada.quantidade_objetos_diretos} objeto(s) direto(s)"
+                )
         ocorrencias = doc.conferencia_limites()
         if ocorrencias:
             print(f"  alerta: {len(ocorrencias)} objeto(s) excedem os limites da pagina")
