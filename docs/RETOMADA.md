@@ -60,6 +60,7 @@ Os detalhes e evidências estão separados por assunto em:
 - `docs/descobertas-geometria-vetorial.md`
 - `docs/descobertas-preenchimentos-transparencias.md`
 - `docs/descobertas-gestao-cor.md`
+- `docs/roteiro-automacao-ia.md`
 
 Os geradores dos casos avançados estão em
 `ferramentas-estudo/GerarCasosAvancados.ps1`. Eles dependem do CorelDRAW 2025
