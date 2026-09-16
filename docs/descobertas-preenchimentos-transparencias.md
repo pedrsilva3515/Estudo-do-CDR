@@ -36,6 +36,8 @@ O caso 85 confirma que um degradê com dez bandas discretas é registrado em
 `fill.numSteps="10"`; o valor `0` dos casos anteriores indica transição suave.
 No caso 86, margem de 15% não é serializada como um campo próprio: reduz
 `xScale` e `yScale` de 1 para 0,7.
+O caso 89 confirma que escala explícita usa os mesmos campos, com precisão de
+ponto flutuante: 70% e 80% são serializados próximos a 0,7 e 0,8.
 
 A transparência graduada tem uma camada externa com `startTransparency` e
 `endTransparency`. Sua geometria é serializada em `transparency.fill`, com os
