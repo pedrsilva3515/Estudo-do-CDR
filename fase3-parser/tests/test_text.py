@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 _AQUI = Path(__file__).resolve().parent
@@ -20,6 +22,18 @@ def _objeto_texto(nome: str):
 
 
 class TestTexto(unittest.TestCase):
+    def test_textinfo_em_caminho_metadata_usado_por_cdr_real(self):
+        xml = b'''<?xml version="1.0"?><x:xmpmeta xmlns:x="adobe:ns:meta/"
+            xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+            <rdf:RDF><rdf:Description><TextStream><TextRun lang="1046">1und</TextRun>
+            </TextStream></rdf:Description></rdf:RDF></x:xmpmeta>'''
+        with tempfile.TemporaryDirectory() as pasta:
+            caminho = Path(pasta) / "real.cdr"
+            with zipfile.ZipFile(caminho, "w") as arquivo:
+                arquivo.writestr("metadata/textinfo.xml", xml)
+            with abrir_cdr(caminho) as doc:
+                self.assertEqual([fluxo.texto for fluxo in doc.textos()], ["1und"])
+
     def test_conteudo_vem_de_textinfo_xml(self):
         with abrir_cdr(CASOS / "caso_37_texto_arial_12.cdr") as doc:
             fluxos = doc.textos()

@@ -11,6 +11,30 @@ com o objetivo de produzir:
 3. **Pontos de integração** com a automação existente da gráfica (Kanban de produção,
    manifestos de job, validação de arquivos antes da fila de impressão).
 
+## MVP de interpretação de pedidos
+
+O primeiro contrato JSON para transformar montagens recebidas em pedidos
+estruturados está documentado em
+[docs/mvp-interpretacao-pedidos.md](docs/mvp-interpretacao-pedidos.md). O comando
+`python -m zcfreader.cli pedido arquivo.cdr` extrai quantidades, dimensões,
+componentes, modo de cor, DPI, alertas e pendências sem inventar informações
+ausentes.
+
+### Instalação em outro computador
+
+Requer Python 3.10 ou mais recente. O parser não depende do CorelDRAW para abrir
+arquivos CDR modernos no formato ZCF.
+
+```powershell
+git clone https://github.com/pedrsilva3515/Estudo-do-CDR.git
+cd Estudo-do-CDR
+git switch codex/mvp-interpretacao-pedidos
+python -m pip install -e .
+cdr-pedido pedido "C:\pedidos\arquivo.cdr" --saida pedido.json
+```
+
+Para atualizar uma cópia existente, execute `git pull` na mesma branch.
+
 > Para continuar o trabalho em outro computador, comece por
 > [docs/RETOMADA.md](docs/RETOMADA.md). O documento registra branch, comandos,
 > estado dos testes, descobertas fechadas e o próximo estudo recomendado.

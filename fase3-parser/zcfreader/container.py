@@ -39,6 +39,11 @@ class ZcfContainer:
     def tem_membro(self, membro: str) -> bool:
         return membro in self._zip.namelist()
 
+    def _primeiro_membro(self, *candidatos: str) -> str | None:
+        """Resolve variantes de caminho observadas entre versões do CorelDRAW."""
+        nomes = set(self._zip.namelist())
+        return next((nome for nome in candidatos if nome in nomes), None)
+
     @property
     def arquivos_de_dados(self) -> list[str]:
         """Nomes listados em content/dataFileList.dat (relativos a
@@ -204,10 +209,14 @@ class ZcfContainer:
         objetos, fontes usadas e versao do CorelDRAW. Devolve ``None`` em
         contêineres ZCF que nao tenham esse membro.
         """
-        if not self.tem_membro("META-INF/metadata.xml"):
+        membro = self._primeiro_membro(
+            "META-INF/metadata.xml",
+            "metadata/metadata.xml",
+        )
+        if membro is None:
             return None
         from .metadata import parse_metadata
-        return parse_metadata(self.read("META-INF/metadata.xml"))
+        return parse_metadata(self.read(membro))
 
     def contexto_cor(self):
         """Lê o modelo e o intento ICC em ``color/color.xml``."""
@@ -222,11 +231,15 @@ class ZcfContainer:
         Devolve os fluxos na ordem do XML. Fonte e tamanho por objeto ficam
         disponíveis em ``objeto.estilos_texto`` na árvore estrutural.
         """
-        if not self.tem_membro("META-INF/textinfo.xml"):
+        membro = self._primeiro_membro(
+            "META-INF/textinfo.xml",
+            "metadata/textinfo.xml",
+        )
+        if membro is None:
             return ()
         from .text import parse_textinfo
 
-        return parse_textinfo(self.read("META-INF/textinfo.xml"))
+        return parse_textinfo(self.read(membro))
 
     def textos_por_objeto(self):
         """Associa cada fluxo ao objeto textual na ordem estrutural.

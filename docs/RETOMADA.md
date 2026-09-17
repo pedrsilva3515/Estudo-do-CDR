@@ -5,12 +5,15 @@ Este arquivo é o ponto de entrada para continuar o estudo em outro computador.
 ## Estado versionado
 
 - Repositório: `pedrsilva3515/Estudo-do-CDR`
-- Branch de trabalho: `claude/zcf-format-reverse-engineering-hdgcjw`
+- Branch estável do estudo: `claude/zcf-format-reverse-engineering-hdgcjw`
+- Branch do MVP de pedidos: `codex/mvp-interpretacao-pedidos`
 - Último marco técnico antes deste documento: preenchimentos, transparências,
   geometria de nós e contornos avançados
 - Casos controlados versionados: `caso_00` a `caso_104`, sempre com `.cdr` e
   manifesto `.json`.
-- Testes no encerramento: 112 testes passando.
+- Testes do parser antes do MVP: 112 testes passando.
+- O MVP acrescenta testes de quantidade, variantes de metadados e caminhos de
+  texto observados nos arquivos reais enviados para validação.
 
 Commits técnicos desta rodada, em ordem:
 
@@ -27,8 +30,8 @@ Para retomar:
 ```powershell
 git clone https://github.com/pedrsilva3515/Estudo-do-CDR.git
 cd Estudo-do-CDR
-git switch claude/zcf-format-reverse-engineering-hdgcjw
-$env:PYTHONPATH = "fase3-parser"
+git switch codex/mvp-interpretacao-pedidos
+python -m pip install -e .
 python -m unittest discover -s fase3-parser/tests -v
 ```
 

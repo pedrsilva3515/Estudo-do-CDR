@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import json
 import sys
 from pathlib import Path
 
@@ -199,6 +200,23 @@ def _extrair(caminho: Path, saida: Path) -> int:
     return 0
 
 
+def _pedido(caminho: Path, saida: Path | None) -> int:
+    from .pedido import interpretar_pedido
+
+    conteudo = json.dumps(
+        interpretar_pedido(caminho),
+        ensure_ascii=False,
+        indent=2,
+    )
+    if saida is None:
+        print(conteudo)
+    else:
+        saida.parent.mkdir(parents=True, exist_ok=True)
+        saida.write_text(conteudo + "\n", encoding="utf-8")
+        print(f"gravado: {saida}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="zcfreader", description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="comando", required=True)
@@ -210,11 +228,17 @@ def main(argv: list[str] | None = None) -> int:
     p_extrair.add_argument("arquivo", type=Path)
     p_extrair.add_argument("--saida", type=Path, default=Path("."))
 
+    p_pedido = sub.add_parser("pedido", help="interpreta um pedido montado em CDR como JSON")
+    p_pedido.add_argument("arquivo", type=Path)
+    p_pedido.add_argument("--saida", type=Path)
+
     args = ap.parse_args(argv)
     if args.comando == "listar":
         return _listar(args.arquivo)
     if args.comando == "extrair":
         return _extrair(args.arquivo, args.saida)
+    if args.comando == "pedido":
+        return _pedido(args.arquivo, args.saida)
     ap.error("comando desconhecido")
     return 2
 

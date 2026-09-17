@@ -16,6 +16,20 @@ CASOS = _RAIZ_PROJETO / "casos-de-teste"
 
 
 class TestMetadadosPagina(unittest.TestCase):
+    def test_namespace_legado_usado_por_cdr_real(self):
+        xml = b'''<?xml version="1.0"?><x:xmpmeta xmlns:x="adobe:ns:meta/"
+            xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+            <rdf:RDF><rdf:Description xmlns="http://namespace.corel.com/Cdr/metadata">
+            <NumPages>1</NumPages><NumLayers>2</NumLayers><PageWidth>2100000</PageWidth>
+            <PageHeight>2970000</PageHeight><FontsUsed><rdf:Bag><rdf:li>Arial</rdf:li>
+            </rdf:Bag></FontsUsed><Objects><Total>14</Total><Bitmap>8</Bitmap></Objects>
+            </rdf:Description></rdf:RDF></x:xmpmeta>'''
+        meta = parse_metadata(xml)
+        self.assertEqual((meta.paginas, meta.layers), (1, 2))
+        self.assertEqual((meta.largura_pagina_mm, meta.altura_pagina_mm), (210.0, 297.0))
+        self.assertEqual(meta.fontes_usadas, ("Arial",))
+        self.assertEqual(meta.contagem_objetos, {"Total": 14, "Bitmap": 8})
+
     def test_todos_os_casos_numerados_tem_xml_legivel(self):
         casos = sorted(CASOS.glob("caso_*.cdr"))
         self.assertGreaterEqual(len(casos), 33)

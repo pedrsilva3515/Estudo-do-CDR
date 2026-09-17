@@ -31,6 +31,9 @@ class FormatoMetadadosInvalido(ValueError):
 
 def _texto(root: ET.Element, caminho: str) -> str | None:
     no = root.find(caminho, NS)
+    if no is None:
+        nome = caminho.rsplit(":", 1)[-1]
+        no = next((item for item in root.iter() if _nome_local(item.tag) == nome), None)
     if no is None or no.text is None:
         return None
     valor = no.text.strip()
@@ -52,6 +55,9 @@ def _inteiro(root: ET.Element, caminho: str) -> int | None:
 def _contagens_recurso(root: ET.Element, caminho: str) -> dict[str, int]:
     recurso = root.find(caminho, NS)
     if recurso is None:
+        nome = caminho.rsplit(":", 1)[-1]
+        recurso = next((item for item in root.iter() if _nome_local(item.tag) == nome), None)
+    if recurso is None:
         return {}
     resultado: dict[str, int] = {}
     for filho in recurso:
@@ -61,6 +67,10 @@ def _contagens_recurso(root: ET.Element, caminho: str) -> dict[str, int]:
         except ValueError:
             continue
     return resultado
+
+
+def _nome_local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
 
 
 @dataclass(frozen=True)
@@ -118,6 +128,14 @@ def parse_metadata(data: bytes) -> MetadadosDocumento:
         for no in root.findall(".//cdrinfo:FontsUsed/rdf:Bag/rdf:li", NS)
         if (no.text or "").strip()
     )
+    if not fontes:
+        grupos_fontes = [no for no in root.iter() if _nome_local(no.tag) == "FontsUsed"]
+        fontes = tuple(
+            (no.text or "").strip()
+            for grupo in grupos_fontes
+            for no in grupo.iter()
+            if _nome_local(no.tag) == "li" and (no.text or "").strip()
+        )
     incorporadas_texto = _texto(root, ".//cdrinfo:FontsEmbedded")
     incorporadas = None
     if incorporadas_texto is not None:
