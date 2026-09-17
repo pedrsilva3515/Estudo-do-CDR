@@ -1,0 +1,30 @@
+name: executavel-windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/mvp-interpretacao-pedidos
+    paths:
+      - "fase3-parser/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - ".github/workflows/build-windows.yml"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Construir executável
+        shell: powershell
+        run: ./scripts/build_gui.ps1
+      - name: Publicar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: Leitor-de-Pedidos-CDR-Windows
+          path: dist/Leitor-de-Pedidos-CDR.exe
+          if-no-files-found: error
