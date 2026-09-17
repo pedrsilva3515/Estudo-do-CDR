@@ -9,13 +9,21 @@ origem e confiança de cada informação. Campos ausentes não são inventados.
 - [x] abrir CDR/ZCF sem depender do CorelDRAW;
 - [x] ler textos nativos, quantidades, bitmaps, dimensões, cor e DPI;
 - [x] produzir JSON com evidências, alertas e pendências;
-- [ ] agrupar composições por proximidade em dois eixos e contorno externo;
-- [ ] interpretar instruções globais e locais de material/acabamento;
+- [x] agrupar composições por proximidade em dois eixos e contorno externo;
+- [x] interpretar instruções globais e locais de material/acabamento;
 - [ ] gerar preview e aplicar OCR a textos convertidos em curvas;
 - [ ] disponibilizar tela de revisão para o operador.
 
 O primeiro marco é deliberadamente conservador: o resultado automático ainda
 não deve liberar um pedido para produção sem revisão humana.
+
+Na versão 0.2, retângulos, curvas externas, símbolos, bitmaps e grupos isolados
+formam candidatos de arte. Objetos internos contidos são descartados, textos de
+quantidade são associados um a um pela distância em dois eixos, e peças sem
+quantidade explícita são contadas pelas composições. Instruções que contêm sua
+própria quantidade têm escopo local; as demais são aplicadas como escopo global.
+Peças sem quantidade escrita, mas com o mesmo tamanho e material, podem ser
+consolidadas com confiança reduzida e indicação explícita no JSON.
 
 ## Uso
 
@@ -40,9 +48,9 @@ O relatório inicial contém:
 
 Textos com formas como `1und`, `2 un`, `3 unidades` ou `qtd: 5` são
 reconhecidos como quantidade. Cópias exatamente sobrepostas são
-desduplicadas. Cada bitmap é associado à quantidade mais próxima no eixo
-horizontal. Isso também permite representar como um único conjunto várias
-peças lado a lado que compartilham uma quantidade.
+desduplicadas. Cada composição é associada a no máximo um texto de quantidade,
+considerando a distância nos dois eixos. Quando não há quantidade escrita, as
+composições são contadas e podem ser consolidadas por tamanho e material.
 
 Essa associação é uma hipótese explícita do MVP e precisa aparecer para
 confirmação na interface. Ela não deve disparar produção automaticamente.
