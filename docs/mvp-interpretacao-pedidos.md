@@ -12,7 +12,8 @@ origem e confiança de cada informação. Campos ausentes não são inventados.
 - [x] agrupar composições por proximidade em dois eixos e contorno externo;
 - [x] interpretar instruções globais e locais de material/acabamento;
 - [ ] gerar preview e aplicar OCR a textos convertidos em curvas;
-- [ ] disponibilizar tela de revisão para o operador.
+- [x] disponibilizar tela inicial de revisão para o operador;
+- [ ] permitir correção manual dos campos antes da exportação.
 
 O primeiro marco é deliberadamente conservador: o resultado automático ainda
 não deve liberar um pedido para produção sem revisão humana.
@@ -32,6 +33,17 @@ $env:PYTHONPATH = "fase3-parser"
 python -m zcfreader.cli pedido "C:\pedidos\arquivo.cdr"
 python -m zcfreader.cli pedido "C:\pedidos\arquivo.cdr" --saida pedido.json
 ```
+
+Interface gráfica:
+
+```powershell
+python -m pip install -e ".[gui]"
+cdr-pedido-gui
+```
+
+Para construir um executável do Windows, execute
+`powershell -ExecutionPolicy Bypass -File scripts/build_gui.ps1`. O resultado
+fica em `dist/Leitor-de-Pedidos-CDR.exe`.
 
 O relatório inicial contém:
 

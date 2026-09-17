@@ -33,6 +33,13 @@ python -m pip install -e .
 cdr-pedido pedido "C:\pedidos\arquivo.cdr" --saida pedido.json
 ```
 
+Para usar a interface com arrastar e soltar:
+
+```powershell
+python -m pip install -e ".[gui]"
+cdr-pedido-gui
+```
+
 Para atualizar uma cópia existente, execute `git pull` na mesma branch.
 
 > Para continuar o trabalho em outro computador, comece por

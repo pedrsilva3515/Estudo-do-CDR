@@ -4,15 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdr-pedido"
-version = "0.2.0"
+version = "0.3.0"
 description = "Interpretação auditável de pedidos de gráfica em arquivos CorelDRAW CDR"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "pedrsilva3515" }]
 dependencies = []
 
+[project.optional-dependencies]
+gui = ["tkinterdnd2>=0.6.3"]
+
 [project.scripts]
 cdr-pedido = "zcfreader.cli:main"
+cdr-pedido-gui = "zcfreader.gui:main"
 
 [tool.setuptools]
 package-dir = { "" = "fase3-parser" }
