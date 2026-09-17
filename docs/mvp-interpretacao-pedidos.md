@@ -32,6 +32,24 @@ acabamento, quantidade acompanhada de unidade e dimensões acompanhadas de
 lacunas e nunca substitui texto ou geometria encontrados dentro do CDR. Sufixos
 de cópia como `(1)` não são tratados como quantidade.
 
+## Processamento local ou por API
+
+A versão 0.4 oferece três modos na janela **Configurar IA**:
+
+- **Somente local:** não envia dados e não gera cobrança;
+- **Automático:** consulta a API somente quando restarem pendências;
+- **Sempre usar API:** consulta o modelo visual em todas as análises.
+
+A integração inicial usa a Responses API da OpenAI com entrada de imagem e
+saída JSON estruturada. O aplicativo envia o preview incorporado no CDR e o
+resultado estrutural, nunca o arquivo CDR completo, e define `store=false`.
+A chave fica no Gerenciador de Credenciais do Windows. O arquivo local de
+configuração contém apenas modo e nome do modelo.
+
+A análise visual pode preencher lacunas de material e acabamento. Quando ela
+discorda de uma evidência estrutural, o valor original é preservado e a
+divergência vira alerta para revisão do operador.
+
 ## Uso
 
 ```powershell

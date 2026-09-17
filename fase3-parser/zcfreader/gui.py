@@ -8,7 +8,15 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from .configuracao import (
+    MODELOS_OPENAI,
+    carregar_configuracao,
+    obter_chave_openai,
+    salvar_chave_openai,
+    salvar_configuracao,
+)
 from .pedido import interpretar_pedido
+from .visao_api import analisar_com_openai, mesclar_analise_visual
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -39,6 +47,7 @@ class AplicacaoPedido:
         self.raiz.configure(bg=COR_FUNDO)
         self.resultado: dict | None = None
         self.arquivo: Path | None = None
+        self.configuracao = carregar_configuracao()
         self.fila: Queue = Queue()
         self._configurar_estilos()
         self._montar_interface()
@@ -68,6 +77,7 @@ class AplicacaoPedido:
             text="Arraste o arquivo do cliente, confira os itens encontrados e exporte o resultado.",
             style="Subtitulo.TLabel",
         ).pack(anchor="w", pady=(4, 0))
+        ttk.Button(cabecalho, text="Configurar IA", style="Secondary.TButton", command=self.configurar_ia).place(relx=1, x=0, y=8, anchor="ne")
 
         conteudo = ttk.Frame(self.raiz, padding=(28, 0, 28, 24))
         conteudo.pack(fill="both", expand=True)
@@ -132,6 +142,58 @@ class AplicacaoPedido:
         if caminho:
             self.analisar(Path(caminho))
 
+    def configurar_ia(self) -> None:
+        janela = tk.Toplevel(self.raiz)
+        janela.title("Configurar processamento")
+        janela.geometry("510x430")
+        janela.resizable(False, False)
+        janela.configure(bg=COR_FUNDO)
+        janela.transient(self.raiz)
+        janela.grab_set()
+        corpo = ttk.Frame(janela, padding=24)
+        corpo.pack(fill="both", expand=True)
+        ttk.Label(corpo, text="Processamento visual", style="Titulo.TLabel", font=("Segoe UI", 16, "bold")).pack(anchor="w")
+        ttk.Label(corpo, text="O modo local nunca envia o arquivo para a internet.", style="Subtitulo.TLabel").pack(anchor="w", pady=(4, 18))
+
+        modos = {
+            "Somente local (sem custo)": "local",
+            "Automático (API apenas com pendências)": "automatico",
+            "Sempre usar API": "api",
+        }
+        inverso = {valor: rotulo for rotulo, valor in modos.items()}
+        ttk.Label(corpo, text="Modo", style="Subtitulo.TLabel").pack(anchor="w")
+        var_modo = tk.StringVar(value=inverso.get(self.configuracao.get("modo"), next(iter(modos))))
+        combo_modo = ttk.Combobox(corpo, textvariable=var_modo, values=list(modos), state="readonly")
+        combo_modo.pack(fill="x", pady=(4, 14))
+
+        ttk.Label(corpo, text="Modelo OpenAI", style="Subtitulo.TLabel").pack(anchor="w")
+        var_modelo = tk.StringVar(value=self.configuracao.get("modelo", MODELOS_OPENAI[0]))
+        ttk.Combobox(corpo, textvariable=var_modelo, values=MODELOS_OPENAI, state="readonly").pack(fill="x", pady=(4, 14))
+
+        ttk.Label(corpo, text="Chave da API", style="Subtitulo.TLabel").pack(anchor="w")
+        chave_existente = obter_chave_openai()
+        marcador = "••••••••••••" if chave_existente else ""
+        var_chave = tk.StringVar(value=marcador)
+        ttk.Entry(corpo, textvariable=var_chave, show="•").pack(fill="x", pady=(4, 8))
+        ttk.Label(
+            corpo,
+            text="A chave é salva no Gerenciador de Credenciais do Windows. Ao usar API, o preview e o resultado estrutural são enviados à OpenAI e podem gerar cobrança.",
+            style="Subtitulo.TLabel", wraplength=450, justify="left",
+        ).pack(anchor="w", pady=(0, 18))
+
+        def salvar() -> None:
+            modo = modos[var_modo.get()]
+            if modo != "local" and not chave_existente and not var_chave.get().strip():
+                messagebox.showwarning("Chave necessária", "Informe uma chave da API para ativar este modo.", parent=janela)
+                return
+            self.configuracao = {"modo": modo, "provedor": "openai", "modelo": var_modelo.get()}
+            salvar_configuracao(self.configuracao)
+            if var_chave.get() != marcador:
+                salvar_chave_openai(var_chave.get())
+            janela.destroy()
+
+        ttk.Button(corpo, text="Salvar configuração", style="Primary.TButton", command=salvar).pack(anchor="e")
+
     def _arquivo_solto(self, evento) -> None:
         caminhos = self.raiz.tk.splitlist(evento.data)
         if caminhos:
@@ -161,7 +223,19 @@ class AplicacaoPedido:
 
     def _executar_analise(self, caminho: Path) -> None:
         try:
-            self.fila.put(("ok", interpretar_pedido(caminho)))
+            resultado = interpretar_pedido(caminho)
+            modo = self.configuracao.get("modo", "local")
+            usar_api = modo == "api" or (modo == "automatico" and bool(resultado.get("pendencias")))
+            if usar_api:
+                chave = obter_chave_openai()
+                if not chave:
+                    raise RuntimeError("Configure uma chave da API antes de usar a análise visual paga.")
+                visual = analisar_com_openai(caminho, resultado, chave, self.configuracao["modelo"])
+                resultado = mesclar_analise_visual(resultado, visual)
+                resultado["processamento"] = {"modo": modo, "provedor": "openai", "modelo": self.configuracao["modelo"]}
+            else:
+                resultado["processamento"] = {"modo": "local", "provedor": None, "modelo": None}
+            self.fila.put(("ok", resultado))
         except Exception as erro:  # erro é apresentado ao operador de forma legível
             self.fila.put(("erro", erro))
 
@@ -209,8 +283,13 @@ class AplicacaoPedido:
             for item in itens for campo in ("quantidade", "material", "acabamento")
         )
         origem_nome = " • nome usado como evidência" if nome_usado else ""
+        processamento = resultado.get("processamento", {})
+        origem_ia = (
+            f" • IA: {processamento.get('modelo')}"
+            if processamento.get("provedor") else " • análise local"
+        )
         self.rotulo_status.configure(
-            text=f"{len(itens)} item(ns) • modo de cor {modo}{origem_nome} • "
+            text=f"{len(itens)} item(ns) • modo de cor {modo}{origem_nome}{origem_ia} • "
             + ("revisão necessária" if pendencias else "análise concluída"),
             foreground=COR_SUCESSO if not pendencias else "#9a6700",
         )

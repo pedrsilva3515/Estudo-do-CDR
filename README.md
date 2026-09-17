@@ -36,7 +36,7 @@ cdr-pedido pedido "C:\pedidos\arquivo.cdr" --saida pedido.json
 Para usar a interface com arrastar e soltar:
 
 ```powershell
-python -m pip install -e ".[gui]"
+python -m pip install -e ".[gui,api]"
 cdr-pedido-gui
 ```
 

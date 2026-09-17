@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdr-pedido"
-version = "0.3.1"
+version = "0.4.0"
 description = "Interpretação auditável de pedidos de gráfica em arquivos CorelDRAW CDR"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,6 +13,7 @@ dependencies = []
 
 [project.optional-dependencies]
 gui = ["tkinterdnd2>=0.6.3"]
+api = ["openai>=2.0", "keyring>=25"]
 
 [project.scripts]
 cdr-pedido = "zcfreader.cli:main"

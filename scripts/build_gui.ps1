@@ -5,7 +5,7 @@ $temporarios = Join-Path $raiz "build"
 
 Push-Location $raiz
 try {
-    python -m pip install -e ".[gui]" pyinstaller
+    python -m pip install -e ".[gui,api]" pyinstaller
     python -m PyInstaller `
         --noconfirm `
         --clean `
@@ -14,6 +14,7 @@ try {
         --name "Leitor-de-Pedidos-CDR" `
         --paths "fase3-parser" `
         --collect-all tkinterdnd2 `
+        --collect-all keyring `
         --distpath $saida `
         --workpath $temporarios `
         --specpath $temporarios `
