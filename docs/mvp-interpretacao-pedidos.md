@@ -4,6 +4,19 @@ O primeiro incremento transforma um arquivo CDR em um JSON auditável. Ele
 combina o conteúdo textual do documento com a geometria dos objetos e mantém
 origem e confiança de cada informação. Campos ausentes não são inventados.
 
+## Estado do MVP
+
+- [x] abrir CDR/ZCF sem depender do CorelDRAW;
+- [x] ler textos nativos, quantidades, bitmaps, dimensões, cor e DPI;
+- [x] produzir JSON com evidências, alertas e pendências;
+- [ ] agrupar composições por proximidade em dois eixos e contorno externo;
+- [ ] interpretar instruções globais e locais de material/acabamento;
+- [ ] gerar preview e aplicar OCR a textos convertidos em curvas;
+- [ ] disponibilizar tela de revisão para o operador.
+
+O primeiro marco é deliberadamente conservador: o resultado automático ainda
+não deve liberar um pedido para produção sem revisão humana.
+
 ## Uso
 
 ```powershell
@@ -50,4 +63,3 @@ deve:
 O parser estrutural continua sendo a fonte para medidas, DPI, modo de cor e
 propriedades técnicas. Visão serve para interpretar a intenção visual, não
 para substituir medidas disponíveis no CDR.
-
