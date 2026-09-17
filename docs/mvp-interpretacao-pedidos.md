@@ -26,6 +26,12 @@ própria quantidade têm escopo local; as demais são aplicadas como escopo glob
 Peças sem quantidade escrita, mas com o mesmo tamanho e material, podem ser
 consolidadas com confiança reduzida e indicação explícita no JSON.
 
+Desde a versão 0.3.1, o nome do arquivo também é interpretado. Material,
+acabamento, quantidade acompanhada de unidade e dimensões acompanhadas de
+`mm`, `cm` ou `m` entram como evidência de menor confiança. O nome só preenche
+lacunas e nunca substitui texto ou geometria encontrados dentro do CDR. Sufixos
+de cópia como `(1)` não são tratados como quantidade.
+
 ## Uso
 
 ```powershell

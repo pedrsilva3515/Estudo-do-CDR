@@ -204,8 +204,14 @@ class AplicacaoPedido:
         self.rotulo_total.configure(text=f"{total} unidade{'s' if total != 1 else ''}")
         modo = resultado.get("modo_cor", {}).get("documento") or "não identificado"
         pendencias = resultado.get("pendencias", [])
+        nome_usado = any(
+            item.get(campo, {}).get("fonte") == "nome_arquivo"
+            for item in itens for campo in ("quantidade", "material", "acabamento")
+        )
+        origem_nome = " • nome usado como evidência" if nome_usado else ""
         self.rotulo_status.configure(
-            text=f"{len(itens)} item(ns) • modo de cor {modo} • " + ("revisão necessária" if pendencias else "análise concluída"),
+            text=f"{len(itens)} item(ns) • modo de cor {modo}{origem_nome} • "
+            + ("revisão necessária" if pendencias else "análise concluída"),
             foreground=COR_SUCESSO if not pendencias else "#9a6700",
         )
         alertas = len(resultado.get("alertas", []))

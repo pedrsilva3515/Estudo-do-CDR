@@ -9,6 +9,7 @@ from collections import defaultdict
 from math import hypot
 from pathlib import Path
 import re
+import unicodedata
 
 from .container import abrir_cdr
 
@@ -43,8 +44,38 @@ def parse_material(texto: str) -> dict | None:
         material = "adesivo normal"
     else:
         material = "adesivo"
-    acabamento = "recortado" if re.search(r"\brecortad[oa]s?\b", normalizado) else None
+    if re.search(r"\bsem\s+rec(?:orte|ortad[oa]s?|\.)?\b", normalizado):
+        acabamento = "sem recorte"
+    elif re.search(r"\brecortad[oa]s?\b", normalizado):
+        acabamento = "recortado"
+    else:
+        acabamento = None
     return {"material": material, "acabamento": acabamento}
+
+
+def interpretar_nome_arquivo(nome: str) -> dict:
+    """Extrai somente evidências explícitas do nome, sempre com baixa prioridade."""
+    base = Path(nome).stem
+    texto = " ".join(base.replace("_", " ").replace("-", " ").split())
+    sem_acentos = "".join(
+        caractere for caractere in unicodedata.normalize("NFKD", texto.casefold())
+        if not unicodedata.combining(caractere)
+    )
+    material = parse_material(sem_acentos)
+    quantidade = parse_quantidade(sem_acentos)
+    dimensao = re.search(
+        r"(?<!\d)(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b",
+        sem_acentos,
+    )
+    dimensoes = None
+    if dimensao:
+        fator = {"mm": 1.0, "cm": 10.0, "m": 1000.0}[dimensao.group(3)]
+        dimensoes = {
+            "largura_mm": float(dimensao.group(1).replace(",", ".")) * fator,
+            "altura_mm": float(dimensao.group(2).replace(",", ".")) * fator,
+            "texto_origem": dimensao.group(0),
+        }
+    return {"texto": texto, "material": material, "quantidade": quantidade, "dimensoes": dimensoes}
 
 
 def _caixa_mm(caixa) -> dict[str, float]:
@@ -238,6 +269,31 @@ def _aplicar_materiais(itens: list[dict], instrucoes: list[dict]) -> None:
         }
 
 
+def _aplicar_nome_arquivo(itens: list[dict], evidencia: dict) -> None:
+    """Usa o nome para preencher lacunas, nunca para sobrescrever o conteúdo do CDR."""
+    material = evidencia.get("material")
+    if material:
+        for item in itens:
+            if item["material"]["valor"] is None:
+                item["material"] = {
+                    "valor": material["material"], "fonte": "nome_arquivo", "confianca": 0.65,
+                    "texto_origem": evidencia["texto"],
+                }
+            if item["acabamento"]["valor"] is None and material["acabamento"] is not None:
+                item["acabamento"] = {
+                    "valor": material["acabamento"], "fonte": "nome_arquivo", "confianca": 0.6,
+                }
+
+    # Quantidade no nome só é segura quando o documento contém uma única arte.
+    if len(itens) == 1:
+        quantidade = evidencia.get("quantidade")
+        if quantidade and itens[0]["quantidade"]["fonte"] == "contagem_de_composicoes":
+            itens[0]["quantidade"] = {
+                "valor": quantidade[0], "unidade": quantidade[1],
+                "texto_origem": evidencia["texto"], "fonte": "nome_arquivo", "confianca": 0.7,
+            }
+
+
 def _consolidar_mesmo_tamanho(itens: list[dict]) -> list[dict]:
     """Agrupa peças sem quantidade explícita quando tamanho e material coincidem."""
     grupos = defaultdict(list)
@@ -271,6 +327,7 @@ def interpretar_pedido(caminho) -> dict:
         contexto = doc.contexto_cor()
         quantidades = _textos_quantidade(doc)
         instrucoes = _textos_material(doc)
+        evidencia_nome = interpretar_nome_arquivo(caminho.name)
         candidatos = _candidatos_arte(doc)
         associacoes = _associar_um_a_um(candidatos, quantidades)
         instancias = [item for item in doc.instancias_bitmaps() if item.objeto is not None and item.objeto.caixa is not None]
@@ -308,6 +365,7 @@ def interpretar_pedido(caminho) -> dict:
             })
 
         _aplicar_materiais(itens, instrucoes)
+        _aplicar_nome_arquivo(itens, evidencia_nome)
         itens = _consolidar_mesmo_tamanho(itens)
         itens.sort(key=lambda item: (item["_caixa"].esquerda, -item["_caixa"].topo))
         for indice, item in enumerate(itens, 1):
@@ -342,6 +400,7 @@ def interpretar_pedido(caminho) -> dict:
             "schema_version": "0.2",
             "arquivo": {
                 "nome": caminho.name, "paginas": metadados.paginas if metadados else None,
+                "nome_interpretado": evidencia_nome,
                 "tamanho_pagina_mm": {
                     "largura": metadados.largura_pagina_mm if metadados else None,
                     "altura": metadados.altura_pagina_mm if metadados else None,

@@ -8,7 +8,7 @@ from pathlib import Path
 _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent))
 
-from zcfreader import parse_material, parse_quantidade  # noqa: E402
+from zcfreader import interpretar_nome_arquivo, parse_material, parse_quantidade  # noqa: E402
 
 
 class TestQuantidade(unittest.TestCase):
@@ -44,6 +44,23 @@ class TestMaterial(unittest.TestCase):
 
     def test_texto_sem_material(self):
         self.assertIsNone(parse_material("14und"))
+
+
+class TestNomeArquivo(unittest.TestCase):
+    def test_sufixo_de_copia_nao_vira_quantidade(self):
+        resultado = interpretar_nome_arquivo("guanarabara iza ads (1).cdr")
+        self.assertIsNone(resultado["quantidade"])
+
+    def test_material_e_sem_recorte(self):
+        resultado = interpretar_nome_arquivo("adesivos BK set - sem rec.cdr")
+        self.assertEqual(resultado["material"]["material"], "adesivo")
+        self.assertEqual(resultado["material"]["acabamento"], "sem recorte")
+
+    def test_quantidade_e_dimensao_explicitas(self):
+        resultado = interpretar_nome_arquivo("20und adesivo 30x40cm.cdr")
+        self.assertEqual(resultado["quantidade"], (20, "unidade"))
+        self.assertEqual(resultado["dimensoes"]["largura_mm"], 300)
+        self.assertEqual(resultado["dimensoes"]["altura_mm"], 400)
 
 
 if __name__ == "__main__":
