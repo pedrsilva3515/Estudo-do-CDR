@@ -48,6 +48,22 @@ escolhido para os computadores da gráfica com 32 GB de RAM e sem placa de víde
 Também permanecem disponíveis o modo estrutural rápido e a análise opcional pela
 API da OpenAI.
 
+### Fluxo 0.7
+
+A versão 0.7 trata o resultado estrutural como hipótese. A etapa visual recebe
+textos nativos com suas posições, procura instruções convertidas em curvas,
+repetições e documentos com materiais mistos, e pode criar, remover ou reagrupar
+itens. Uma reconstrução só é aplicada quando todos os itens propostos possuem
+quantidade e dimensões válidas; o resultado continua marcado para conferência.
+Antes do modelo visual, um OCR local em CPU produz textos e caixas espaciais;
+isso evita depender do modelo de linguagem para simplesmente transcrever uma
+legenda nítida.
+
+Quando o CorelDRAW está instalado, a aplicação abre uma instância invisível e
+temporária para renderizar os objetos em alta resolução. O documento não é
+salvo nem alterado. Sem CorelDRAW, o processamento continua usando o preview
+embutido no CDR, com a limitação de resolução registrada no diagnóstico.
+
 ### Revisão e diagnóstico
 
 Depois de cada análise, a interface permite confirmar o resultado ou corrigir,

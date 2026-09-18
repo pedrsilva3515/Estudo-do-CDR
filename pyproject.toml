@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdr-pedido"
-version = "0.6.1"
+version = "0.7.0"
 description = "Interpretação auditável de pedidos de gráfica em arquivos CorelDRAW CDR"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ authors = [{ name = "pedrsilva3515" }]
 dependencies = []
 
 [project.optional-dependencies]
-gui = ["tkinterdnd2>=0.6.3"]
+gui = ["tkinterdnd2>=0.6.3", "pywin32>=306; sys_platform == 'win32'", "rapidocr-onnxruntime==1.4.4"]
 api = ["openai>=2.0", "keyring>=25"]
 
 [project.scripts]

@@ -348,12 +348,13 @@ class AplicacaoPedido:
             resultado = deepcopy(estrutural)
             visual = None
             modo = self.configuracao.get("modo", "estrutural")
-            pendente = bool(resultado.get("pendencias"))
-            if modo == "local" or (modo == "automatico" and pendente and modelo_instalado()):
+            # Na 0.7 a visão também audita agrupamento, quantidade e dimensões;
+            # portanto não depende mais de uma pendência estrutural prévia.
+            if modo == "local" or (modo == "automatico" and modelo_instalado()):
                 visual = analisar_com_modelo_local(caminho, resultado)
                 resultado = mesclar_analise_visual(resultado, visual, fonte="modelo_local")
                 resultado["processamento"] = {"modo": modo, "provedor": "local", "modelo": NOME_MODELO}
-            elif modo == "api" or (modo == "automatico" and pendente):
+            elif modo == "api" or modo == "automatico":
                 chave = obter_chave_openai()
                 if not chave:
                     raise RuntimeError(
@@ -424,9 +425,9 @@ class AplicacaoPedido:
         origem_nome = " • nome usado como evidência" if nome_usado else ""
         processamento = resultado.get("processamento", {})
         if processamento.get("provedor") == "local":
-            origem_ia = " • IA local em CPU"
+            origem_ia = " • OCR + IA local em CPU"
         elif processamento.get("provedor"):
-            origem_ia = f" • IA: {processamento.get('modelo')}"
+            origem_ia = f" • OCR + IA: {processamento.get('modelo')}"
         else:
             origem_ia = " • análise estrutural"
         self.rotulo_status.configure(
@@ -434,12 +435,16 @@ class AplicacaoPedido:
             + ("revisão necessária" if pendencias else "análise concluída"),
             foreground=COR_SUCESSO if not pendencias else "#9a6700",
         )
-        alertas = len(resultado.get("alertas", []))
+        alertas_lista = resultado.get("alertas", [])
+        alertas = len(alertas_lista)
         detalhes = []
         if alertas:
             detalhes.append(f"{alertas} alerta(s)")
         if pendencias:
             detalhes.append("Confirmar: " + ", ".join(pendencias))
+        reconstruida = any(a.get("codigo") == "ESTRUTURA_RECONSTRUIDA_PELA_VISAO" for a in alertas_lista)
+        if reconstruida:
+            detalhes.append("A IA reconstruiu os itens — confira antes de confirmar")
         self.rotulo_alertas.configure(text=" • ".join(detalhes) or "Nenhuma pendência detectada")
         self.botao_exportar.configure(state="normal")
         self.botao_confirmar.configure(state="normal")

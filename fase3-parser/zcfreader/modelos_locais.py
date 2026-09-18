@@ -12,7 +12,8 @@ from typing import Callable
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
-from .visao_api import _schema_resposta, extrair_preview
+from .visao_api import _schema_resposta, extrair_imagem_analise, prompt_analise_visual
+from .ocr import executar_ocr
 
 
 NOME_MODELO = "Qwen2.5-VL 3B (Q4_K_M)"
@@ -187,6 +188,11 @@ def _evidencias_compactas(resultado: dict) -> dict:
     return {
         "arquivo": {"nome": arquivo.get("nome") or arquivo.get("caminho")},
         "modo_cor": resultado.get("modo_cor"),
+        "evidencias_textuais": [
+            e for e in resultado.get("evidencias_textuais", [])
+            if e.get("quantidade") or e.get("dimensoes") or e.get("material")
+        ][:50],
+        "hipoteses": resultado.get("hipoteses", {}),
         "itens": itens,
         "total_unidades": resultado.get("total_unidades"),
         "pendencias": resultado.get("pendencias", []),
@@ -196,8 +202,6 @@ def _evidencias_compactas(resultado: dict) -> dict:
 def _schema_resposta_local() -> dict:
     """Contrato enxuto para impedir que modelos pequenos entrem em repetição."""
     schema = _schema_resposta()
-    item = schema["properties"]["itens"]["items"]
-    item["properties"]["observacao"] = {"type": "null"}
     schema["properties"]["observacoes"] = {
         "type": "array", "maxItems": 0, "items": {"type": "string"},
     }
@@ -207,18 +211,17 @@ def _schema_resposta_local() -> dict:
 def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict) -> dict:
     if not modelo_instalado():
         raise RuntimeError("O modelo local ainda não foi baixado. Abra 'Configurar IA' para instalá-lo.")
-    preview = extrair_preview(caminho)
+    preview = extrair_imagem_analise(caminho)
     if preview is None:
         raise RuntimeError("O CDR não contém um preview PNG utilizável pela análise visual local.")
-    bytes_imagem, _ = preview
+    bytes_imagem, _, origem_imagem = preview
+    ocr_visual = executar_ocr(bytes_imagem)
     caminhos = caminhos_instalacao()
     evidencias = json.dumps(_evidencias_compactas(resultado_estrutural), ensure_ascii=False, separators=(",", ":"))
-    prompt = (
-        "Interprete este pedido de gráfica em português. Leia textos visíveis, inclusive texto convertido "
-        "em curvas. Associe quantidade, material e acabamento a cada item detectado no JSON estrutural. "
-        "Não recalcule dimensões pela imagem e não invente informação ilegível; use null. Seja conciso, "
-        "defina observacao como null e observacoes como lista vazia. Responda apenas com o JSON solicitado. "
-        "Evidências estruturais: " + evidencias
+    evidencias_dict = json.loads(evidencias)
+    evidencias_dict["ocr_visual"] = ocr_visual
+    prompt = prompt_analise_visual(evidencias_dict) + (
+        f" Fonte da imagem: {origem_imagem}. Seja conciso, use observacoes como lista vazia e responda somente com o JSON solicitado."
     )
     with tempfile.TemporaryDirectory(prefix="cdr-pedido-") as pasta:
         imagem = Path(pasta) / "preview.png"
@@ -231,9 +234,9 @@ def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict) -> dict
             str(caminhos["executavel"]), "-m", str(caminhos["modelo"]),
             "--mmproj", str(caminhos["mmproj"]), "--image", str(imagem),
             "--no-mmproj-offload", "--device", "none", "--ctx-size", "8192",
-            "--image-min-tokens", "1024", "--image-max-tokens", "1024",
+            "--image-min-tokens", "1536", "--image-max-tokens", "2048",
             "--temp", "0", "--seed", "1", "--repeat-penalty", "1.12",
-            "--repeat-last-n", "128", "--predict", "800",
+            "--repeat-last-n", "128", "--predict", "1400",
             "--json-schema-file", str(schema_path),
             "--file", str(prompt_path),
         ]
@@ -245,4 +248,7 @@ def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict) -> dict
     if processo.returncode != 0:
         detalhe = (processo.stderr or processo.stdout).strip()[-1200:]
         raise RuntimeError("Falha ao executar o modelo local. " + detalhe)
-    return _extrair_json(processo.stdout)
+    resposta = _extrair_json(processo.stdout)
+    resposta["_imagem_origem"] = origem_imagem
+    resposta["_ocr_visual"] = ocr_visual
+    return resposta

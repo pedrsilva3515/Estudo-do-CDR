@@ -53,6 +53,11 @@ class TestMaterial(unittest.TestCase):
             {"material": "adesivo transparente", "acabamento": None},
         )
 
+    def test_materiais_adicionais_e_documento_misto(self):
+        self.assertEqual(parse_material("VINIL FOSCO")["material"], "adesivo fosco")
+        self.assertEqual(parse_material("LONA COM ILHOS")["material"], "lona")
+        self.assertIsNone(parse_material("banner e adesivo sem recorte"))
+
 
 class TestDimensoes(unittest.TestCase):
     def test_quantidade_com_dimensoes_decimais(self):
@@ -73,6 +78,10 @@ class TestDimensoes(unittest.TestCase):
         self.assertEqual(itens[0]["dimensoes"]["altura_mm"], 184)
         self.assertEqual(itens[0]["dimensoes"]["fonte"], "texto_cdr")
 
+    def test_sem_unidade_exige_contexto_de_quantidade(self):
+        self.assertEqual(parse_dimensoes("4 UN (46,5 X 9)")["largura_mm"], 465)
+        self.assertIsNone(parse_dimensoes("telefone 46,5 x 9"))
+
 
 class TestNomeArquivo(unittest.TestCase):
     def test_sufixo_de_copia_nao_vira_quantidade(self):
@@ -89,6 +98,11 @@ class TestNomeArquivo(unittest.TestCase):
         self.assertEqual(resultado["quantidade"], (20, "unidade"))
         self.assertEqual(resultado["dimensoes"]["largura_mm"], 300)
         self.assertEqual(resultado["dimensoes"]["altura_mm"], 400)
+
+    def test_dimensao_em_metros_sem_unidade_no_nome(self):
+        resultado = interpretar_nome_arquivo("ADESIVO TRANSPARENTE 1,00X0,55.cdr")
+        self.assertEqual(resultado["dimensoes"]["largura_mm"], 1000)
+        self.assertEqual(resultado["dimensoes"]["altura_mm"], 550)
 
 
 if __name__ == "__main__":

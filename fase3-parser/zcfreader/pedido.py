@@ -34,10 +34,20 @@ def parse_quantidade(texto: str) -> tuple[int, str] | None:
 def parse_material(texto: str) -> dict | None:
     """Extrai material e acabamento de instruções usuais da gráfica."""
     normalizado = " ".join(texto.casefold().split())
-    if "adesivo" not in normalizado and "vinil" not in normalizado:
+    adesivo = "adesivo" in normalizado or "vinil" in normalizado
+    banner = "banner" in normalizado or "lona" in normalizado
+    if adesivo and banner:
+        return None  # documento misto: a associação precisa ser regional
+    if not adesivo and not banner:
         return None
-    if "transparente" in normalizado:
+    if banner:
+        material = "lona" if "lona" in normalizado else "banner"
+    elif "transparente" in normalizado:
         material = "adesivo transparente"
+    elif "fosco" in normalizado:
+        material = "adesivo fosco"
+    elif "super cola" in normalizado:
+        material = "adesivo super cola"
     elif "leitoso" in normalizado:
         material = "adesivo leitoso"
     elif "normal" in normalizado:
@@ -54,18 +64,28 @@ def parse_material(texto: str) -> dict | None:
 
 
 def parse_dimensoes(texto: str) -> dict | None:
-    """Reconhece dimensões explícitas como ``23,4 x 18,4 cm``."""
+    """Reconhece dimensões; sem unidade somente quando há contexto de quantidade."""
     sem_acentos = "".join(
         caractere for caractere in unicodedata.normalize("NFKD", texto.casefold())
         if not unicodedata.combining(caractere)
     )
     dimensao = re.search(
-        r"(?<!\d)(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b",
+        r"(?<!\d)(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?\b",
         sem_acentos,
     )
     if dimensao is None:
         return None
-    fator = {"mm": 1.0, "cm": 10.0, "m": 1000.0}[dimensao.group(3)]
+    unidade = dimensao.group(3)
+    if unidade is None:
+        # Evita interpretar telefone, código ou texto da arte como dimensão.
+        contexto_quantidade = re.search(
+            r"(?i)(?:\bq(?:td|uantidade)?\s*[:=-]?\s*\d+\b|\b\d+\s*un(?:d|id(?:ade)?s?)?\b)",
+            sem_acentos,
+        )
+        if contexto_quantidade is None:
+            return None
+        unidade = "cm"
+    fator = {"mm": 1.0, "cm": 10.0, "m": 1000.0}[unidade]
     return {
         "largura_mm": float(dimensao.group(1).replace(",", ".")) * fator,
         "altura_mm": float(dimensao.group(2).replace(",", ".")) * fator,
@@ -84,6 +104,13 @@ def interpretar_nome_arquivo(nome: str) -> dict:
     material = parse_material(sem_acentos)
     quantidade = parse_quantidade(sem_acentos)
     dimensoes = parse_dimensoes(sem_acentos)
+    if dimensoes is None:
+        sem_unidade = re.search(r"(?<!\d)(\d+[.,]\d+)\s*[x×]\s*(\d+[.,]\d+)(?!\d)", sem_acentos)
+        if sem_unidade:
+            a, b = (float(valor.replace(",", ".")) for valor in sem_unidade.groups())
+            # Nomes como 1,00x0,55 em gráficas normalmente expressam metros.
+            fator = 1000.0 if max(a, b) <= 5 else 10.0
+            dimensoes = {"largura_mm": a * fator, "altura_mm": b * fator, "texto_origem": sem_unidade.group(0)}
     return {"texto": texto, "material": material, "quantidade": quantidade, "dimensoes": dimensoes}
 
 
@@ -161,6 +188,26 @@ def _textos_material(doc) -> list[dict]:
     return encontrados
 
 
+def _evidencias_textuais(doc) -> list[dict]:
+    """Expõe texto nativo com posição para a etapa de associação regional."""
+    evidencias, vistos = [], set()
+    for item in doc.textos_por_objeto() or ():
+        texto = " ".join(item.fluxo.texto.split()).strip()
+        caixa = item.objeto.caixa
+        if not texto or caixa is None:
+            continue
+        chave = (texto.casefold(), caixa.esquerda, caixa.base, caixa.direita, caixa.topo)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        evidencias.append({
+            "texto": texto, "caixa_mm": _caixa_mm(caixa),
+            "quantidade": (parse_quantidade(texto) or (None,))[0],
+            "dimensoes": parse_dimensoes(texto), "material": parse_material(texto),
+        })
+    return evidencias
+
+
 def _candidatos_arte(doc) -> list[dict]:
     """Seleciona caixas externas prováveis, evitando objetos internos duplicados."""
     estrutura = doc.estrutura()
@@ -201,10 +248,13 @@ def _candidatos_arte(doc) -> list[dict]:
     candidatos = []
     for objeto in externos:
         caixa = objeto.caixa
+        largura_mm = (caixa.direita - caixa.esquerda) / 10_000.0
+        altura_mm = (caixa.topo - caixa.base) / 10_000.0
+        if largura_mm <= 1 or altura_mm <= 1 or max(largura_mm / altura_mm, altura_mm / largura_mm) > 100:
+            continue
         candidatos.append({
             "objeto": objeto, "caixa": caixa, "tipo": objeto.tipo_objeto or "grupo",
-            "largura_mm": round((caixa.direita - caixa.esquerda) / 10_000.0, 3),
-            "altura_mm": round((caixa.topo - caixa.base) / 10_000.0, 3),
+            "largura_mm": round(largura_mm, 3), "altura_mm": round(altura_mm, 3),
         })
     return sorted(candidatos, key=lambda item: (item["caixa"].esquerda, -item["caixa"].topo))
 
@@ -245,7 +295,7 @@ def _dimensoes_componentes(instancias) -> list[dict]:
     return componentes
 
 
-def _aplicar_materiais(itens: list[dict], instrucoes: list[dict]) -> None:
+def _aplicar_materiais(itens: list[dict], instrucoes: list[dict]) -> list[dict]:
     locais = [item for item in instrucoes if item["quantidade"] is not None]
     globais = [item for item in instrucoes if item["quantidade"] is None]
     ocupados = set()
@@ -266,10 +316,16 @@ def _aplicar_materiais(itens: list[dict], instrucoes: list[dict]) -> None:
             "valor": instrucao["acabamento"], "fonte": "texto_cdr_local", "confianca": 0.98,
         }
 
+    ambiguas = []
     for indice, item in enumerate(itens):
         if indice in ocupados or not globais:
             continue
         instrucao = min(globais, key=lambda x: _distancia(item["_caixa"], x["objeto"].caixa))
+        explicita_global = bool(re.search(r"(?i)\b(todos?|todas?)\b", instrucao["texto_origem"]))
+        if len(itens) > 1 and not explicita_global:
+            if instrucao not in ambiguas:
+                ambiguas.append(instrucao)
+            continue
         item["material"] = {
             "valor": instrucao["material"], "fonte": "texto_cdr_global", "confianca": 0.9,
             "texto_origem": instrucao["texto_origem"],
@@ -277,12 +333,13 @@ def _aplicar_materiais(itens: list[dict], instrucoes: list[dict]) -> None:
         item["acabamento"] = {
             "valor": instrucao["acabamento"], "fonte": "texto_cdr_global", "confianca": 0.9,
         }
+    return ambiguas
 
 
 def _aplicar_nome_arquivo(itens: list[dict], evidencia: dict) -> None:
     """Usa o nome para preencher lacunas, nunca para sobrescrever o conteúdo do CDR."""
     material = evidencia.get("material")
-    if material:
+    if material and len(itens) == 1:
         for item in itens:
             if item["material"]["valor"] is None:
                 item["material"] = {
@@ -296,6 +353,16 @@ def _aplicar_nome_arquivo(itens: list[dict], evidencia: dict) -> None:
 
     # Quantidade no nome só é segura quando o documento contém uma única arte.
     if len(itens) == 1:
+        dimensoes = evidencia.get("dimensoes")
+        if dimensoes:
+            atual = itens[0].get("dimensoes", {})
+            esperado = (dimensoes["largura_mm"], dimensoes["altura_mm"])
+            medido = (atual.get("largura_mm"), atual.get("altura_mm"))
+            if medido != esperado:
+                itens[0]["dimensoes_geometria"] = atual
+                itens[0]["dimensoes"] = {
+                    **dimensoes, "tipo": "instrucao_nome_arquivo", "fonte": "nome_arquivo", "confianca": 0.75,
+                }
         quantidade = evidencia.get("quantidade")
         if quantidade and itens[0]["quantidade"]["fonte"] == "contagem_de_composicoes":
             itens[0]["quantidade"] = {
@@ -362,6 +429,7 @@ def interpretar_pedido(caminho) -> dict:
         contexto = doc.contexto_cor()
         quantidades = _textos_quantidade(doc)
         instrucoes = _textos_material(doc)
+        evidencias_textuais = _evidencias_textuais(doc)
         evidencia_nome = interpretar_nome_arquivo(caminho.name)
         candidatos = _candidatos_arte(doc)
         associacoes = _associar_um_a_um(candidatos, quantidades)
@@ -402,7 +470,7 @@ def interpretar_pedido(caminho) -> dict:
                     "_caixa": candidato["caixa"],
                 })
 
-        _aplicar_materiais(itens, instrucoes)
+        materiais_ambiguos = _aplicar_materiais(itens, instrucoes)
         _aplicar_nome_arquivo(itens, evidencia_nome)
         itens = _consolidar_mesmo_tamanho(itens)
         itens.sort(key=lambda item: (item["_caixa"].esquerda, -item["_caixa"].topo))
@@ -411,6 +479,11 @@ def interpretar_pedido(caminho) -> dict:
             del item["_caixa"]
 
         alertas = []
+        if materiais_ambiguos:
+            alertas.append({
+                "codigo": "MATERIAL_GLOBAL_AMBIGUO", "severidade": "revisao",
+                "mensagem": "Há instrução de material sem associação inequívoca; ela não foi aplicada a todos os itens.",
+            })
         if contexto and contexto.modelo and contexto.modelo.casefold() == "cmyk":
             rgb = sum(c["espaco_cor"].casefold() == "rgb" for item in itens for c in item["componentes"])
             if rgb:
@@ -435,7 +508,7 @@ def interpretar_pedido(caminho) -> dict:
             pendencias.append("acabamento")
 
         return {
-            "schema_version": "0.2",
+            "schema_version": "0.3",
             "arquivo": {
                 "nome": caminho.name, "paginas": metadados.paginas if metadados else None,
                 "nome_interpretado": evidencia_nome,
@@ -450,12 +523,19 @@ def interpretar_pedido(caminho) -> dict:
                 "possui_rgb": contexto.possui_objetos_rgb if contexto else None,
                 "possui_cmyk": contexto.possui_objetos_cmyk if contexto else None,
             },
+            "evidencias_textuais": evidencias_textuais,
             "itens": itens,
             "total_unidades": sum(item["quantidade"]["valor"] or 0 for item in itens),
             "alertas": alertas,
+            "hipoteses": {
+                "materiais_globais_ambiguos": [
+                    {"material": item["material"], "acabamento": item["acabamento"], "texto_origem": item["texto_origem"]}
+                    for item in materiais_ambiguos
+                ],
+            },
             "pendencias": pendencias,
             "limitacoes": [
-                "Textos convertidos em curvas ainda exigem OCR/visão.",
+                "Textos convertidos em curvas exigem a etapa visual.",
                 "Agrupamentos por mesmo tamanho e material devem ser confirmados pelo operador.",
             ],
         }

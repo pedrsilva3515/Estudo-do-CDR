@@ -66,7 +66,9 @@ class TestModelosLocais(unittest.TestCase):
     def test_schema_local_impede_observacoes_longas(self):
         schema = modelos_locais._schema_resposta_local()
         item = schema["properties"]["itens"]["items"]
-        self.assertEqual(item["properties"]["observacao"], {"type": "null"})
+        self.assertIn("largura_cm", item["properties"])
+        self.assertIn("evidencia", item["properties"])
+        self.assertIn("estrutura_confere", schema["properties"])
         self.assertEqual(schema["properties"]["observacoes"]["maxItems"], 0)
 
     def test_asset_runtime_ignora_release_sem_binario(self):

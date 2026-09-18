@@ -15,6 +15,10 @@ try {
         --paths "fase3-parser" `
         --collect-all tkinterdnd2 `
         --collect-all keyring `
+        --collect-all rapidocr_onnxruntime `
+        --collect-submodules win32com `
+        --hidden-import pythoncom `
+        --hidden-import pywintypes `
         --distpath $saida `
         --workpath $temporarios `
         --specpath $temporarios `
