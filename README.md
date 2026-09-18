@@ -48,6 +48,16 @@ escolhido para os computadores da gráfica com 32 GB de RAM e sem placa de víde
 Também permanecem disponíveis o modo estrutural rápido e a análise opcional pela
 API da OpenAI.
 
+### Revisão e diagnóstico
+
+Depois de cada análise, a interface permite confirmar o resultado ou corrigir,
+adicionar e excluir itens. A revisão gera automaticamente um pacote ZIP em
+`Documentos/LeitorPedidosCDR/Relatorios`, contendo resultado original, resultado
+correto, evidências estruturais, resposta visual, preview, diagnóstico e resumo.
+O CDR original não é incluído por padrão e só entra no pacote quando o operador
+marca essa opção. Um histórico local em JSONL registra os casos para futuras
+avaliações e testes de regressão.
+
 Para atualizar uma cópia existente, execute `git pull` na mesma branch.
 
 > Para continuar o trabalho em outro computador, comece por

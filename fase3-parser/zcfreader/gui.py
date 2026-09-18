@@ -1,10 +1,13 @@
 """Interface gráfica simples para analisar pedidos em arquivos CDR."""
 from __future__ import annotations
 
+from copy import deepcopy
 import json
+import os
 from pathlib import Path
 from queue import Empty, Queue
 import threading
+from time import perf_counter
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -16,6 +19,7 @@ from .configuracao import (
     salvar_configuracao,
 )
 from .pedido import interpretar_pedido
+from .relatorios import gerar_pacote_diagnostico, normalizar_resultado_corrigido
 from .modelos_locais import (
     NOME_MODELO,
     TAMANHO_TOTAL_MODELOS,
@@ -49,10 +53,14 @@ class AplicacaoPedido:
     def __init__(self, raiz: tk.Tk):
         self.raiz = raiz
         self.raiz.title("Leitor de pedidos CDR")
-        self.raiz.geometry("980x680")
-        self.raiz.minsize(820, 580)
+        self.raiz.geometry("1020x740")
+        self.raiz.minsize(880, 640)
         self.raiz.configure(bg=COR_FUNDO)
         self.resultado: dict | None = None
+        self.resultado_original: dict | None = None
+        self.resultado_estrutural: dict | None = None
+        self.analise_visual: dict | None = None
+        self.duracao_analise = 0.0
         self.arquivo: Path | None = None
         self.configuracao = carregar_configuracao()
         self.fila: Queue = Queue()
@@ -140,9 +148,23 @@ class AplicacaoPedido:
         rodape = ttk.Frame(conteudo, padding=(0, 14, 0, 0))
         rodape.pack(fill="x")
         self.rotulo_alertas = ttk.Label(rodape, text="", style="Subtitulo.TLabel")
-        self.rotulo_alertas.pack(side="left", fill="x", expand=True)
-        self.botao_exportar = ttk.Button(rodape, text="Exportar JSON", style="Secondary.TButton", command=self.exportar, state="disabled")
+        self.rotulo_alertas.pack(fill="x", pady=(0, 8))
+        acoes = ttk.Frame(rodape)
+        acoes.pack(fill="x")
+        self.var_incluir_cdr = tk.BooleanVar(value=False)
+        ttk.Checkbutton(acoes, text="Incluir CDR no pacote de diagnóstico", variable=self.var_incluir_cdr).pack(side="left")
+        self.botao_exportar = ttk.Button(acoes, text="Exportar JSON", style="Secondary.TButton", command=self.exportar, state="disabled")
         self.botao_exportar.pack(side="right")
+        self.botao_corrigir = ttk.Button(
+            acoes, text="Corrigir resultado", style="Secondary.TButton",
+            command=self.corrigir_resultado, state="disabled",
+        )
+        self.botao_corrigir.pack(side="right", padx=(0, 8))
+        self.botao_confirmar = ttk.Button(
+            acoes, text="Confirmar correto", style="Primary.TButton",
+            command=self.confirmar_resultado, state="disabled",
+        )
+        self.botao_confirmar.pack(side="right", padx=(0, 8))
 
     def procurar(self) -> None:
         caminho = filedialog.askopenfilename(title="Escolha o pedido", filetypes=[("CorelDRAW", "*.cdr"), ("Todos os arquivos", "*.*")])
@@ -295,8 +317,13 @@ class AplicacaoPedido:
             return
         self.arquivo = caminho
         self.resultado = None
+        self.resultado_original = None
+        self.resultado_estrutural = None
+        self.analise_visual = None
         self.botao_procurar.configure(state="disabled")
         self.botao_exportar.configure(state="disabled")
+        self.botao_confirmar.configure(state="disabled")
+        self.botao_corrigir.configure(state="disabled")
         self.rotulo_arquivo.configure(text=caminho.name)
         self.rotulo_status.configure(text="Analisando estrutura, textos, dimensões e imagens…", foreground=COR_AZUL)
         self.rotulo_total.configure(text="…")
@@ -310,7 +337,10 @@ class AplicacaoPedido:
 
     def _executar_analise(self, caminho: Path) -> None:
         try:
-            resultado = interpretar_pedido(caminho)
+            inicio = perf_counter()
+            estrutural = interpretar_pedido(caminho)
+            resultado = deepcopy(estrutural)
+            visual = None
             modo = self.configuracao.get("modo", "estrutural")
             pendente = bool(resultado.get("pendencias"))
             if modo == "local" or (modo == "automatico" and pendente and modelo_instalado()):
@@ -329,7 +359,10 @@ class AplicacaoPedido:
                 resultado["processamento"] = {"modo": modo, "provedor": "openai", "modelo": self.configuracao["modelo"]}
             else:
                 resultado["processamento"] = {"modo": "estrutural", "provedor": None, "modelo": None}
-            self.fila.put(("ok", resultado))
+            self.fila.put(("ok", {
+                "resultado": resultado, "estrutural": estrutural, "visual": visual,
+                "duracao": perf_counter() - inicio,
+            }))
         except Exception as erro:  # erro é apresentado ao operador de forma legível
             self.fila.put(("erro", erro))
 
@@ -347,10 +380,16 @@ class AplicacaoPedido:
             self.rotulo_total.configure(text="0 unidades")
             messagebox.showerror("Falha na análise", str(conteudo))
             return
-        self._mostrar_resultado(conteudo)
+        self.resultado_estrutural = conteudo["estrutural"]
+        self.analise_visual = conteudo["visual"]
+        self.duracao_analise = conteudo["duracao"]
+        self.resultado_original = deepcopy(conteudo["resultado"])
+        self._mostrar_resultado(conteudo["resultado"])
 
     def _mostrar_resultado(self, resultado: dict) -> None:
         self.resultado = resultado
+        for linha in self.tabela.get_children():
+            self.tabela.delete(linha)
         itens = resultado.get("itens", [])
         for item in itens:
             dimensoes = item.get("dimensoes") or {}
@@ -397,6 +436,161 @@ class AplicacaoPedido:
             detalhes.append("Confirmar: " + ", ".join(pendencias))
         self.rotulo_alertas.configure(text=" • ".join(detalhes) or "Nenhuma pendência detectada")
         self.botao_exportar.configure(state="normal")
+        self.botao_confirmar.configure(state="normal")
+        self.botao_corrigir.configure(state="normal")
+
+    def _salvar_feedback(self, correto: dict, situacao: str, observacao: str = "") -> None:
+        if self.arquivo is None or self.resultado_original is None:
+            return
+        try:
+            destino = gerar_pacote_diagnostico(
+                self.arquivo, self.resultado_original, correto,
+                resultado_estrutural=self.resultado_estrutural,
+                analise_visual=self.analise_visual,
+                duracao_segundos=self.duracao_analise,
+                situacao=situacao,
+                observacao_operador=observacao,
+                incluir_cdr=self.var_incluir_cdr.get(),
+            )
+        except Exception as erro:
+            messagebox.showerror("Falha ao gerar relatório", str(erro))
+            return
+        self.botao_confirmar.configure(state="disabled")
+        self.botao_corrigir.configure(state="disabled")
+        self.rotulo_alertas.configure(text=f"Revisão registrada • pacote: {destino.name}")
+        abrir = messagebox.askyesno(
+            "Pacote de diagnóstico criado",
+            f"O relatório foi salvo em:\n{destino}\n\nDeseja abrir a pasta?",
+        )
+        if abrir and hasattr(os, "startfile"):
+            os.startfile(destino.parent)
+
+    def confirmar_resultado(self) -> None:
+        if self.resultado is not None:
+            self._salvar_feedback(self.resultado, "confirmado")
+
+    def corrigir_resultado(self) -> None:
+        if self.resultado is None:
+            return
+        dados = deepcopy(self.resultado)
+        janela = tk.Toplevel(self.raiz)
+        janela.title("Corrigir resultado")
+        janela.geometry("900x560")
+        janela.minsize(760, 500)
+        janela.transient(self.raiz)
+        janela.grab_set()
+        corpo = ttk.Frame(janela, padding=20)
+        corpo.pack(fill="both", expand=True)
+        ttk.Label(corpo, text="Corrija o pedido", style="Titulo.TLabel", font=("Segoe UI", 16, "bold")).pack(anchor="w")
+        ttk.Label(
+            corpo, text="Edite, adicione ou exclua itens. O resultado anterior será preservado no relatório.",
+            style="Subtitulo.TLabel",
+        ).pack(anchor="w", pady=(3, 12))
+
+        colunas = ("item", "quantidade", "largura", "altura", "material", "acabamento")
+        tabela = ttk.Treeview(corpo, columns=colunas, show="headings", height=9)
+        titulos = ("Item", "Quantidade", "Largura (cm)", "Altura (cm)", "Material", "Acabamento")
+        larguras = (50, 90, 105, 105, 230, 160)
+        for coluna, titulo, largura in zip(colunas, titulos, larguras):
+            tabela.heading(coluna, text=titulo)
+            tabela.column(coluna, width=largura, anchor="center" if coluna != "material" else "w")
+        tabela.pack(fill="both", expand=True)
+
+        def atualizar_tabela() -> None:
+            for linha in tabela.get_children():
+                tabela.delete(linha)
+            for indice, item in enumerate(dados.get("itens", [])):
+                dim = item.get("dimensoes", {})
+                tabela.insert("", "end", iid=str(indice), values=(
+                    indice + 1, item.get("quantidade", {}).get("valor") or "",
+                    _numero((dim.get("largura_mm") or 0) / 10),
+                    _numero((dim.get("altura_mm") or 0) / 10),
+                    item.get("material", {}).get("valor") or "",
+                    item.get("acabamento", {}).get("valor") or "",
+                ))
+
+        def formulario_item(indice: int | None = None) -> None:
+            atual = dados["itens"][indice] if indice is not None else {}
+            editor = tk.Toplevel(janela)
+            editor.title("Editar item" if indice is not None else "Adicionar item")
+            editor.geometry("430x360")
+            editor.resizable(False, False)
+            editor.transient(janela)
+            editor.grab_set()
+            frame = ttk.Frame(editor, padding=20)
+            frame.pack(fill="both", expand=True)
+            dim = atual.get("dimensoes", {})
+            valores = {
+                "Quantidade": str(atual.get("quantidade", {}).get("valor") or 1),
+                "Largura (cm)": _numero((dim.get("largura_mm") or 0) / 10),
+                "Altura (cm)": _numero((dim.get("altura_mm") or 0) / 10),
+                "Material": atual.get("material", {}).get("valor") or "",
+                "Acabamento": atual.get("acabamento", {}).get("valor") or "",
+            }
+            variaveis: dict[str, tk.StringVar] = {}
+            for rotulo, valor in valores.items():
+                ttk.Label(frame, text=rotulo, style="Subtitulo.TLabel").pack(anchor="w")
+                variaveis[rotulo] = tk.StringVar(value=valor)
+                ttk.Entry(frame, textvariable=variaveis[rotulo]).pack(fill="x", pady=(3, 10))
+
+            def salvar_item() -> None:
+                try:
+                    quantidade = int(variaveis["Quantidade"].get())
+                    largura = float(variaveis["Largura (cm)"].get().replace(",", "."))
+                    altura = float(variaveis["Altura (cm)"].get().replace(",", "."))
+                    if quantidade <= 0 or largura <= 0 or altura <= 0:
+                        raise ValueError
+                except ValueError:
+                    messagebox.showwarning("Valores inválidos", "Use números maiores que zero para quantidade e tamanho.", parent=editor)
+                    return
+                item = deepcopy(atual) if atual else {}
+                item.update({
+                    "quantidade": {"valor": quantidade, "unidade": "unidade", "fonte": "correcao_operador", "confianca": 1.0},
+                    "dimensoes": {"largura_mm": largura * 10, "altura_mm": altura * 10, "tipo": "corrigido", "fonte": "correcao_operador", "confianca": 1.0},
+                    "material": {"valor": variaveis["Material"].get().strip() or None, "fonte": "correcao_operador", "confianca": 1.0},
+                    "acabamento": {"valor": variaveis["Acabamento"].get().strip() or None, "fonte": "correcao_operador", "confianca": 1.0},
+                })
+                if indice is None:
+                    dados.setdefault("itens", []).append(item)
+                else:
+                    dados["itens"][indice] = item
+                atualizar_tabela()
+                editor.destroy()
+
+            ttk.Button(frame, text="Salvar item", style="Primary.TButton", command=salvar_item).pack(anchor="e", pady=(4, 0))
+
+        def editar_selecionado() -> None:
+            selecionado = tabela.selection()
+            if selecionado:
+                formulario_item(int(selecionado[0]))
+            else:
+                messagebox.showinfo("Selecione um item", "Selecione a linha que deseja editar.", parent=janela)
+
+        def excluir_selecionado() -> None:
+            selecionado = tabela.selection()
+            if not selecionado:
+                return
+            del dados["itens"][int(selecionado[0])]
+            atualizar_tabela()
+
+        botoes = ttk.Frame(corpo, padding=(0, 10, 0, 0))
+        botoes.pack(fill="x")
+        ttk.Button(botoes, text="Editar item", command=editar_selecionado).pack(side="left")
+        ttk.Button(botoes, text="Adicionar item", command=lambda: formulario_item()).pack(side="left", padx=6)
+        ttk.Button(botoes, text="Excluir item", command=excluir_selecionado).pack(side="left")
+        ttk.Label(corpo, text="Observação para o diagnóstico", style="Subtitulo.TLabel").pack(anchor="w", pady=(12, 3))
+        var_observacao = tk.StringVar()
+        ttk.Entry(corpo, textvariable=var_observacao).pack(fill="x")
+
+        def finalizar() -> None:
+            correto = normalizar_resultado_corrigido(dados)
+            self._mostrar_resultado(correto)
+            janela.destroy()
+            self._salvar_feedback(correto, "corrigido", var_observacao.get())
+
+        ttk.Button(corpo, text="Finalizar correção e gerar relatório", style="Primary.TButton", command=finalizar).pack(anchor="e", pady=(12, 0))
+        tabela.bind("<Double-1>", lambda _evento: editar_selecionado())
+        atualizar_tabela()
 
     def exportar(self) -> None:
         if self.resultado is None or self.arquivo is None:
