@@ -19,7 +19,7 @@ from .configuracao import (
     salvar_configuracao,
 )
 from .pedido import interpretar_pedido
-from .relatorios import gerar_pacote_diagnostico, normalizar_resultado_corrigido
+from .relatorios import VERSAO_APLICACAO, gerar_pacote_diagnostico, normalizar_resultado_corrigido
 from .modelos_locais import (
     NOME_MODELO,
     TAMANHO_TOTAL_MODELOS,
@@ -52,9 +52,9 @@ def _numero(valor: float) -> str:
 class AplicacaoPedido:
     def __init__(self, raiz: tk.Tk):
         self.raiz = raiz
-        self.raiz.title("Leitor de pedidos CDR")
-        self.raiz.geometry("1020x740")
-        self.raiz.minsize(880, 640)
+        self.raiz.title(f"Leitor de pedidos CDR v{VERSAO_APLICACAO}")
+        self.raiz.geometry("1020x700")
+        self.raiz.minsize(880, 620)
         self.raiz.configure(bg=COR_FUNDO)
         self.resultado: dict | None = None
         self.resultado_original: dict | None = None
@@ -128,6 +128,28 @@ class AplicacaoPedido:
         self.rotulo_status.grid(row=1, column=0, sticky="w", pady=(5, 0))
         self.progresso = ttk.Progressbar(resumo, mode="indeterminate", length=160)
 
+        revisao = ttk.Frame(conteudo, padding=(0, 0, 0, 10))
+        revisao.pack(fill="x")
+        self.var_incluir_cdr = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            revisao, text="Incluir CDR no diagnóstico", variable=self.var_incluir_cdr,
+        ).pack(side="left")
+        self.botao_exportar = ttk.Button(
+            revisao, text="Exportar JSON", style="Secondary.TButton",
+            command=self.exportar, state="disabled",
+        )
+        self.botao_exportar.pack(side="right")
+        self.botao_corrigir = ttk.Button(
+            revisao, text="Corrigir resultado", style="Secondary.TButton",
+            command=self.corrigir_resultado, state="disabled",
+        )
+        self.botao_corrigir.pack(side="right", padx=(0, 8))
+        self.botao_confirmar = ttk.Button(
+            revisao, text="Confirmar correto", style="Primary.TButton",
+            command=self.confirmar_resultado, state="disabled",
+        )
+        self.botao_confirmar.pack(side="right", padx=(0, 8))
+
         tabela_card = ttk.Frame(conteudo, style="Card.TFrame", padding=1)
         tabela_card.pack(fill="both", expand=True)
         colunas = ("item", "quantidade", "tamanho", "material", "acabamento", "confianca")
@@ -148,23 +170,7 @@ class AplicacaoPedido:
         rodape = ttk.Frame(conteudo, padding=(0, 14, 0, 0))
         rodape.pack(fill="x")
         self.rotulo_alertas = ttk.Label(rodape, text="", style="Subtitulo.TLabel")
-        self.rotulo_alertas.pack(fill="x", pady=(0, 8))
-        acoes = ttk.Frame(rodape)
-        acoes.pack(fill="x")
-        self.var_incluir_cdr = tk.BooleanVar(value=False)
-        ttk.Checkbutton(acoes, text="Incluir CDR no pacote de diagnóstico", variable=self.var_incluir_cdr).pack(side="left")
-        self.botao_exportar = ttk.Button(acoes, text="Exportar JSON", style="Secondary.TButton", command=self.exportar, state="disabled")
-        self.botao_exportar.pack(side="right")
-        self.botao_corrigir = ttk.Button(
-            acoes, text="Corrigir resultado", style="Secondary.TButton",
-            command=self.corrigir_resultado, state="disabled",
-        )
-        self.botao_corrigir.pack(side="right", padx=(0, 8))
-        self.botao_confirmar = ttk.Button(
-            acoes, text="Confirmar correto", style="Primary.TButton",
-            command=self.confirmar_resultado, state="disabled",
-        )
-        self.botao_confirmar.pack(side="right", padx=(0, 8))
+        self.rotulo_alertas.pack(fill="x")
 
     def procurar(self) -> None:
         caminho = filedialog.askopenfilename(title="Escolha o pedido", filetypes=[("CorelDRAW", "*.cdr"), ("Todos os arquivos", "*.*")])
