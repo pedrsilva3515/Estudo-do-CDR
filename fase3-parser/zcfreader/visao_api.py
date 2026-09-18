@@ -126,11 +126,11 @@ def analisar_com_openai(caminho: Path, resultado_estrutural: dict | None, chave:
         text={"format": {"type": "json_schema", "name": "pedido_cdr_v07", "strict": True, "schema": _schema_resposta()}},
         max_output_tokens=2600,
     )
-    resultado = normalizar_mapa_visual(json.loads(resposta.output_text))
+    resultado = json.loads(resposta.output_text)
     resultado["_imagem_origem"] = _origem
     resultado["_ocr_visual"] = ocr_visual
     resultado["_fase"] = fase
-    return resultado
+    return incorporar_instrucoes_ocr(normalizar_mapa_visual(resultado))
 
 
 def precisa_adjudicacao(resultado_estrutural: dict, mapa_visual: dict) -> bool:
@@ -179,6 +179,38 @@ def normalizar_mapa_visual(mapa: dict) -> dict:
     return mapa
 
 
+def incorporar_instrucoes_ocr(mapa: dict) -> dict:
+    """Transforma instruções completas do OCR que a IA omitiu em hipóteses obrigatórias."""
+    from .pedido import parse_dimensoes, parse_quantidade
+
+    itens = mapa.setdefault("itens", [])
+    chaves = {
+        (item.get("quantidade"), item.get("largura_cm"), item.get("altura_cm"))
+        for item in itens
+    }
+    orfas = []
+    for leitura in mapa.get("_ocr_visual") or []:
+        texto = leitura.get("texto", "")
+        quantidade = parse_quantidade(texto)
+        dimensoes = parse_dimensoes(texto)
+        if not quantidade or not dimensoes:
+            continue
+        chave = (quantidade[0], dimensoes["largura_mm"] / 10, dimensoes["altura_mm"] / 10)
+        if chave in chaves:
+            continue
+        itens.append({
+            "indice": len(itens) + 1, "quantidade": chave[0],
+            "largura_cm": chave[1], "altura_cm": chave[2],
+            "material": None, "acabamento": None, "evidencia": texto,
+            "confianca": min(0.95, float(leitura.get("confianca") or 0.8)),
+            "fonte": "ocr_orfao",
+        })
+        chaves.add(chave)
+        orfas.append(texto)
+    mapa["_instrucoes_ocr_orfas"] = orfas
+    return mapa
+
+
 def _item_visual(proposta: dict, indice: int, fonte: str) -> dict:
     confianca = float(proposta.get("confianca") or 0)
     largura, altura = proposta.get("largura_cm"), proposta.get("altura_cm")
@@ -207,14 +239,18 @@ def reconciliar_analise_visual(resultado: dict, visual: dict, fonte: str = "visa
     # O inventário visual é deliberadamente redundante: modelos pequenos podem
     # transcrever corretamente uma legenda e ainda omiti-la da lista final.
     chaves = {(p.get("quantidade"), p.get("largura_cm"), p.get("altura_cm")) for p in propostas}
-    for instrucao in visual.get("instrucoes_visuais") or []:
-        chave = (instrucao.get("quantidade"), instrucao.get("largura_cm"), instrucao.get("altura_cm"))
-        if all(chave) and chave not in chaves:
-            propostas.append({
-                "indice": len(propostas) + 1, **{k: instrucao.get(k) for k in ("quantidade", "largura_cm", "altura_cm")},
-                "material": None, "acabamento": None, "evidencia": instrucao.get("texto"), "confianca": 0.8,
-            })
-            chaves.add(chave)
+    # A lista adjudicada é a saída principal do modelo. A seção auxiliar só é
+    # promovida quando o modelo não produziu item algum; caso contrário, pode
+    # duplicar peças ou converter textos internos da arte em novos pedidos.
+    if not propostas:
+        for instrucao in visual.get("instrucoes_visuais") or []:
+            chave = (instrucao.get("quantidade"), instrucao.get("largura_cm"), instrucao.get("altura_cm"))
+            if all(chave) and chave not in chaves:
+                propostas.append({
+                    "indice": len(propostas) + 1, **{k: instrucao.get(k) for k in ("quantidade", "largura_cm", "altura_cm")},
+                    "material": None, "acabamento": None, "evidencia": instrucao.get("texto"), "confianca": 0.8,
+                })
+                chaves.add(chave)
     from .pedido import parse_dimensoes, parse_quantidade
     for leitura in visual.get("_ocr_visual") or []:
         quantidade = parse_quantidade(leitura.get("texto", ""))
@@ -231,10 +267,11 @@ def reconciliar_analise_visual(resultado: dict, visual: dict, fonte: str = "visa
         })
         chaves.add(chave)
     estado = visual.get("estrutura_confere", "incerto")
+    divergencia_objetiva = len(propostas) != len(resultado.get("itens") or [])
     substituir = bool(
         visual.get("_fase") != "mapa_visual_inicial"
         and
-        estado == "nao" and propostas
+        (estado == "nao" or visual.get("_instrucoes_ocr_orfas") or divergencia_objetiva) and propostas
         and all(_proposta_completa(p) and float(p.get("confianca") or 0) >= 0.65 for p in propostas)
     )
     if substituir:
@@ -244,6 +281,11 @@ def reconciliar_analise_visual(resultado: dict, visual: dict, fonte: str = "visa
             "codigo": "ESTRUTURA_RECONSTRUIDA_PELA_VISAO", "severidade": "revisao",
             "mensagem": "A leitura visual encontrou outra composição; confirme os itens reconstruídos.",
         })
+        if visual.get("_instrucoes_ocr_orfas"):
+            resultado.setdefault("alertas", []).append({
+                "codigo": "ITEM_RECUPERADO_DE_OCR_ORFAO", "severidade": "revisao",
+                "mensagem": "Uma instrução completa lida pelo OCR não possuía item correspondente e foi recuperada.",
+            })
     else:
         por_indice = {p.get("indice"): p for p in propostas}
         for item in resultado.get("itens", []):

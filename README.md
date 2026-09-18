@@ -71,6 +71,15 @@ de produtos divergem. O reconciliador entende instruções regionais como
 `30 UNI DE CADA`, descarta curvas abertas usadas como colchetes e padroniza as
 unidades antes de comparar as leituras.
 
+Na 0.7.2, toda linha do OCR que contenha simultaneamente quantidade e dimensões
+passa a ser uma hipótese obrigatória quando não possui item correspondente no
+mapa da IA. Ela força a adjudicação e pode recuperar textos convertidos em
+curvas, como `4 UN (46,5X9)`. Na segunda passagem, uma diferença objetiva entre
+o número de itens completos prevalece sobre um rótulo contraditório da IA como
+`estrutura_confere: sim`. A seção auxiliar de instruções não é somada quando a
+lista adjudicada já existe, evitando duplicações e falsos itens extraídos do
+conteúdo interno da arte.
+
 O harness de regressão pode ser executado sobre os pacotes revisados:
 
 ```powershell

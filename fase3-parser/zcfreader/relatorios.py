@@ -13,7 +13,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from .visao_api import extrair_preview
 
 
-VERSAO_APLICACAO = "0.7.1"
+VERSAO_APLICACAO = "0.7.2"
 
 
 def pasta_relatorios() -> Path:

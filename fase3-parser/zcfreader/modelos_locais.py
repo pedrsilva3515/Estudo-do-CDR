@@ -12,7 +12,7 @@ from typing import Callable
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
-from .visao_api import _schema_resposta, extrair_imagem_analise, normalizar_mapa_visual, prompt_analise_visual, prompt_mapa_visual
+from .visao_api import _schema_resposta, extrair_imagem_analise, incorporar_instrucoes_ocr, normalizar_mapa_visual, prompt_analise_visual, prompt_mapa_visual
 from .ocr import executar_ocr
 
 
@@ -260,8 +260,8 @@ def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict | None, 
     if processo.returncode != 0:
         detalhe = (processo.stderr or processo.stdout).strip()[-1200:]
         raise RuntimeError("Falha ao executar o modelo local. " + detalhe)
-    resposta = normalizar_mapa_visual(_extrair_json(processo.stdout))
+    resposta = _extrair_json(processo.stdout)
     resposta["_imagem_origem"] = origem_imagem
     resposta["_ocr_visual"] = ocr_visual
     resposta["_fase"] = fase
-    return resposta
+    return incorporar_instrucoes_ocr(normalizar_mapa_visual(resposta))

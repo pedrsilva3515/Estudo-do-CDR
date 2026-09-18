@@ -8,7 +8,7 @@ from pathlib import Path
 _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent))
 
-from zcfreader.visao_api import mesclar_analise_visual, normalizar_mapa_visual, precisa_adjudicacao  # noqa: E402
+from zcfreader.visao_api import incorporar_instrucoes_ocr, mesclar_analise_visual, normalizar_mapa_visual, precisa_adjudicacao  # noqa: E402
 
 
 class TestMesclagemVisual(unittest.TestCase):
@@ -112,6 +112,96 @@ class TestMesclagemVisual(unittest.TestCase):
         ]}
         normalizar_mapa_visual(mapa)
         self.assertEqual([i["quantidade"] for i in mapa["itens"]], [30, 30, 60])
+
+    def test_ocr_orfao_entra_no_mapa_e_forca_adjudicacao(self):
+        mapa = {
+            "itens": [
+                {"indice": 1, "quantidade": 4, "largura_cm": 37, "altura_cm": 24.5, "confianca": .9},
+                {"indice": 2, "quantidade": 12, "largura_cm": 46.5, "altura_cm": 9, "confianca": .9},
+            ],
+            "_ocr_visual": [{"texto": "4 UN (46,5X9)", "confianca": .99}],
+        }
+        estrutural = {"itens": [{}, {}]}
+
+        incorporar_instrucoes_ocr(mapa)
+
+        self.assertEqual(len(mapa["itens"]), 3)
+        self.assertEqual(mapa["itens"][2]["quantidade"], 4)
+        self.assertEqual(mapa["itens"][2]["largura_cm"], 46.5)
+        self.assertEqual(mapa["_instrucoes_ocr_orfas"], ["4 UN (46,5X9)"])
+        self.assertTrue(precisa_adjudicacao(estrutural, mapa))
+
+    def test_adjudicacao_recupera_item_omitido_mesmo_se_modelo_diz_estrutura_confere(self):
+        resultado = {
+            "itens": [
+                {"indice": 1, "quantidade": {"valor": 4}, "dimensoes": {"largura_mm": 370, "altura_mm": 245}, "material": {"valor": None}, "acabamento": {"valor": None}},
+                {"indice": 2, "quantidade": {"valor": 12}, "dimensoes": {"largura_mm": 465, "altura_mm": 90}, "material": {"valor": None}, "acabamento": {"valor": None}},
+            ],
+            "alertas": [],
+        }
+        visual = {
+            "_fase": "adjudicacao", "estrutura_confere": "sim", "documento_misto": False,
+            "instrucoes_visuais": [], "observacoes": [],
+            "itens": [
+                {"indice": 1, "quantidade": 4, "largura_cm": 37, "altura_cm": 24.5, "material": None, "acabamento": None, "evidencia": "4 UN (37X24,5 CM)", "confianca": .9},
+                {"indice": 2, "quantidade": 12, "largura_cm": 46.5, "altura_cm": 9, "material": None, "acabamento": None, "evidencia": "12 UN (46,5X9 CM)", "confianca": .9},
+            ],
+            "_ocr_visual": [{"texto": "4 UN (46,5X9)", "confianca": .99}],
+        }
+
+        incorporar_instrucoes_ocr(visual)
+        mesclar_analise_visual(resultado, visual, fonte="modelo_local")
+
+        self.assertEqual(len(resultado["itens"]), 3)
+        self.assertEqual(resultado["total_unidades"], 20)
+        self.assertEqual(resultado["itens"][2]["dimensoes"]["altura_mm"], 90)
+        self.assertIn("ITEM_RECUPERADO_DE_OCR_ORFAO", [a["codigo"] for a in resultado["alertas"]])
+
+    def test_adjudicacao_prioriza_contagem_completa_sobre_rotulo_contraditorio(self):
+        resultado = {
+            "itens": [
+                {"indice": 1, "quantidade": {"valor": 4}, "dimensoes": {"largura_mm": 370, "altura_mm": 245}, "material": {"valor": None}, "acabamento": {"valor": None}},
+                {"indice": 2, "quantidade": {"valor": 12}, "dimensoes": {"largura_mm": 465, "altura_mm": 90}, "material": {"valor": None}, "acabamento": {"valor": None}},
+            ],
+            "alertas": [],
+        }
+        visual = {
+            "_fase": "adjudicacao", "estrutura_confere": "sim", "documento_misto": False,
+            "observacoes": [],
+            "itens": [
+                {"indice": 1, "quantidade": 4, "largura_cm": 37, "altura_cm": 24.5, "material": None, "acabamento": None, "evidencia": "4 UN (37X24,5 CM)", "confianca": .9},
+                {"indice": 2, "quantidade": 4, "largura_cm": 46.5, "altura_cm": 9, "material": None, "acabamento": None, "evidencia": "4 UN (46,5X9)", "confianca": .9},
+                {"indice": 3, "quantidade": 12, "largura_cm": 46.5, "altura_cm": 9, "material": None, "acabamento": None, "evidencia": "12 UN (46,5X9 CM)", "confianca": .9},
+            ],
+        }
+
+        mesclar_analise_visual(resultado, visual, fonte="modelo_local")
+
+        self.assertEqual(len(resultado["itens"]), 3)
+        self.assertEqual(resultado["total_unidades"], 20)
+
+    def test_instrucoes_auxiliares_nao_duplicam_lista_adjudicada(self):
+        resultado = {
+            "itens": [{"indice": 1, "quantidade": {"valor": 4}, "dimensoes": {"largura_mm": 370, "altura_mm": 245}, "material": {"valor": None}, "acabamento": {"valor": None}}],
+            "alertas": [],
+        }
+        visual = {
+            "_fase": "adjudicacao", "estrutura_confere": "nao", "observacoes": [],
+            "itens": [
+                {"indice": 1, "quantidade": 4, "largura_cm": 37, "altura_cm": 24.5, "material": None, "acabamento": None, "evidencia": "4 UN", "confianca": .9},
+                {"indice": 2, "quantidade": 4, "largura_cm": 46.5, "altura_cm": 9, "material": None, "acabamento": None, "evidencia": "4 UN", "confianca": .9},
+                {"indice": 3, "quantidade": 12, "largura_cm": 46.5, "altura_cm": 9, "material": None, "acabamento": None, "evidencia": "12 UN", "confianca": .9},
+            ],
+            "instrucoes_visuais": [
+                {"quantidade": 10, "largura_cm": 37, "altura_cm": 24.5, "texto": "interpretação auxiliar incorreta"},
+                {"quantidade": 10, "largura_cm": 90, "altura_cm": 28.7, "texto": "texto interno da arte"},
+            ],
+        }
+
+        mesclar_analise_visual(resultado, visual, fonte="modelo_local")
+
+        self.assertEqual(len(resultado["itens"]), 3)
+        self.assertEqual(resultado["total_unidades"], 20)
 
 
 if __name__ == "__main__":
