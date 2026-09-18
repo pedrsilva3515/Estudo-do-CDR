@@ -4,11 +4,13 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent))
 
-from zcfreader import interpretar_nome_arquivo, parse_material, parse_quantidade  # noqa: E402
+from zcfreader import interpretar_nome_arquivo, parse_dimensoes, parse_material, parse_quantidade  # noqa: E402
+from zcfreader.pedido import _itens_de_instrucoes_explicitas  # noqa: E402
 
 
 class TestQuantidade(unittest.TestCase):
@@ -44,6 +46,32 @@ class TestMaterial(unittest.TestCase):
 
     def test_texto_sem_material(self):
         self.assertIsNone(parse_material("14und"))
+
+    def test_vinil_transparente_no_nome(self):
+        self.assertEqual(
+            parse_material("VINIL TRANSPARENTE - ANMG 014"),
+            {"material": "adesivo transparente", "acabamento": None},
+        )
+
+
+class TestDimensoes(unittest.TestCase):
+    def test_quantidade_com_dimensoes_decimais(self):
+        resultado = parse_dimensoes("9 UN (23,4X18,4 CM)")
+        self.assertEqual(resultado["largura_mm"], 234)
+        self.assertEqual(resultado["altura_mm"], 184)
+
+    def test_instrucao_explicita_vira_um_unico_item_autoritativo(self):
+        origem = {
+            "valor": 9, "unidade": "unidade", "texto_origem": "9 UN (23,4X18,4 CM)",
+            "dimensoes": parse_dimensoes("9 UN (23,4X18,4 CM)"),
+            "objeto": SimpleNamespace(caixa=object()),
+        }
+        itens = _itens_de_instrucoes_explicitas([origem])
+        self.assertEqual(len(itens), 1)
+        self.assertEqual(itens[0]["quantidade"]["valor"], 9)
+        self.assertEqual(itens[0]["dimensoes"]["largura_mm"], 234)
+        self.assertEqual(itens[0]["dimensoes"]["altura_mm"], 184)
+        self.assertEqual(itens[0]["dimensoes"]["fonte"], "texto_cdr")
 
 
 class TestNomeArquivo(unittest.TestCase):

@@ -54,7 +54,7 @@ from .structure import (
     SubcaminhoCurva,
 )
 from .text import EstiloTexto, FluxoTexto, FormatoTextoInvalido, TextoEstruturado, TrechoTexto
-from .pedido import interpretar_nome_arquivo, interpretar_pedido, parse_material, parse_quantidade
+from .pedido import interpretar_nome_arquivo, interpretar_pedido, parse_dimensoes, parse_material, parse_quantidade
 
 __all__ = [
     "abrir_cdr",
@@ -97,5 +97,6 @@ __all__ = [
     "interpretar_pedido",
     "interpretar_nome_arquivo",
     "parse_material",
+    "parse_dimensoes",
     "parse_quantidade",
 ]

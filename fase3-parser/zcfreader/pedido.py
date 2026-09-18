@@ -34,7 +34,7 @@ def parse_quantidade(texto: str) -> tuple[int, str] | None:
 def parse_material(texto: str) -> dict | None:
     """Extrai material e acabamento de instruções usuais da gráfica."""
     normalizado = " ".join(texto.casefold().split())
-    if "adesivo" not in normalizado:
+    if "adesivo" not in normalizado and "vinil" not in normalizado:
         return None
     if "transparente" in normalizado:
         material = "adesivo transparente"
@@ -53,6 +53,26 @@ def parse_material(texto: str) -> dict | None:
     return {"material": material, "acabamento": acabamento}
 
 
+def parse_dimensoes(texto: str) -> dict | None:
+    """Reconhece dimensões explícitas como ``23,4 x 18,4 cm``."""
+    sem_acentos = "".join(
+        caractere for caractere in unicodedata.normalize("NFKD", texto.casefold())
+        if not unicodedata.combining(caractere)
+    )
+    dimensao = re.search(
+        r"(?<!\d)(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b",
+        sem_acentos,
+    )
+    if dimensao is None:
+        return None
+    fator = {"mm": 1.0, "cm": 10.0, "m": 1000.0}[dimensao.group(3)]
+    return {
+        "largura_mm": float(dimensao.group(1).replace(",", ".")) * fator,
+        "altura_mm": float(dimensao.group(2).replace(",", ".")) * fator,
+        "texto_origem": dimensao.group(0),
+    }
+
+
 def interpretar_nome_arquivo(nome: str) -> dict:
     """Extrai somente evidências explícitas do nome, sempre com baixa prioridade."""
     base = Path(nome).stem
@@ -63,18 +83,7 @@ def interpretar_nome_arquivo(nome: str) -> dict:
     )
     material = parse_material(sem_acentos)
     quantidade = parse_quantidade(sem_acentos)
-    dimensao = re.search(
-        r"(?<!\d)(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b",
-        sem_acentos,
-    )
-    dimensoes = None
-    if dimensao:
-        fator = {"mm": 1.0, "cm": 10.0, "m": 1000.0}[dimensao.group(3)]
-        dimensoes = {
-            "largura_mm": float(dimensao.group(1).replace(",", ".")) * fator,
-            "altura_mm": float(dimensao.group(2).replace(",", ".")) * fator,
-            "texto_origem": dimensao.group(0),
-        }
+    dimensoes = parse_dimensoes(sem_acentos)
     return {"texto": texto, "material": material, "quantidade": quantidade, "dimensoes": dimensoes}
 
 
@@ -131,6 +140,7 @@ def _textos_quantidade(doc) -> list[dict]:
         encontrados.append({
             "valor": quantidade[0], "unidade": quantidade[1],
             "texto_origem": item.fluxo.texto, "objeto": item.objeto,
+            "dimensoes": parse_dimensoes(item.fluxo.texto),
         })
     return encontrados
 
@@ -319,6 +329,31 @@ def _consolidar_mesmo_tamanho(itens: list[dict]) -> list[dict]:
     return resultado
 
 
+def _itens_de_instrucoes_explicitas(quantidades: list[dict]) -> list[dict]:
+    """Transforma linhas com quantidade+tamanho em itens autoritativos."""
+    itens = []
+    for origem in (item for item in quantidades if item.get("dimensoes")):
+        dimensoes = origem["dimensoes"]
+        itens.append({
+            "indice": len(itens) + 1,
+            "quantidade": {
+                "valor": origem["valor"], "unidade": origem["unidade"],
+                "texto_origem": origem["texto_origem"], "fonte": "texto_cdr", "confianca": 1.0,
+            },
+            "dimensoes": {
+                "largura_mm": dimensoes["largura_mm"], "altura_mm": dimensoes["altura_mm"],
+                "tipo": "pedido_explicito", "fonte": "texto_cdr", "confianca": 1.0,
+                "texto_origem": dimensoes["texto_origem"],
+            },
+            "componentes": [],
+            "material": {"valor": None, "fonte": None, "confianca": 0.0},
+            "acabamento": {"valor": None, "fonte": None, "confianca": 0.0},
+            "evidencia_geometrica": "texto_com_quantidade_e_dimensoes",
+            "_caixa": origem["objeto"].caixa,
+        })
+    return itens
+
+
 def interpretar_pedido(caminho) -> dict:
     """Gera o contrato JSON auditável de um pedido em CDR."""
     caminho = Path(caminho)
@@ -332,37 +367,40 @@ def interpretar_pedido(caminho) -> dict:
         associacoes = _associar_um_a_um(candidatos, quantidades)
         instancias = [item for item in doc.instancias_bitmaps() if item.objeto is not None and item.objeto.caixa is not None]
 
-        itens = []
-        for indice_candidato, candidato in enumerate(candidatos):
-            indice_quantidade = associacoes.get(indice_candidato)
-            if indice_quantidade is None:
-                quantidade = {
-                    "valor": 1, "unidade": "unidade", "texto_origem": None,
-                    "fonte": "contagem_de_composicoes", "confianca": 0.85,
-                }
-            else:
-                origem = quantidades[indice_quantidade]
-                quantidade = {
-                    "valor": origem["valor"], "unidade": origem["unidade"],
-                    "texto_origem": origem["texto_origem"], "fonte": "texto_cdr", "confianca": 1.0,
-                }
-            componentes_instancia = [
-                instancia for instancia in instancias
-                if _area_intersecao(candidato["caixa"], instancia.objeto.caixa) / max(1, _area(instancia.objeto.caixa)) > 0.5
-            ]
-            itens.append({
-                "indice": len(itens) + 1,
-                "quantidade": quantidade,
-                "dimensoes": {
-                    "largura_mm": candidato["largura_mm"], "altura_mm": candidato["altura_mm"],
-                    "tipo": "contorno_externo", "fonte": "geometria_cdr", "confianca": 0.9,
-                },
-                "componentes": _dimensoes_componentes(componentes_instancia),
-                "material": {"valor": None, "fonte": None, "confianca": 0.0},
-                "acabamento": {"valor": None, "fonte": None, "confianca": 0.0},
-                "evidencia_geometrica": candidato["tipo"],
-                "_caixa": candidato["caixa"],
-            })
+        itens = _itens_de_instrucoes_explicitas(quantidades)
+        # Uma linha contendo quantidade e tamanho é evidência direta do pedido.
+        # Curvas externas podem ser apenas partes internas da mesma arte.
+        if not itens:
+            for indice_candidato, candidato in enumerate(candidatos):
+                indice_quantidade = associacoes.get(indice_candidato)
+                if indice_quantidade is None:
+                    quantidade = {
+                        "valor": 1, "unidade": "unidade", "texto_origem": None,
+                        "fonte": "contagem_de_composicoes", "confianca": 0.85,
+                    }
+                else:
+                    origem = quantidades[indice_quantidade]
+                    quantidade = {
+                        "valor": origem["valor"], "unidade": origem["unidade"],
+                        "texto_origem": origem["texto_origem"], "fonte": "texto_cdr", "confianca": 1.0,
+                    }
+                componentes_instancia = [
+                    instancia for instancia in instancias
+                    if _area_intersecao(candidato["caixa"], instancia.objeto.caixa) / max(1, _area(instancia.objeto.caixa)) > 0.5
+                ]
+                itens.append({
+                    "indice": len(itens) + 1,
+                    "quantidade": quantidade,
+                    "dimensoes": {
+                        "largura_mm": candidato["largura_mm"], "altura_mm": candidato["altura_mm"],
+                        "tipo": "contorno_externo", "fonte": "geometria_cdr", "confianca": 0.9,
+                    },
+                    "componentes": _dimensoes_componentes(componentes_instancia),
+                    "material": {"valor": None, "fonte": None, "confianca": 0.0},
+                    "acabamento": {"valor": None, "fonte": None, "confianca": 0.0},
+                    "evidencia_geometrica": candidato["tipo"],
+                    "_caixa": candidato["caixa"],
+                })
 
         _aplicar_materiais(itens, instrucoes)
         _aplicar_nome_arquivo(itens, evidencia_nome)
