@@ -64,6 +64,23 @@ temporária para renderizar os objetos em alta resolução. O documento não é
 salvo nem alterado. Sem CorelDRAW, o processamento continua usando o preview
 embutido no CDR, com a limitação de resolução registrada no diagnóstico.
 
+Na 0.7.1, a ordem passou a ser visual primeiro: o modelo cria um mapa sem
+receber candidatos geométricos; em seguida o parser mede o CDR de forma
+independente. Uma segunda consulta à IA só ocorre quando quantidade ou número
+de produtos divergem. O reconciliador entende instruções regionais como
+`30 UNI DE CADA`, descarta curvas abertas usadas como colchetes e padroniza as
+unidades antes de comparar as leituras.
+
+O harness de regressão pode ser executado sobre os pacotes revisados:
+
+```powershell
+$env:PYTHONPATH="fase3-parser"
+python scripts/avaliar_relatorios.py "$env:USERPROFILE\Documents\LeitorPedidosCDR\Relatorios"
+```
+
+Ele compara itens sem depender da ordem da tabela e mede quantidade, dimensões,
+material, acabamento, total de unidades e correspondência integral.
+
 ### Revisão e diagnóstico
 
 Depois de cada análise, a interface permite confirmar o resultado ou corrigir,

@@ -10,7 +10,7 @@ _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent))
 
 from zcfreader import interpretar_nome_arquivo, parse_dimensoes, parse_material, parse_quantidade  # noqa: E402
-from zcfreader.pedido import _itens_de_instrucoes_explicitas  # noqa: E402
+from zcfreader.pedido import _associar_um_a_um, _itens_de_instrucoes_explicitas  # noqa: E402
 
 
 class TestQuantidade(unittest.TestCase):
@@ -21,6 +21,8 @@ class TestQuantidade(unittest.TestCase):
             ("3 unidades", 3),
             ("qtd: 5", 5),
             ("Quantidade = 12", 12),
+            ("30 UNI DE CADA", 30),
+            ("60 UNI", 60),
         ):
             with self.subTest(texto=texto):
                 self.assertEqual(parse_quantidade(texto), (esperado, "unidade"))
@@ -81,6 +83,22 @@ class TestDimensoes(unittest.TestCase):
     def test_sem_unidade_exige_contexto_de_quantidade(self):
         self.assertEqual(parse_dimensoes("4 UN (46,5 X 9)")["largura_mm"], 465)
         self.assertIsNone(parse_dimensoes("telefone 46,5 x 9"))
+
+    def test_de_cada_e_associado_a_todas_as_pecas_da_regiao(self):
+        def caixa(esquerda, base, direita, topo):
+            return SimpleNamespace(esquerda=esquerda, base=base, direita=direita, topo=topo)
+        candidatos = [
+            {"caixa": caixa(-390_0000, -150_0000, -110_0000, 180_0000)},
+            {"caixa": caixa(-100_0000, -760_0000, 140_0000, 180_0000)},
+            {"caixa": caixa(300_0000, -70_0000, 500_0000, 180_0000)},
+        ]
+        referencias = [{
+            "texto_origem": "30 UNI DE CADA", "objeto": SimpleNamespace(
+                caixa=caixa(-395_0000, 265_0000, 125_0000, 315_0000)
+            ),
+        }]
+        associacoes = _associar_um_a_um(candidatos, referencias)
+        self.assertEqual(associacoes, {0: 0, 1: 0})
 
 
 class TestNomeArquivo(unittest.TestCase):

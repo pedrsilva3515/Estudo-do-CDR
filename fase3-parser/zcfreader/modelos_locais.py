@@ -12,7 +12,7 @@ from typing import Callable
 from urllib.request import Request, urlopen
 from zipfile import ZipFile
 
-from .visao_api import _schema_resposta, extrair_imagem_analise, prompt_analise_visual
+from .visao_api import _schema_resposta, extrair_imagem_analise, normalizar_mapa_visual, prompt_analise_visual, prompt_mapa_visual
 from .ocr import executar_ocr
 
 
@@ -176,10 +176,15 @@ def _evidencias_compactas(resultado: dict) -> dict:
     """Mantém apenas evidências úteis à visão, evitando estourar o contexto local."""
     itens = []
     for item in resultado.get("itens", []):
+        dimensoes = item.get("dimensoes") or {}
         itens.append({
             "indice": item.get("indice"),
             "quantidade": item.get("quantidade"),
-            "dimensoes": item.get("dimensoes"),
+            "dimensoes_cm": {
+                "largura": (dimensoes.get("largura_mm") / 10) if dimensoes.get("largura_mm") is not None else None,
+                "altura": (dimensoes.get("altura_mm") / 10) if dimensoes.get("altura_mm") is not None else None,
+                "fonte": dimensoes.get("fonte"), "confianca": dimensoes.get("confianca"),
+            },
             "material": item.get("material"),
             "acabamento": item.get("acabamento"),
             "total_componentes": len(item.get("componentes", [])),
@@ -208,7 +213,7 @@ def _schema_resposta_local() -> dict:
     return schema
 
 
-def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict) -> dict:
+def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict | None, mapa_inicial: dict | None = None) -> dict:
     if not modelo_instalado():
         raise RuntimeError("O modelo local ainda não foi baixado. Abra 'Configurar IA' para instalá-lo.")
     preview = extrair_imagem_analise(caminho)
@@ -217,10 +222,17 @@ def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict) -> dict
     bytes_imagem, _, origem_imagem = preview
     ocr_visual = executar_ocr(bytes_imagem)
     caminhos = caminhos_instalacao()
-    evidencias = json.dumps(_evidencias_compactas(resultado_estrutural), ensure_ascii=False, separators=(",", ":"))
-    evidencias_dict = json.loads(evidencias)
-    evidencias_dict["ocr_visual"] = ocr_visual
-    prompt = prompt_analise_visual(evidencias_dict) + (
+    if resultado_estrutural is None:
+        prompt_base = prompt_mapa_visual(caminho.name, ocr_visual)
+        fase = "mapa_visual_inicial"
+    else:
+        evidencias_dict = _evidencias_compactas(resultado_estrutural)
+        evidencias_dict["ocr_visual"] = ocr_visual
+        if mapa_inicial is not None:
+            evidencias_dict["mapa_visual_inicial"] = mapa_inicial
+        prompt_base = prompt_analise_visual(evidencias_dict)
+        fase = "adjudicacao"
+    prompt = prompt_base + (
         f" Fonte da imagem: {origem_imagem}. Seja conciso, use observacoes como lista vazia e responda somente com o JSON solicitado."
     )
     with tempfile.TemporaryDirectory(prefix="cdr-pedido-") as pasta:
@@ -248,7 +260,8 @@ def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict) -> dict
     if processo.returncode != 0:
         detalhe = (processo.stderr or processo.stdout).strip()[-1200:]
         raise RuntimeError("Falha ao executar o modelo local. " + detalhe)
-    resposta = _extrair_json(processo.stdout)
+    resposta = normalizar_mapa_visual(_extrair_json(processo.stdout))
     resposta["_imagem_origem"] = origem_imagem
     resposta["_ocr_visual"] = ocr_visual
+    resposta["_fase"] = fase
     return resposta

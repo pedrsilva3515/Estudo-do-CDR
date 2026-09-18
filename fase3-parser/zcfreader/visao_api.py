@@ -84,29 +84,99 @@ def prompt_analise_visual(resultado_estrutural: dict) -> str:
     )
 
 
-def analisar_com_openai(caminho: Path, resultado_estrutural: dict, chave: str, modelo: str) -> dict:
+def prompt_mapa_visual(nome_arquivo: str, ocr_visual: list[dict]) -> str:
+    """Primeira leitura deliberadamente independente, para evitar ancoragem."""
+    ocr = json.dumps(ocr_visual, ensure_ascii=False, separators=(",", ":"))
+    return (
+        "Faça uma primeira leitura independente deste pedido de gráfica. Você NÃO recebeu candidatos nem "
+        "geometria do CDR. Conte apenas produtos/peças imprimíveis; linhas, colchetes, molduras e textos são "
+        "instruções ou auxiliares, não produtos. Percorra a página de cima para baixo e da esquerda para a "
+        "direita. Associe cabeçalhos de material e legendas de quantidade às peças abaixo. 'N DE CADA' aplica "
+        "N unidades a cada peça distinta dentro da região indicada. Não estime dimensões pela aparência: use "
+        "null quando elas não estiverem escritas. Retorne um item para cada produto distinto e descreva sua "
+        "posição em evidencia. Como não há estrutura para conferir, use estrutura_confere='incerto'. "
+        f"Nome do arquivo (somente contexto): {nome_arquivo}. OCR com posições: {ocr}"
+    )
+
+
+def analisar_com_openai(caminho: Path, resultado_estrutural: dict | None, chave: str, modelo: str, mapa_inicial: dict | None = None) -> dict:
     from openai import OpenAI
     preview = extrair_imagem_analise(caminho)
     if preview is None:
         raise RuntimeError("O CDR não contém um preview PNG utilizável pela análise visual.")
     bytes_imagem, mime, _origem = preview
     ocr_visual = executar_ocr(bytes_imagem)
-    evidencias = deepcopy(resultado_estrutural)
-    evidencias["ocr_visual"] = ocr_visual
+    if resultado_estrutural is None:
+        prompt = prompt_mapa_visual(caminho.name, ocr_visual)
+        fase = "mapa_visual_inicial"
+    else:
+        evidencias = deepcopy(resultado_estrutural)
+        evidencias["ocr_visual"] = ocr_visual
+        if mapa_inicial is not None:
+            evidencias["mapa_visual_inicial"] = mapa_inicial
+        prompt = prompt_analise_visual(evidencias)
+        fase = "adjudicacao"
     url_imagem = f"data:{mime};base64,{base64.b64encode(bytes_imagem).decode('ascii')}"
     resposta = OpenAI(api_key=chave).responses.create(
         model=modelo, store=False,
         input=[{"role": "user", "content": [
-            {"type": "input_text", "text": prompt_analise_visual(evidencias)},
+            {"type": "input_text", "text": prompt},
             {"type": "input_image", "image_url": url_imagem, "detail": "high"},
         ]}],
         text={"format": {"type": "json_schema", "name": "pedido_cdr_v07", "strict": True, "schema": _schema_resposta()}},
         max_output_tokens=2600,
     )
-    resultado = json.loads(resposta.output_text)
+    resultado = normalizar_mapa_visual(json.loads(resposta.output_text))
     resultado["_imagem_origem"] = _origem
     resultado["_ocr_visual"] = ocr_visual
+    resultado["_fase"] = fase
     return resultado
+
+
+def precisa_adjudicacao(resultado_estrutural: dict, mapa_visual: dict) -> bool:
+    """Detecta divergência objetiva antes de gastar uma segunda chamada de IA."""
+    propostas = mapa_visual.get("itens") or []
+    itens = resultado_estrutural.get("itens") or []
+    if propostas and len(propostas) != len(itens):
+        return True
+    for estrutural, visual in zip(itens, propostas):
+        qtd_visual = visual.get("quantidade")
+        qtd_estrutural = estrutural.get("quantidade", {}).get("valor")
+        if qtd_visual and qtd_estrutural and qtd_visual != qtd_estrutural:
+            return True
+    return False
+
+
+def normalizar_mapa_visual(mapa: dict) -> dict:
+    """Converte contagem de desenhos em unidades quando a legenda é explícita."""
+    from .pedido import parse_material, parse_quantidade
+
+    normalizados = []
+    for item in mapa.get("itens") or []:
+        evidencia = str(item.get("evidencia") or "")
+        instrucao = parse_quantidade(evidencia)
+        atual = item.get("quantidade")
+        if instrucao and "de cada" in evidencia.casefold() and isinstance(atual, int) and 1 < atual <= 20 and atual != instrucao[0]:
+            for numero in range(atual):
+                copia = deepcopy(item)
+                copia["quantidade"] = instrucao[0]
+                copia["evidencia"] = f"{evidencia} — peça {numero + 1} de {atual}"
+                normalizados.append(copia)
+        else:
+            copia = deepcopy(item)
+            if instrucao:
+                copia["quantidade"] = instrucao[0]
+            normalizados.append(copia)
+    for item in normalizados:
+        material = parse_material(str(item.get("material") or ""))
+        if material:
+            item["material"] = material["material"]
+            if not item.get("acabamento") and material.get("acabamento"):
+                item["acabamento"] = material["acabamento"]
+    for indice, item in enumerate(normalizados, 1):
+        item["indice"] = indice
+    mapa["itens"] = normalizados
+    return mapa
 
 
 def _item_visual(proposta: dict, indice: int, fonte: str) -> dict:
@@ -162,6 +232,8 @@ def reconciliar_analise_visual(resultado: dict, visual: dict, fonte: str = "visa
         chaves.add(chave)
     estado = visual.get("estrutura_confere", "incerto")
     substituir = bool(
+        visual.get("_fase") != "mapa_visual_inicial"
+        and
         estado == "nao" and propostas
         and all(_proposta_completa(p) and float(p.get("confianca") or 0) >= 0.65 for p in propostas)
     )

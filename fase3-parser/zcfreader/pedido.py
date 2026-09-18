@@ -16,7 +16,7 @@ from .container import abrir_cdr
 
 _QUANTIDADE = re.compile(
     r"(?ix)(?:\bq(?:td|uantidade)?\s*[:=-]?\s*)?"
-    r"(?P<valor>\d+)\s*(?P<unidade>un(?:d|id(?:ade)?s?)?|u(?:n)?|x)\b"
+    r"(?P<valor>\d+)\s*(?P<unidade>uni|un(?:d|id(?:ade)?s?)?|u(?:n)?|x)\b"
 )
 
 
@@ -220,6 +220,10 @@ def _candidatos_arte(doc) -> list[dict]:
     externos = []
     prioridade = {"retangulo": 4, "desconhecido": 4, "bitmap": 3, "curva": 2}
     for objeto in limites:
+        # Curvas abertas costumam ser colchetes, linhas de agrupamento ou corte;
+        # não delimitam por si só a área fechada de um produto.
+        if objeto.tipo_objeto == "curva" and objeto.geometria_curva and objeto.geometria_curva.possui_subcaminho_aberto:
+            continue
         contenedores = [
             outro for outro in limites
             if outro is not objeto and _area(outro.caixa) > _area(objeto.caixa) * 1.05
@@ -274,6 +278,16 @@ def _associar_um_a_um(candidatos: list[dict], referencias: list[dict]) -> dict[i
         resultado[ci] = ri
         usados_candidatos.add(ci)
         usados_referencias.add(ri)
+    # "N de cada" é uma instrução de região, não uma relação um-para-um.
+    for ri, referencia in enumerate(referencias):
+        if not re.search(r"(?i)\bde\s+cada\b", referencia["texto_origem"]):
+            continue
+        caixa = referencia["objeto"].caixa
+        margem = max((caixa.direita - caixa.esquerda) * 0.08, 200_000)  # 20 mm
+        for ci, candidato in enumerate(candidatos):
+            centro_x, centro_y = _centro(candidato["caixa"])
+            if caixa.esquerda - margem <= centro_x <= caixa.direita + margem and centro_y < caixa.topo:
+                resultado[ci] = ri
     return resultado
 
 
@@ -321,8 +335,14 @@ def _aplicar_materiais(itens: list[dict], instrucoes: list[dict]) -> list[dict]:
         if indice in ocupados or not globais:
             continue
         instrucao = min(globais, key=lambda x: _distancia(item["_caixa"], x["objeto"].caixa))
+        caixa_instrucao = instrucao["objeto"].caixa
+        centros = [_centro(outro["_caixa"]) for outro in itens]
+        cabecalho_global = bool(centros) and all(
+            caixa_instrucao.esquerda <= x <= caixa_instrucao.direita and y < caixa_instrucao.topo
+            for x, y in centros
+        )
         explicita_global = bool(re.search(r"(?i)\b(todos?|todas?)\b", instrucao["texto_origem"]))
-        if len(itens) > 1 and not explicita_global:
+        if len(itens) > 1 and not (explicita_global or cabecalho_global):
             if instrucao not in ambiguas:
                 ambiguas.append(instrucao)
             continue

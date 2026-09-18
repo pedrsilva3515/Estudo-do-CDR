@@ -27,7 +27,7 @@ from .modelos_locais import (
     instalar_modelo,
     modelo_instalado,
 )
-from .visao_api import analisar_com_openai, mesclar_analise_visual
+from .visao_api import analisar_com_openai, mesclar_analise_visual, precisa_adjudicacao
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -344,30 +344,47 @@ class AplicacaoPedido:
     def _executar_analise(self, caminho: Path) -> None:
         try:
             inicio = perf_counter()
-            estrutural = interpretar_pedido(caminho)
-            resultado = deepcopy(estrutural)
-            visual = None
             modo = self.configuracao.get("modo", "estrutural")
-            # Na 0.7 a visão também audita agrupamento, quantidade e dimensões;
-            # portanto não depende mais de uma pendência estrutural prévia.
+            visual_inicial = adjudicacao = visual = None
+            provedor = None
+
+            # A primeira leitura visual acontece sem candidatos estruturais.
             if modo == "local" or (modo == "automatico" and modelo_instalado()):
-                visual = analisar_com_modelo_local(caminho, resultado)
-                resultado = mesclar_analise_visual(resultado, visual, fonte="modelo_local")
-                resultado["processamento"] = {"modo": modo, "provedor": "local", "modelo": NOME_MODELO}
+                provedor = "local"
+                visual_inicial = analisar_com_modelo_local(caminho, None)
             elif modo == "api" or modo == "automatico":
                 chave = obter_chave_openai()
                 if not chave:
                     raise RuntimeError(
-                        "O modo automático encontrou pendências, mas não há modelo local nem chave de API. "
+                        "O modo automático não encontrou modelo local nem chave de API. "
                         "Abra 'Configurar IA' para baixar o modelo ou informar uma chave."
                     )
-                visual = analisar_com_openai(caminho, resultado, chave, self.configuracao["modelo"])
-                resultado = mesclar_analise_visual(resultado, visual)
-                resultado["processamento"] = {"modo": modo, "provedor": "openai", "modelo": self.configuracao["modelo"]}
+                provedor = "openai"
+                visual_inicial = analisar_com_openai(caminho, None, chave, self.configuracao["modelo"])
+
+            estrutural = interpretar_pedido(caminho)
+            resultado = deepcopy(estrutural)
+            if visual_inicial is not None:
+                visual = visual_inicial
+                if precisa_adjudicacao(estrutural, visual_inicial):
+                    if provedor == "local":
+                        adjudicacao = analisar_com_modelo_local(caminho, estrutural, visual_inicial)
+                    else:
+                        chave = obter_chave_openai()
+                        adjudicacao = analisar_com_openai(caminho, estrutural, chave, self.configuracao["modelo"], visual_inicial)
+                    visual = adjudicacao
+                fonte = "modelo_local" if provedor == "local" else "visao_api"
+                resultado = mesclar_analise_visual(resultado, visual, fonte=fonte)
+                resultado["processamento"] = {
+                    "modo": modo, "provedor": provedor,
+                    "modelo": NOME_MODELO if provedor == "local" else self.configuracao["modelo"],
+                    "fluxo": "visual_primeiro", "adjudicacao": adjudicacao is not None,
+                }
             else:
                 resultado["processamento"] = {"modo": "estrutural", "provedor": None, "modelo": None}
             self.fila.put(("ok", {
-                "resultado": resultado, "estrutural": estrutural, "visual": visual,
+                "resultado": resultado, "estrutural": estrutural,
+                "visual": {"mapa_visual_inicial": visual_inicial, "adjudicacao": adjudicacao},
                 "duracao": perf_counter() - inicio,
             }))
         except Exception as erro:  # erro é apresentado ao operador de forma legível

@@ -8,7 +8,7 @@ from pathlib import Path
 _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent))
 
-from zcfreader.visao_api import mesclar_analise_visual  # noqa: E402
+from zcfreader.visao_api import mesclar_analise_visual, normalizar_mapa_visual, precisa_adjudicacao  # noqa: E402
 
 
 class TestMesclagemVisual(unittest.TestCase):
@@ -90,6 +90,28 @@ class TestMesclagemVisual(unittest.TestCase):
         mesclar_analise_visual(resultado, visual, fonte="modelo_local")
         self.assertEqual([(i["quantidade"]["valor"], i["dimensoes"]["largura_mm"]) for i in resultado["itens"]], [(12, 465), (4, 465)])
         self.assertEqual(resultado["total_unidades"], 16)
+
+    def test_mapa_inicial_divergente_pede_adjudicacao_mas_nao_substitui(self):
+        resultado = {"itens": [{"indice": 1, "quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 100, "altura_mm": 100}, "material": {"valor": None}, "acabamento": {"valor": None}}], "alertas": []}
+        mapa = {
+            "_fase": "mapa_visual_inicial", "estrutura_confere": "nao", "documento_misto": False,
+            "instrucoes_visuais": [], "observacoes": [],
+            "itens": [
+                {"indice": 1, "quantidade": 2, "largura_cm": 10, "altura_cm": 10, "material": None, "acabamento": None, "evidencia": "esquerda", "confianca": .9},
+                {"indice": 2, "quantidade": 3, "largura_cm": 20, "altura_cm": 20, "material": None, "acabamento": None, "evidencia": "direita", "confianca": .9},
+            ],
+        }
+        self.assertTrue(precisa_adjudicacao(resultado, mapa))
+        mesclar_analise_visual(resultado, mapa)
+        self.assertEqual(len(resultado["itens"]), 1)
+
+    def test_normaliza_de_cada_e_contagem_visual(self):
+        mapa = {"itens": [
+            {"indice": 1, "quantidade": 2, "evidencia": "30 UNI DE CADA"},
+            {"indice": 2, "quantidade": 1, "evidencia": "60 UNI"},
+        ]}
+        normalizar_mapa_visual(mapa)
+        self.assertEqual([i["quantidade"] for i in mapa["itens"]], [30, 30, 60])
 
 
 if __name__ == "__main__":

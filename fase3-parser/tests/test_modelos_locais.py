@@ -62,6 +62,7 @@ class TestModelosLocais(unittest.TestCase):
         compacto = modelos_locais._evidencias_compactas(resultado)
         self.assertEqual(compacto["itens"][0]["total_componentes"], 40)
         self.assertNotIn("componentes", compacto["itens"][0])
+        self.assertEqual(compacto["itens"][0]["dimensoes_cm"]["largura"], 30)
 
     def test_schema_local_impede_observacoes_longas(self):
         schema = modelos_locais._schema_resposta_local()
