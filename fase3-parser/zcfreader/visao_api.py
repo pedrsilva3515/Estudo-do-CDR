@@ -81,35 +81,36 @@ def analisar_com_openai(caminho: Path, resultado_estrutural: dict, chave: str, m
     return json.loads(resposta.output_text)
 
 
-def mesclar_analise_visual(resultado: dict, visual: dict) -> dict:
+def mesclar_analise_visual(resultado: dict, visual: dict, fonte: str = "visao_api") -> dict:
     """Preenche lacunas e registra divergências sem ocultar a fonte original."""
     por_indice = {item.get("indice"): item for item in visual.get("itens", [])}
     for item in resultado.get("itens", []):
         proposta = por_indice.get(item.get("indice"))
         if not proposta:
             continue
-        item["analise_visual_api"] = proposta
+        item["analise_visual"] = proposta
         for campo in ("material", "acabamento"):
             valor = proposta.get(campo)
             atual = item.get(campo, {}).get("valor")
             if valor and atual is None:
                 item[campo] = {
-                    "valor": valor, "fonte": "visao_api", "confianca": proposta.get("confianca", 0.5),
+                    "valor": valor, "fonte": fonte, "confianca": proposta.get("confianca", 0.5),
                 }
             elif valor and atual and valor.casefold() != str(atual).casefold():
                 resultado.setdefault("alertas", []).append({
-                    "codigo": f"DIVERGENCIA_API_{campo.upper()}", "severidade": "revisao",
-                    "mensagem": f"Item {item['indice']}: estrutura/nome indica '{atual}', API sugere '{valor}'.",
+                    "codigo": f"DIVERGENCIA_VISAO_{campo.upper()}", "severidade": "revisao",
+                    "mensagem": f"Item {item['indice']}: estrutura/nome indica '{atual}', visão sugere '{valor}'.",
                 })
         quantidade = proposta.get("quantidade")
         atual_qtd = item.get("quantidade", {}).get("valor")
         if quantidade and atual_qtd and quantidade != atual_qtd:
             resultado.setdefault("alertas", []).append({
-                "codigo": "DIVERGENCIA_API_QUANTIDADE", "severidade": "revisao",
-                "mensagem": f"Item {item['indice']}: análise atual indica {atual_qtd}, API sugere {quantidade}.",
+                "codigo": "DIVERGENCIA_VISAO_QUANTIDADE", "severidade": "revisao",
+                "mensagem": f"Item {item['indice']}: análise atual indica {atual_qtd}, visão sugere {quantidade}.",
             })
     resultado["analise_visual"] = {
-        "fonte": "openai_api", "observacoes": visual.get("observacoes", []),
+        "fonte": "openai_api" if fonte == "visao_api" else fonte,
+        "observacoes": visual.get("observacoes", []),
     }
     resultado["pendencias"] = [
         campo for campo in resultado.get("pendencias", [])

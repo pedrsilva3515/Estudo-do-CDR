@@ -40,6 +40,14 @@ python -m pip install -e ".[gui,api]"
 cdr-pedido-gui
 ```
 
+Na janela **Configurar IA**, o operador pode baixar o modelo visual local
+Qwen2.5-VL 3B quantizado (cerca de 2,77 GB, mais um runtime pequeno). O download
+é feito pela própria aplicação, pode ser retomado depois de uma interrupção e é
+validado antes de o modo local ser liberado. O modelo roda somente em CPU e foi
+escolhido para os computadores da gráfica com 32 GB de RAM e sem placa de vídeo.
+Também permanecem disponíveis o modo estrutural rápido e a análise opcional pela
+API da OpenAI.
+
 Para atualizar uma cópia existente, execute `git pull` na mesma branch.
 
 > Para continuar o trabalho em outro computador, comece por
