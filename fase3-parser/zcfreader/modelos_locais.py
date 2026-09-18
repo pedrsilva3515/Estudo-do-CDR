@@ -163,7 +163,45 @@ def _extrair_json(texto: str) -> dict:
             candidatos.append(valor)
     if not candidatos:
         raise RuntimeError("O modelo local não devolveu um resultado JSON válido.")
-    return candidatos[-1]
+    # O decodificador também encontra cada objeto aninhado dentro da resposta.
+    # Prefira explicitamente o envelope do contrato, não o último item da lista.
+    for candidato in reversed(candidatos):
+        if isinstance(candidato.get("itens"), list) and isinstance(candidato.get("observacoes"), list):
+            return candidato
+    raise RuntimeError("O modelo local devolveu JSON, mas não no formato esperado para um pedido.")
+
+
+def _evidencias_compactas(resultado: dict) -> dict:
+    """Mantém apenas evidências úteis à visão, evitando estourar o contexto local."""
+    itens = []
+    for item in resultado.get("itens", []):
+        itens.append({
+            "indice": item.get("indice"),
+            "quantidade": item.get("quantidade"),
+            "dimensoes": item.get("dimensoes"),
+            "material": item.get("material"),
+            "acabamento": item.get("acabamento"),
+            "total_componentes": len(item.get("componentes", [])),
+        })
+    arquivo = resultado.get("arquivo", {})
+    return {
+        "arquivo": {"nome": arquivo.get("nome") or arquivo.get("caminho")},
+        "modo_cor": resultado.get("modo_cor"),
+        "itens": itens,
+        "total_unidades": resultado.get("total_unidades"),
+        "pendencias": resultado.get("pendencias", []),
+    }
+
+
+def _schema_resposta_local() -> dict:
+    """Contrato enxuto para impedir que modelos pequenos entrem em repetição."""
+    schema = _schema_resposta()
+    item = schema["properties"]["itens"]["items"]
+    item["properties"]["observacao"] = {"type": "null"}
+    schema["properties"]["observacoes"] = {
+        "type": "array", "maxItems": 0, "items": {"type": "string"},
+    }
+    return schema
 
 
 def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict) -> dict:
@@ -174,12 +212,13 @@ def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict) -> dict
         raise RuntimeError("O CDR não contém um preview PNG utilizável pela análise visual local.")
     bytes_imagem, _ = preview
     caminhos = caminhos_instalacao()
-    evidencias = json.dumps(resultado_estrutural, ensure_ascii=False, separators=(",", ":"))
+    evidencias = json.dumps(_evidencias_compactas(resultado_estrutural), ensure_ascii=False, separators=(",", ":"))
     prompt = (
         "Interprete este pedido de gráfica em português. Leia textos visíveis, inclusive texto convertido "
         "em curvas. Associe quantidade, material e acabamento a cada item detectado no JSON estrutural. "
-        "Não recalcule dimensões pela imagem e não invente informação ilegível; use null. Responda apenas "
-        "com o JSON solicitado. Evidências estruturais: " + evidencias
+        "Não recalcule dimensões pela imagem e não invente informação ilegível; use null. Seja conciso, "
+        "defina observacao como null e observacoes como lista vazia. Responda apenas com o JSON solicitado. "
+        "Evidências estruturais: " + evidencias
     )
     with tempfile.TemporaryDirectory(prefix="cdr-pedido-") as pasta:
         imagem = Path(pasta) / "preview.png"
@@ -187,14 +226,16 @@ def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict) -> dict
         prompt_path = Path(pasta) / "prompt.txt"
         prompt_path.write_text(prompt, encoding="utf-8")
         schema_path = Path(pasta) / "schema.json"
-        schema_path.write_text(json.dumps(_schema_resposta(), ensure_ascii=False), encoding="utf-8")
+        schema_path.write_text(json.dumps(_schema_resposta_local(), ensure_ascii=False), encoding="utf-8")
         comando = [
             str(caminhos["executavel"]), "-m", str(caminhos["modelo"]),
             "--mmproj", str(caminhos["mmproj"]), "--image", str(imagem),
             "--no-mmproj-offload", "--device", "none", "--ctx-size", "8192",
-            "--image-max-tokens", "1024", "--temp", "0", "--seed", "1",
-            "--predict", "1400", "--json-schema-file", str(schema_path),
-            "--log-disable", "--file", str(prompt_path),
+            "--image-min-tokens", "1024", "--image-max-tokens", "1024",
+            "--temp", "0", "--seed", "1", "--repeat-penalty", "1.12",
+            "--repeat-last-n", "128", "--predict", "800",
+            "--json-schema-file", str(schema_path),
+            "--file", str(prompt_path),
         ]
         flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
         processo = subprocess.run(

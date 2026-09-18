@@ -38,6 +38,37 @@ class TestModelosLocais(unittest.TestCase):
         texto = 'log {"parcial": true}\nresposta {"itens": [], "observacoes": ["ok"]}\n'
         self.assertEqual(modelos_locais._extrair_json(texto)["observacoes"], ["ok"])
 
+    def test_extrai_envelope_e_nao_ultimo_item_aninhado(self):
+        texto = '{"itens":[{"indice":1,"quantidade":2}],"observacoes":["ok"]}'
+        resultado = modelos_locais._extrair_json(texto)
+        self.assertIn("itens", resultado)
+        self.assertEqual(resultado["itens"][0]["indice"], 1)
+
+    def test_rejeita_json_fora_do_contrato(self):
+        with self.assertRaisesRegex(RuntimeError, "formato esperado"):
+            modelos_locais._extrair_json('{"indice": 1}')
+
+    def test_evidencias_compactas_nao_enviam_lista_pesada_de_componentes(self):
+        resultado = {
+            "arquivo": {"nome": "pedido.cdr"},
+            "itens": [{
+                "indice": 1, "quantidade": {"valor": 2},
+                "dimensoes": {"largura_mm": 300},
+                "material": {"valor": None}, "acabamento": {"valor": None},
+                "componentes": [{"pixels": {"largura": 9000}} for _ in range(40)],
+            }],
+            "pendencias": ["material"],
+        }
+        compacto = modelos_locais._evidencias_compactas(resultado)
+        self.assertEqual(compacto["itens"][0]["total_componentes"], 40)
+        self.assertNotIn("componentes", compacto["itens"][0])
+
+    def test_schema_local_impede_observacoes_longas(self):
+        schema = modelos_locais._schema_resposta_local()
+        item = schema["properties"]["itens"]["items"]
+        self.assertEqual(item["properties"]["observacao"], {"type": "null"})
+        self.assertEqual(schema["properties"]["observacoes"]["maxItems"], 0)
+
     def test_asset_runtime_ignora_release_sem_binario(self):
         releases = [
             {"assets": [{"name": "nightly-tag.txt", "browser_download_url": "x"}]},
