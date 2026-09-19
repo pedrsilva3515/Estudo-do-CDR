@@ -124,9 +124,11 @@ avaliações e testes de regressão.
 
 Quando a arquitetura regional experimental está ativa, a janela de correção
 oferece **Comparar com análise regional**. O pareamento usa medidas do CDR e
-desempata produtos de mesmo tamanho por quantidade e material. A comparação é
-somente informativa: mostra divergências e itens exclusivos de cada leitura sem
-alterar silenciosamente o pedido corrigido.
+desempata produtos de mesmo tamanho por quantidade e material. O operador pode
+aplicar uma sugestão selecionada por vez. A aplicação pede confirmação, não
+apaga campos que a leitura regional deixou vazios, não adiciona produto sem
+quantidade de pedido confirmada e registra candidato e campos aplicados no
+relatório.
 
 Para atualizar uma cópia existente, execute `git pull` na mesma branch.
 

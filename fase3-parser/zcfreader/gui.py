@@ -181,6 +181,68 @@ def comparar_resultado_com_regional(principal: dict, auditoria: dict) -> dict:
     }
 
 
+def aplicar_sugestao_regional(principal: dict, correspondencia: dict) -> dict:
+    """Aplica uma única linha regional ao rascunho após ação explícita do operador."""
+    regional = correspondencia.get("item_regional")
+    if not regional:
+        raise ValueError("A linha selecionada não possui sugestão regional.")
+    indice_principal = correspondencia.get("indice_principal")
+    quantidade = regional.get("quantidade_pedido")
+    if indice_principal is None and quantidade is None:
+        raise ValueError("O produto regional não possui quantidade de pedido confirmada.")
+    largura = float(regional.get("largura_cm") or 0)
+    altura = float(regional.get("altura_cm") or 0)
+    if largura <= 0 or altura <= 0:
+        raise ValueError("O produto regional não possui dimensões válidas.")
+
+    itens = principal.setdefault("itens", [])
+    novo = indice_principal is None
+    if novo:
+        item = {}
+        indice_principal = len(itens)
+    else:
+        if not 0 <= int(indice_principal) < len(itens):
+            raise ValueError("O item principal correspondente não existe mais.")
+        item = deepcopy(itens[int(indice_principal)])
+    campos_aplicados = ["dimensoes"]
+    fonte = "correcao_operador_via_auditoria_regional"
+    item["dimensoes"] = {
+        "largura_mm": largura * 10, "altura_mm": altura * 10,
+        "tipo": "confirmado_regionalmente", "fonte": fonte, "confianca": 1.0,
+    }
+    if quantidade is not None:
+        item["quantidade"] = {
+            "valor": int(quantidade), "unidade": "unidade", "fonte": fonte, "confianca": 1.0,
+        }
+        campos_aplicados.append("quantidade")
+    material = regional.get("material")
+    if material:
+        item["material"] = {"valor": material, "fonte": fonte, "confianca": 1.0}
+        campos_aplicados.append("material")
+    acabamento = regional.get("acabamento")
+    if acabamento:
+        item["acabamento"] = {"valor": acabamento, "fonte": fonte, "confianca": 1.0}
+        campos_aplicados.append("acabamento")
+    item["indice"] = int(indice_principal) + 1
+    item["auditoria_regional_aplicada"] = {
+        "candidato_id": regional.get("candidato_id"),
+        "papel": regional.get("papel"),
+        "campos": campos_aplicados,
+    }
+    if novo:
+        itens.append(item)
+        acao = "adicionado"
+    else:
+        itens[int(indice_principal)] = item
+        acao = "atualizado"
+    registro = {
+        "acao": acao, "indice_principal": int(indice_principal),
+        "candidato_id": regional.get("candidato_id"), "campos": campos_aplicados,
+    }
+    principal.setdefault("aplicacoes_regionais", []).append(registro)
+    return registro
+
+
 class AplicacaoPedido:
     def __init__(self, raiz: tk.Tk):
         self.raiz = raiz
@@ -920,7 +982,6 @@ class AplicacaoPedido:
             auditoria = self.resultado.get("analise_regional_experimental") if self.resultado else None
             if not auditoria:
                 return
-            comparacao = comparar_resultado_com_regional(dados, auditoria)
             janela_comparacao = tk.Toplevel(janela)
             janela_comparacao.title("Comparar resultado principal e análise regional")
             janela_comparacao.geometry("1180x590")
@@ -932,21 +993,15 @@ class AplicacaoPedido:
                 frame, text="Comparação com a análise regional",
                 style="Titulo.TLabel", font=("Segoe UI", 16, "bold"),
             ).pack(anchor="w")
-            resumo = comparacao["resumo"]
             resumo_auditoria = auditoria.get("resumo", {})
+            var_resumo_comparacao = tk.StringVar()
             ttk.Label(
-                frame,
-                text=(
-                    f"{resumo['compativeis']} compatível(is) • {resumo['divergencias']} divergência(s) • "
-                    f"{resumo['somente_principal']} somente no principal • "
-                    f"{resumo['somente_regional']} somente no regional • "
-                    f"{resumo_auditoria.get('revisoes_necessarias', 0)} estrutura(s) regional(is) em revisão"
-                ),
+                frame, textvariable=var_resumo_comparacao,
                 style="Subtitulo.TLabel",
             ).pack(anchor="w", pady=(3, 4))
             ttk.Label(
                 frame,
-                text="Esta comparação é somente para conferência; nenhum valor será alterado automaticamente.",
+                text="Selecione uma linha para aplicar somente aquela sugestão ao rascunho da correção.",
                 style="Subtitulo.TLabel",
             ).pack(anchor="w", pady=(0, 12))
             colunas_comparacao = ("principal", "regional", "estado", "diferencas", "resumo_principal", "resumo_regional")
@@ -988,20 +1043,34 @@ class AplicacaoPedido:
                     f"{item.get('acabamento') or '?'}"
                 )
 
-            for numero, correspondencia in enumerate(comparacao["correspondencias"]):
-                indice_principal = correspondencia.get("indice_principal")
-                item_regional = correspondencia.get("item_regional")
-                linha_id = f"comparacao-{numero}"
-                detalhes_por_linha[linha_id] = correspondencia
-                tabela_comparacao.insert("", "end", iid=linha_id, values=(
-                    f"Item {indice_principal + 1}" if indice_principal is not None else "—",
-                    item_regional.get("candidato_id") if item_regional else "—",
-                    correspondencia["estado"],
-                    ", ".join(correspondencia["diferencas"]) or "nenhuma",
-                    resumo_principal(correspondencia.get("item_principal")),
-                    resumo_regional(item_regional),
-                ))
             tabela_comparacao.pack(fill="both", expand=True)
+
+            def atualizar_comparacao() -> None:
+                comparacao = comparar_resultado_com_regional(dados, auditoria)
+                dados["comparacao_regional"] = comparacao
+                resumo = comparacao["resumo"]
+                var_resumo_comparacao.set(
+                    f"{resumo['compativeis']} compatível(is) • {resumo['divergencias']} divergência(s) • "
+                    f"{resumo['somente_principal']} somente no principal • "
+                    f"{resumo['somente_regional']} somente no regional • "
+                    f"{resumo_auditoria.get('revisoes_necessarias', 0)} estrutura(s) regional(is) em revisão"
+                )
+                for linha in tabela_comparacao.get_children():
+                    tabela_comparacao.delete(linha)
+                detalhes_por_linha.clear()
+                for numero, correspondencia in enumerate(comparacao["correspondencias"]):
+                    indice_principal = correspondencia.get("indice_principal")
+                    item_regional = correspondencia.get("item_regional")
+                    linha_id = f"comparacao-{numero}"
+                    detalhes_por_linha[linha_id] = correspondencia
+                    tabela_comparacao.insert("", "end", iid=linha_id, values=(
+                        f"Item {indice_principal + 1}" if indice_principal is not None else "—",
+                        item_regional.get("candidato_id") if item_regional else "—",
+                        correspondencia["estado"],
+                        ", ".join(correspondencia["diferencas"]) or "nenhuma",
+                        resumo_principal(correspondencia.get("item_principal")),
+                        resumo_regional(item_regional),
+                    ))
 
             def ver_detalhes_comparacao() -> None:
                 selecionado = tabela_comparacao.selection()
@@ -1022,11 +1091,66 @@ class AplicacaoPedido:
                     )
                 messagebox.showinfo("Detalhes da comparação", "\n".join(linhas), parent=janela_comparacao)
 
+            def aplicar_selecionado() -> None:
+                selecionado = tabela_comparacao.selection()
+                if not selecionado:
+                    messagebox.showinfo(
+                        "Selecione uma sugestão", "Selecione a linha regional que deseja aplicar.",
+                        parent=janela_comparacao,
+                    )
+                    return
+                correspondencia = detalhes_por_linha[selecionado[0]]
+                regional = correspondencia.get("item_regional")
+                if not regional:
+                    messagebox.showwarning(
+                        "Sem sugestão regional",
+                        "Este item existe somente no resultado principal e não pode ser preenchido pela análise regional.",
+                        parent=janela_comparacao,
+                    )
+                    return
+                indice_principal = correspondencia.get("indice_principal")
+                destino = f"Item {indice_principal + 1}" if indice_principal is not None else "novo item"
+                quantidade = regional.get("quantidade_pedido")
+                quantidade_texto = str(quantidade) if quantidade is not None else "não confirmada"
+                confirmar = messagebox.askyesno(
+                    "Aplicar sugestão regional",
+                    f"Aplicar {regional.get('candidato_id')} somente em {destino}?\n\n"
+                    f"Quantidade: {quantidade_texto}\n"
+                    f"Tamanho: {_numero(regional.get('largura_cm', 0))} × "
+                    f"{_numero(regional.get('altura_cm', 0))} cm\n"
+                    f"Material: {regional.get('material') or 'não informado'}\n"
+                    f"Acabamento: {regional.get('acabamento') or 'não informado'}\n\n"
+                    "Campos regionais ausentes não apagarão os valores existentes.",
+                    parent=janela_comparacao,
+                )
+                if not confirmar:
+                    return
+                try:
+                    registro = aplicar_sugestao_regional(dados, correspondencia)
+                except ValueError as erro:
+                    messagebox.showwarning("Sugestão não aplicável", str(erro), parent=janela_comparacao)
+                    return
+                atualizar_tabela()
+                atualizar_comparacao()
+                messagebox.showinfo(
+                    "Sugestão aplicada",
+                    f"{registro['candidato_id']} foi {registro['acao']} no rascunho. "
+                    "A correção ainda precisa ser finalizada para gerar o relatório.",
+                    parent=janela_comparacao,
+                )
+
+            botoes_comparacao = ttk.Frame(frame, padding=(0, 10, 0, 0))
+            botoes_comparacao.pack(fill="x")
             ttk.Button(
-                frame, text="Ver detalhes e evidências", style="Secondary.TButton",
+                botoes_comparacao, text="Ver detalhes e evidências", style="Secondary.TButton",
                 command=ver_detalhes_comparacao,
-            ).pack(anchor="e", pady=(10, 0))
+            ).pack(side="right")
+            ttk.Button(
+                botoes_comparacao, text="Aplicar sugestão selecionada", style="Primary.TButton",
+                command=aplicar_selecionado,
+            ).pack(side="right", padx=(0, 8))
             tabela_comparacao.bind("<Double-1>", lambda _evento: ver_detalhes_comparacao())
+            atualizar_comparacao()
 
         botoes = ttk.Frame(corpo, padding=(0, 10, 0, 0))
         botoes.pack(fill="x")
@@ -1043,6 +1167,9 @@ class AplicacaoPedido:
         ttk.Entry(corpo, textvariable=var_observacao).pack(fill="x")
 
         def finalizar() -> None:
+            auditoria = dados.get("analise_regional_experimental")
+            if auditoria:
+                dados["comparacao_regional"] = comparar_resultado_com_regional(dados, auditoria)
             correto = normalizar_resultado_corrigido(dados)
             self._mostrar_resultado(correto)
             janela.destroy()

@@ -177,6 +177,23 @@ Nos ensaios reais:
 - Vinil Fosco: três correspondências compatíveis, nenhuma divergência ou item exclusivo;
 - Super Cola: o principal atual apresentou dois itens, enquanto a análise regional apresentou três. O conjunto adicional de quatro unidades ficou corretamente marcado como `somente_regional`; as duas linhas pareadas mostraram material ausente no principal.
 
+## Resultado 9: aplicação seletiva pelo operador
+
+A comparação passou a permitir a aplicação de uma sugestão regional por vez no rascunho da correção. A ação sempre pede confirmação e nunca substitui o pedido inteiro.
+
+Regras de segurança:
+
+- apenas a linha selecionada é atualizada ou adicionada;
+- campo regional ausente não apaga um valor já existente;
+- produto `somente_regional` só pode ser adicionado quando há quantidade de pedido confirmada;
+- dimensões precisam ser positivas;
+- estruturas auxiliares continuam fora da comparação e não podem ser aplicadas;
+- candidato, ação e campos utilizados ficam registrados em `aplicacoes_regionais` e no próprio item corrigido.
+
+Depois de cada aplicação, a tabela principal e a comparação são recalculadas imediatamente. O relatório só é gerado quando o operador finaliza a correção; fechar a janela antes disso descarta o rascunho normalmente.
+
+No ensaio real do Super Cola, o ciclo partiu de duas divergências e um item somente regional. A aplicação individual de `A01`, `A47` e `A10` atualizou as duas linhas existentes e adicionou a terceira. A recomparação terminou com três itens compatíveis e nenhuma divergência: 4 de 37 x 24,5 cm, 12 de 46,5 x 9 cm e 4 de 46,5 x 9 cm, todos associados a adesivo super cola.
+
 ## Arquitetura recomendada após o ensaio
 
 1. Extrair preview, nome, textos nativos, cores e todas as caixas do CDR.
@@ -210,8 +227,9 @@ Esses tempos são faixas de engenharia, não SLA; variam com a quantidade de reg
 - Classificação das emissões extras: **aprovada no corpus (7/7 explicadas; nenhum item revisado rebaixado)**.
 - Estado de conflito na interface: **implementado**.
 - Integração paralela do catálogo regional: **implementada atrás de opção experimental, desligada por padrão e sem substituir o resultado principal**.
-- Comparação assistida entre tabela estável e produtos regionais dentro da revisão: **implementada e somente para leitura**.
-- Aplicação seletiva de valores regionais pelo operador: **próximo experimento, depois de ampliar os testes de pareamento**.
+- Comparação assistida entre tabela estável e produtos regionais dentro da revisão: **implementada**.
+- Aplicação seletiva de valores regionais pelo operador: **implementada com confirmação e registro de proveniência**.
+- Revisão visual da experiência completa em um executável de teste: **próximo portão antes de promover o fluxo experimental**.
 - Modelo maior ou API como árbitro regional: testar somente depois da associação determinística, nos mesmos casos e com a mesma métrica.
 
 ## Reproduzir

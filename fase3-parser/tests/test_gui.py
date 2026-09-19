@@ -5,7 +5,12 @@ from pathlib import Path
 from queue import Queue
 from unittest.mock import patch
 
-from zcfreader.gui import AplicacaoPedido, coletar_conflitos, comparar_resultado_com_regional
+from zcfreader.gui import (
+    AplicacaoPedido,
+    aplicar_sugestao_regional,
+    coletar_conflitos,
+    comparar_resultado_com_regional,
+)
 
 
 class TestConflitosInterface(unittest.TestCase):
@@ -151,6 +156,80 @@ class TestComparacaoRegional(unittest.TestCase):
 
         self.assertEqual(resumo["somente_principal"], 1)
         self.assertEqual(resumo["somente_regional"], 1)
+
+
+class TestAplicacaoSeletivaRegional(unittest.TestCase):
+    def item_principal(self, quantidade, largura, altura, material="adesivo", acabamento=None):
+        return {
+            "quantidade": {"valor": quantidade},
+            "dimensoes": {"largura_mm": largura * 10, "altura_mm": altura * 10},
+            "material": {"valor": material}, "acabamento": {"valor": acabamento},
+        }
+
+    def item_regional(self, identificador, quantidade, largura, altura, material="adesivo", acabamento=None):
+        return {
+            "candidato_id": identificador, "papel": "produto_confirmado",
+            "quantidade_pedido": quantidade, "quantidade_desenhada": 1,
+            "largura_cm": largura, "altura_cm": altura,
+            "material": material, "acabamento": acabamento,
+        }
+
+    def test_atualiza_somente_linha_escolhida_sem_apagar_campo_ausente(self):
+        principal = {"itens": [
+            self.item_principal(4, 46.5, 9, acabamento="recorte especial"),
+            self.item_principal(1, 20, 20, material="adesivo leitoso"),
+        ]}
+        regional = self.item_regional("A01", 12, 46.5, 9, "adesivo super cola", None)
+        correspondencia = {
+            "indice_principal": 0, "item_principal": principal["itens"][0],
+            "item_regional": regional,
+        }
+
+        registro = aplicar_sugestao_regional(principal, correspondencia)
+
+        self.assertEqual(registro["acao"], "atualizado")
+        self.assertEqual(principal["itens"][0]["quantidade"]["valor"], 12)
+        self.assertEqual(principal["itens"][0]["material"]["valor"], "adesivo super cola")
+        self.assertEqual(principal["itens"][0]["acabamento"]["valor"], "recorte especial")
+        self.assertEqual(principal["itens"][1]["material"]["valor"], "adesivo leitoso")
+        self.assertEqual(principal["aplicacoes_regionais"][0]["candidato_id"], "A01")
+
+    def test_adiciona_produto_exclusivamente_regional_com_quantidade_confirmada(self):
+        principal = {"itens": []}
+        regional = self.item_regional("A02", 4, 37, 24.5, "adesivo super cola")
+
+        registro = aplicar_sugestao_regional(principal, {
+            "indice_principal": None, "item_principal": None, "item_regional": regional,
+        })
+
+        self.assertEqual(registro["acao"], "adicionado")
+        self.assertEqual(len(principal["itens"]), 1)
+        self.assertEqual(principal["itens"][0]["quantidade"]["valor"], 4)
+        self.assertEqual(principal["itens"][0]["dimensoes"]["largura_mm"], 370)
+
+    def test_nao_adiciona_produto_sem_quantidade_de_pedido(self):
+        principal = {"itens": []}
+        regional = self.item_regional("A02", None, 37, 24.5)
+
+        with self.assertRaisesRegex(ValueError, "quantidade de pedido"):
+            aplicar_sugestao_regional(principal, {
+                "indice_principal": None, "item_principal": None, "item_regional": regional,
+            })
+
+        self.assertEqual(principal["itens"], [])
+
+    def test_aplicacao_resolve_divergencia_na_recomparacao(self):
+        principal = {"itens": [self.item_principal(4, 46.5, 9, acabamento="recorte especial")]}
+        auditoria = {"itens": [self.item_regional(
+            "A01", 12, 46.5, 9, acabamento="sem recorte"
+        )]}
+        antes = comparar_resultado_com_regional(principal, auditoria)
+
+        aplicar_sugestao_regional(principal, antes["correspondencias"][0])
+        depois = comparar_resultado_com_regional(principal, auditoria)
+
+        self.assertEqual(antes["resumo"]["divergencias"], 1)
+        self.assertEqual(depois["resumo"]["compativeis"], 1)
 
 
 if __name__ == "__main__":
