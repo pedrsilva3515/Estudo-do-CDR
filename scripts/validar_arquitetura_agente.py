@@ -71,6 +71,9 @@ for indice, (zip_path, membro_cdr, diagnostico) in enumerate(casos_revisados(arg
             "associacoes_regionais": len(catalogo.get("ocr_regional", {}).get("associacoes", [])),
             "associacoes_regionais_corretas": associacoes_corretas,
             "associacoes_regionais_falsas": sum(previsto_por_candidato.values()) - associacoes_corretas,
+            "associacoes_com_area": sum(item.get("area_m2") is not None for item in associacoes),
+            "associacoes_area_confirmada": sum(item.get("area_confere_quantidade") is True for item in associacoes),
+            "associacoes_requer_confirmacao": sum(item.get("requer_confirmacao_semantica") is True for item in associacoes),
             "cobertura_geometrica": cobertura,
             "imagens": [str(item) for item in imagens],
         })
@@ -85,6 +88,9 @@ resultado = {
     "associacoes_regionais": sum(item["associacoes_regionais"] for item in resumo),
     "associacoes_regionais_corretas": sum(item["associacoes_regionais_corretas"] for item in resumo),
     "associacoes_regionais_falsas": sum(item["associacoes_regionais_falsas"] for item in resumo),
+    "associacoes_com_area": sum(item["associacoes_com_area"] for item in resumo),
+    "associacoes_area_confirmada": sum(item["associacoes_area_confirmada"] for item in resumo),
+    "associacoes_requer_confirmacao": sum(item["associacoes_requer_confirmacao"] for item in resumo),
 }
 (args.pasta_saida / "resumo.json").write_text(json.dumps(resultado, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(json.dumps({k: v for k, v in resultado.items() if k != "casos"}, ensure_ascii=False, indent=2))

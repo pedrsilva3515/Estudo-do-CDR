@@ -71,13 +71,25 @@ O protótipo passou a converter as caixas do OCR para as coordenadas físicas do
 - `N DE CADA` aplica a quantidade às artes abaixo abrangidas horizontalmente pela instrução;
 - quantidade isolada seleciona a arte imediatamente abaixo com sobreposição horizontal.
 
-No corpus completo, foram emitidas **7 associações, todas corretas e nenhuma falsa**:
+Uma primeira execução aparentou produzir 7 associações corretas, mas a revisão do operador revelou uma falha na identidade dos candidatos: cinco objetos de 46,5 x 9 cm, distribuídos em duas regiões semanticamente diferentes, haviam sido consolidados somente por terem a mesma medida. A métrica anterior não conseguia detectar essa mistura.
+
+O catálogo passou então a separar ocorrências de mesma medida em ilhas espaciais contíguas. O Super Cola agora contém:
+
+- uma região esquerda com quatro ocorrências de 46,5 x 9 cm;
+- uma região direita com uma ocorrência de 46,5 x 9 cm.
+
+As legendas de área funcionam como prova independente da interpretação:
+
+- `0,1674 m² / (46,5 x 9 cm) = 4`, confirmando quatro unidades totais na região esquerda, uma por ocorrência desenhada;
+- `0,5022 m² / (46,5 x 9 cm) = 12`, confirmando doze repetições da arte única à direita.
+
+Depois dessa correção, o corpus completo voltou a produzir **7 associações, todas corretas e nenhuma falsa**, agora com identidade regional distinta:
 
 - 1 no Vinil Transparente: `9 UN (23,4X18,4 CM)`;
 - 3 no Super Cola: `4 UN (37X24,5 CM)`, `4 UN (46,5X9)` e `12 UN (46,5X9 CM)`;
 - 3 no Vinil Fosco: 30 unidades para cada uma das duas artes abrangidas e 60 para a terceira.
 
-Os outros oito arquivos não receberam associação regional automática. Isso é intencional: sem uma instrução reconhecida e uma relação espacial inequívoca, o protótipo se abstém. As sete linhas resolvidas representam precisão de 100% neste corpus, não conclusão automática das 31 linhas. A execução do OCR e das regras nos 11 arquivos levou cerca de 47 segundos no total, aproximadamente 4,3 segundos por pedido.
+Os outros oito arquivos não receberam associação regional automática. Isso é intencional: sem uma instrução reconhecida e uma relação espacial inequívoca, o protótipo se abstém. As sete linhas resolvidas representam precisão de 100% neste corpus, não conclusão automática das 31 linhas. O resultado passa a distinguir quantidade solicitada de ocorrências desenhadas e registra se a área confirma `uma por ocorrência` ou `repetir arte única`. Três associações possuíam legenda de área e as três foram confirmadas pela fórmula; nenhuma das sete permaneceu com ambiguidade semântica depois das provas disponíveis. A execução do OCR e das regras nos 11 arquivos levou cerca de 47 segundos no total, aproximadamente 4,3 segundos por pedido.
 
 ## Arquitetura recomendada após o ensaio
 

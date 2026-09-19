@@ -4,6 +4,7 @@ import unittest
 
 from zcfreader.experimento_agente import (
     _anotar_hierarquia,
+    _separar_regioes_contiguas,
     associar_instrucoes_regionais,
     avaliar_cobertura_geometrica,
     detectar_blocos_producao,
@@ -33,6 +34,21 @@ class TestHierarquiaCandidatos(unittest.TestCase):
         self.assertTrue(itens[2]["visivel_inicialmente"])
         self.assertEqual(itens[2]["pai_id"], "A01")
 
+    def test_separa_mesma_medida_em_ilhas_espaciais(self):
+        item = {
+            "largura_cm": 46.5, "altura_cm": 9,
+            "quantidade_sugerida": 5,
+            "posicoes_centro_cm": [
+                {"x": 20, "y": 10}, {"x": 20, "y": 19},
+                {"x": 20, "y": 28}, {"x": 20, "y": 37},
+                {"x": 100, "y": 37},
+            ],
+        }
+
+        regioes = _separar_regioes_contiguas(item)
+
+        self.assertEqual([regiao["quantidade_sugerida"] for regiao in regioes], [4, 1])
+
 
 class TestCoberturaGeometrica(unittest.TestCase):
     def test_quantidade_do_pedido_nao_elimina_medida_existente(self):
@@ -50,6 +66,22 @@ class TestCoberturaGeometrica(unittest.TestCase):
 
         self.assertEqual(resultado["itens_encontrados"], 1)
         self.assertFalse(resultado["detalhes"][0]["quantidade_geometrica_compativel"])
+
+    def test_prefere_regiao_visivel_a_detalhe_interno_da_mesma_medida(self):
+        interno = candidato("A01", 46.5, 9, {"esquerda": 0, "direita": 46.5, "base": 0, "topo": 9})
+        regional = candidato("A02", 46.5, 9, {"esquerda": 100, "direita": 146.5, "base": 0, "topo": 9})
+        interno["visivel_inicialmente"] = False
+        regional["visivel_inicialmente"] = True
+        esperado = {
+            "itens": [{
+                "quantidade": {"valor": 12},
+                "dimensoes": {"largura_mm": 465, "altura_mm": 90},
+            }],
+        }
+
+        resultado = avaliar_cobertura_geometrica([interno, regional], esperado)
+
+        self.assertEqual(resultado["detalhes"][0]["candidato"], "A02")
 
 
 class TestBlocoProducaoDerivado(unittest.TestCase):
@@ -150,6 +182,7 @@ class TestAssociacaoRegional(unittest.TestCase):
             {(item["candidato_id"], item["quantidade"]) for item in resultado},
             {("A01", 30), ("A02", 30), ("A03", 60)},
         )
+        self.assertTrue(all(not item["requer_confirmacao_semantica"] for item in resultado))
 
     def test_dimensao_explicita_prevalece_sobre_distancia(self):
         candidatos = [
@@ -161,6 +194,9 @@ class TestAssociacaoRegional(unittest.TestCase):
         leituras = [{
             "texto": "4 UN (37X24,5 CM)", "confianca": 0.99,
             "poligono_px": [[100, 100], [400, 100], [400, 150], [100, 150]],
+        }, {
+            "texto": "0,3626 M²", "confianca": 0.99,
+            "poligono_px": [[700, 850], [900, 850], [900, 900], [700, 900]],
         }]
 
         resultado = associar_instrucoes_regionais(
@@ -171,6 +207,27 @@ class TestAssociacaoRegional(unittest.TestCase):
 
         self.assertEqual(resultado[0]["candidato_id"], "A01")
         self.assertEqual(resultado[0]["regra"], "dimensao_explicita")
+        self.assertEqual(resultado[0]["quantidade_calculada_area"], 4)
+        self.assertTrue(resultado[0]["area_confere_quantidade"])
+        self.assertEqual(resultado[0]["interpretacao_quantidade"], "uma_unidade_por_ocorrencia_desenhada")
+        self.assertFalse(resultado[0]["requer_confirmacao_semantica"])
+
+    def test_mesma_quantidade_que_ocorrencias_sem_area_permanece_ambigua(self):
+        item = candidato("A01", 46.5, 9, {"esquerda": 10, "direita": 56.5, "base": 20, "topo": 56}, 4)
+        item["visivel_inicialmente"] = True
+        leituras = [{
+            "texto": "4 UN (46,5X9 CM)", "confianca": 0.99,
+            "poligono_px": [[100, 100], [500, 100], [500, 150], [100, 150]],
+        }]
+
+        resultado = associar_instrucoes_regionais(
+            leituras, [item],
+            {"esquerda": 0, "direita": 100, "base": 0, "topo": 100},
+            (1000, 1000),
+        )
+
+        self.assertTrue(resultado[0]["requer_confirmacao_semantica"])
+        self.assertEqual(resultado[0]["interpretacao_quantidade"], "total_igual_as_ocorrencias_desenhadas_sem_area")
 
 
 if __name__ == "__main__":

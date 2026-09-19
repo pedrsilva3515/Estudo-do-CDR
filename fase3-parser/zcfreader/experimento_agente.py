@@ -4,6 +4,7 @@ from __future__ import annotations
 from io import BytesIO
 import json
 from pathlib import Path
+import re
 
 from .container import abrir_cdr
 from .ocr import executar_ocr
@@ -27,6 +28,49 @@ def _caixa_de_centros(item: dict) -> dict:
         "base": min(c["y"] - altura / 2 for c in centros),
         "topo": max(c["y"] + altura / 2 for c in centros),
     }
+
+
+def _separar_regioes_contiguas(item: dict) -> list[dict]:
+    """Separa ocorrências da mesma medida quando pertencem a ilhas espaciais."""
+    posicoes = item.get("posicoes_centro_cm") or []
+    if len(posicoes) <= 1:
+        return [item]
+    largura = float(item["largura_cm"])
+    altura = float(item["altura_cm"])
+    pendentes = set(range(len(posicoes)))
+    componentes = []
+    while pendentes:
+        componente = {pendentes.pop()}
+        fila = list(componente)
+        while fila:
+            atual = fila.pop()
+            ligados = []
+            for indice in pendentes:
+                dx = abs(posicoes[atual]["x"] - posicoes[indice]["x"])
+                dy = abs(posicoes[atual]["y"] - posicoes[indice]["y"])
+                distancia_bordas_x = max(0.0, dx - largura)
+                distancia_bordas_y = max(0.0, dy - altura)
+                if (
+                    distancia_bordas_x <= max(1.0, largura * 0.25)
+                    and distancia_bordas_y <= max(1.0, altura * 0.25)
+                ):
+                    ligados.append(indice)
+            for indice in ligados:
+                pendentes.remove(indice)
+                componente.add(indice)
+                fila.append(indice)
+        componentes.append(sorted(componente))
+    if len(componentes) == 1:
+        return [item]
+    regioes = []
+    for numero, componente in enumerate(componentes, 1):
+        copia = dict(item)
+        copia["posicoes_centro_cm"] = [posicoes[indice] for indice in componente]
+        copia["quantidade_sugerida"] = len(componente)
+        copia["regiao_medida"] = numero
+        copia["total_regioes_mesma_medida"] = len(componentes)
+        regioes.append(copia)
+    return regioes
 
 
 def _area_caixa(caixa: dict) -> float:
@@ -200,16 +244,16 @@ def associar_instrucoes_regionais(
             "base": limites["topo"] - max(ys) / altura_px * intervalo_y,
         }
 
+    leituras_com_caixa = [(leitura, caixa_ocr_cm(leitura)) for leitura in leituras_ocr]
     principais = [item for item in candidatos if item.get("visivel_inicialmente", True)]
     associacoes = []
-    for leitura in leituras_ocr:
+    for leitura, caixa_texto in leituras_com_caixa:
         texto = leitura.get("texto", "")
         quantidade = parse_quantidade(texto)
         if quantidade is None:
             continue
         valor = quantidade[0]
         dimensoes = parse_dimensoes(texto)
-        caixa_texto = caixa_ocr_cm(leitura)
         alvos: list[tuple[dict, str, float]] = []
         if dimensoes:
             largura_cm = dimensoes["largura_mm"] / 10
@@ -267,6 +311,7 @@ def associar_instrucoes_regionais(
             associacoes.append({
                 "texto": texto, "confianca_ocr": leitura.get("confianca"),
                 "quantidade": valor, "candidato_id": candidato["id"],
+                "quantidade_ocorrencias_desenhadas": candidato.get("quantidade_geometrica", 1),
                 "largura_cm": round(candidato["largura_cm"], 3),
                 "altura_cm": round(candidato["altura_cm"], 3),
                 "regra": regra, "confianca_associacao": confianca,
@@ -279,6 +324,62 @@ def associar_instrucoes_regionais(
         if chave not in vistos:
             vistos.add(chave)
             unicas.append(associacao)
+    areas = []
+    for leitura, caixa in leituras_com_caixa:
+        match = re.search(r"(?i)(\d+(?:[.,]\d+)?)\s*m\s*[²2]\b", leitura.get("texto", ""))
+        if match:
+            areas.append((float(match.group(1).replace(",", ".")), leitura, caixa))
+    por_id = {item["id"]: item for item in principais}
+    areas_usadas = set()
+    for associacao in unicas:
+        candidato = por_id.get(associacao["candidato_id"])
+        if candidato is None:
+            continue
+        caixa = candidato["caixa_cm"]
+        centro_x = (caixa["esquerda"] + caixa["direita"]) / 2
+        opcoes = []
+        for indice, (area_m2, leitura, caixa_area) in enumerate(areas):
+            if indice in areas_usadas or caixa_area["topo"] > caixa["base"] + intervalo_y * 0.03:
+                continue
+            centro_area_x = (caixa_area["esquerda"] + caixa_area["direita"]) / 2
+            distancia_x = abs(centro_area_x - centro_x)
+            distancia_y = max(0.0, caixa["base"] - caixa_area["topo"])
+            if distancia_x <= max(candidato["largura_cm"], caixa_area["direita"] - caixa_area["esquerda"]):
+                opcoes.append((distancia_y + distancia_x * 0.25, indice, area_m2, leitura))
+        if not opcoes:
+            if associacao["regra"] == "quantidade_de_cada":
+                associacao["interpretacao_quantidade"] = "quantidade_por_arte_explicita"
+                associacao["requer_confirmacao_semantica"] = False
+            elif associacao["quantidade_ocorrencias_desenhadas"] == 1 and associacao["quantidade"] > 1:
+                associacao["interpretacao_quantidade"] = "repetir_arte_unica"
+                associacao["requer_confirmacao_semantica"] = False
+            elif associacao["quantidade"] == associacao["quantidade_ocorrencias_desenhadas"]:
+                associacao["interpretacao_quantidade"] = "total_igual_as_ocorrencias_desenhadas_sem_area"
+                associacao["requer_confirmacao_semantica"] = True
+            else:
+                associacao["interpretacao_quantidade"] = "repeticao_sem_area_comprovante"
+                associacao["requer_confirmacao_semantica"] = True
+            continue
+        _, indice, area_m2, leitura_area = min(opcoes)
+        areas_usadas.add(indice)
+        area_individual_cm2 = associacao["largura_cm"] * associacao["altura_cm"]
+        quantidade_area = area_m2 * 10_000 / max(1e-9, area_individual_cm2)
+        quantidade_arredondada = round(quantidade_area)
+        confere = abs(quantidade_area - quantidade_arredondada) <= 0.03 and quantidade_arredondada == associacao["quantidade"]
+        associacao.update({
+            "area_m2": area_m2, "texto_area": leitura_area.get("texto"),
+            "quantidade_calculada_area": quantidade_arredondada,
+            "area_confere_quantidade": confere,
+            "requer_confirmacao_semantica": not confere,
+        })
+        if confere and associacao["quantidade_ocorrencias_desenhadas"] == associacao["quantidade"]:
+            associacao["interpretacao_quantidade"] = "uma_unidade_por_ocorrencia_desenhada"
+        elif confere and associacao["quantidade_ocorrencias_desenhadas"] == 1:
+            associacao["interpretacao_quantidade"] = "repetir_arte_unica"
+        elif confere:
+            associacao["interpretacao_quantidade"] = "quantidade_total_confirmada_por_area"
+        else:
+            associacao["interpretacao_quantidade"] = "divergencia_entre_texto_area_e_desenho"
     return unicas
 
 
@@ -310,16 +411,19 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
         evidencias = _evidencias_textuais(doc)
 
     candidatos = []
-    for item in profundos:
-        candidatos.append({
-            "origem": item["origem"],
-            "quantidade_geometrica": int(item.get("quantidade_sugerida") or 1),
-            "largura_cm": float(item["largura_cm"]),
-            "altura_cm": float(item["altura_cm"]),
-            "posicoes_centro_cm": item.get("posicoes_centro_cm") or [],
-            "tipos": item.get("tipos") or [],
-            "caixa_cm": _caixa_de_centros(item),
-        })
+    for item_bruto in profundos:
+        for item in _separar_regioes_contiguas(item_bruto):
+            candidatos.append({
+                "origem": item["origem"],
+                "quantidade_geometrica": int(item.get("quantidade_sugerida") or 1),
+                "largura_cm": float(item["largura_cm"]),
+                "altura_cm": float(item["altura_cm"]),
+                "posicoes_centro_cm": item.get("posicoes_centro_cm") or [],
+                "tipos": item.get("tipos") or [],
+                "caixa_cm": _caixa_de_centros(item),
+                "regiao_medida": item.get("regiao_medida"),
+                "total_regioes_mesma_medida": item.get("total_regioes_mesma_medida", 1),
+            })
     for item in rasos:
         caixa = item["caixa"]
         centro = {
@@ -395,9 +499,16 @@ def avaliar_cobertura_geometrica(candidatos: list[dict], esperado: dict, toleran
             cw, ch = candidato["largura_cm"] * 10, candidato["altura_cm"] * 10
             erro = min(abs(cw - largura) + abs(ch - altura), abs(cw - altura) + abs(ch - largura))
             if erro <= tolerancia_mm * 2:
-                opcoes.append((erro, indice, candidato["id"]))
+                if capacidade == quantidade:
+                    penalidade_quantidade = 0
+                elif capacidade == 1:
+                    penalidade_quantidade = 1
+                else:
+                    penalidade_quantidade = 2 + abs(capacidade - quantidade) / max(1, quantidade)
+                penalidade_visibilidade = 0 if candidato.get("visivel_inicialmente", True) else 1
+                opcoes.append((erro, penalidade_quantidade, penalidade_visibilidade, indice, candidato["id"]))
         if opcoes:
-            erro, indice, candidato_id = min(opcoes)
+            erro, _, _, indice, candidato_id = min(opcoes)
             candidato = candidatos[indice]
             capacidade = max(1, int(candidato.get("quantidade_geometrica") or 1))
             usos[indice] += capacidade if quantidade == capacidade else 1
