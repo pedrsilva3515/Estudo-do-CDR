@@ -80,6 +80,15 @@ o número de itens completos prevalece sobre um rótulo contraditório da IA com
 lista adjudicada já existe, evitando duplicações e falsos itens extraídos do
 conteúdo interno da arte.
 
+Na 0.7.3, o parser cria também um inventário geométrico profundo. Ele procura
+produtos dentro de grandes grupos, detecta arte e contorno sobrepostos, consolida
+repetições do mesmo tamanho, mede blocos numéricos e calcula a união de curvas
+sem incluir os cabeçalhos de texto. A IA usa esse inventário como menu de
+hipóteses, não como lista pronta. Se o modelo local devolver itens sem medidas
+ou entrar em repetição, o reconciliador seleciona deterministicamente as caixas
+externas e mantém o resultado marcado para revisão. O contrato local limita o
+número e o tamanho dos campos para evitar respostas JSON truncadas.
+
 O harness de regressão pode ser executado sobre os pacotes revisados:
 
 ```powershell

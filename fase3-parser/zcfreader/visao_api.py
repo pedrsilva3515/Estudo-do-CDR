@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 from copy import deepcopy
 import json
+from math import hypot
 from pathlib import Path
 
 from .container import abrir_cdr
@@ -77,7 +78,11 @@ def prompt_analise_visual(resultado_estrutural: dict) -> str:
         "somente à arte próxima. Detecte grades e repetições. Diferencie texto da própria arte (telefone, "
         "preço, nome) de instrução de produção. Nome do arquivo e JSON são hipóteses, não verdade. Pode criar, "
         "remover ou reagrupar itens. Separe materiais em documentos mistos. Dimensões escritas têm prioridade; "
-        "a geometria pode incluir bordas ou objetos auxiliares. Retorne a lista COMPLETA. Use estrutura_confere "
+        "a geometria pode incluir bordas ou objetos auxiliares. O inventario_geometrico é um MENU DE HIPÓTESES "
+        "medidas diretamente no CDR profundo: escolha apenas as caixas que correspondem visualmente a produtos, "
+        "não transforme cada hipótese em item. Caixas menores podem ser partes internas e uma união pode representar "
+        "vários produtos; use posições e a imagem para decidir. Quando uma hipótese corresponder ao produto, preserve "
+        "sua quantidade_sugerida e medidas exatas. Retorne a lista COMPLETA. Use estrutura_confere "
         "'nao' quando a lista estrutural precisar ser substituída, 'sim' quando tiver os mesmos itens, ou "
         "'incerto'. Não invente informação ilegível: use null. Em evidencia, cite brevemente o texto ou padrão "
         "visual que sustenta o item. Evidências estruturais: " + evidencias
@@ -93,7 +98,8 @@ def prompt_mapa_visual(nome_arquivo: str, ocr_visual: list[dict]) -> str:
         "instruções ou auxiliares, não produtos. Percorra a página de cima para baixo e da esquerda para a "
         "direita. Associe cabeçalhos de material e legendas de quantidade às peças abaixo. 'N DE CADA' aplica "
         "N unidades a cada peça distinta dentro da região indicada. Não estime dimensões pela aparência: use "
-        "null quando elas não estiverem escritas. Retorne um item para cada produto distinto e descreva sua "
+        "null quando elas não estiverem escritas. Não transforme cada texto do OCR em produto e nunca repita "
+        "o enunciado. Use no máximo 20 itens. Retorne um item para cada produto distinto e descreva sua "
         "posição em evidencia. Como não há estrutura para conferir, use estrutura_confere='incerto'. "
         f"Nome do arquivo (somente contexto): {nome_arquivo}. OCR com posições: {ocr}"
     )
@@ -135,6 +141,8 @@ def analisar_com_openai(caminho: Path, resultado_estrutural: dict | None, chave:
 
 def precisa_adjudicacao(resultado_estrutural: dict, mapa_visual: dict) -> bool:
     """Detecta divergência objetiva antes de gastar uma segunda chamada de IA."""
+    if mapa_visual.get("_falha_modelo"):
+        return True
     propostas = mapa_visual.get("itens") or []
     itens = resultado_estrutural.get("itens") or []
     if propostas and len(propostas) != len(itens):
@@ -233,6 +241,36 @@ def _proposta_completa(proposta: dict) -> bool:
     )
 
 
+def _propostas_inventario_geometrico(resultado: dict) -> list[dict]:
+    from .pedido import selecionar_inventario_geometrico
+
+    inventario = resultado.get("hipoteses", {}).get("inventario_geometrico") or []
+    selecionados = selecionar_inventario_geometrico(inventario)
+    evidencias = [item for item in resultado.get("evidencias_textuais", []) if item.get("material")]
+
+    def distancia_texto(item: dict, evidencia: dict) -> float:
+        centro = (item.get("posicoes_centro_cm") or [{}])[0]
+        x_mm, y_mm = centro.get("x", 0) * 10, centro.get("y", 0) * 10
+        caixa = evidencia.get("caixa_mm") or {}
+        dx = max((caixa.get("esquerda") or 0) - x_mm, 0, x_mm - (caixa.get("direita") or 0))
+        dy = max((caixa.get("base") or 0) - y_mm, 0, y_mm - (caixa.get("topo") or 0))
+        return hypot(dx, dy)
+
+    propostas = []
+    for indice, item in enumerate(selecionados, 1):
+        evidencia = min(evidencias, key=lambda e: distancia_texto(item, e)) if evidencias else None
+        material = evidencia.get("material") if evidencia else None
+        propostas.append({
+            "indice": indice, "quantidade": int(item.get("quantidade_sugerida") or 1),
+            "largura_cm": item.get("largura_cm"), "altura_cm": item.get("altura_cm"),
+            "material": material.get("material") if material else None,
+            "acabamento": material.get("acabamento") if material else None,
+            "evidencia": f"{item.get('id')} {item.get('origem')}",
+            "confianca": 0.82,
+        })
+    return propostas
+
+
 def reconciliar_analise_visual(resultado: dict, visual: dict, fonte: str = "visao_api") -> dict:
     """Substitui a estrutura somente quando a visão declara conflito com proposta completa."""
     propostas = list(visual.get("itens") or []) if isinstance(visual.get("itens"), list) else []
@@ -266,6 +304,11 @@ def reconciliar_analise_visual(resultado: dict, visual: dict, fonte: str = "visa
             "confianca": min(0.95, float(leitura.get("confianca") or 0.8)),
         })
         chaves.add(chave)
+    if visual.get("_fase") != "mapa_visual_inicial" and not any(_proposta_completa(p) for p in propostas):
+        propostas_inventario = _propostas_inventario_geometrico(resultado)
+        if propostas_inventario:
+            propostas = propostas_inventario
+            visual["_inventario_geometrico_aplicado"] = True
     estado = visual.get("estrutura_confere", "incerto")
     divergencia_objetiva = len(propostas) != len(resultado.get("itens") or [])
     substituir = bool(
@@ -285,6 +328,11 @@ def reconciliar_analise_visual(resultado: dict, visual: dict, fonte: str = "visa
             resultado.setdefault("alertas", []).append({
                 "codigo": "ITEM_RECUPERADO_DE_OCR_ORFAO", "severidade": "revisao",
                 "mensagem": "Uma instrução completa lida pelo OCR não possuía item correspondente e foi recuperada.",
+            })
+        if visual.get("_inventario_geometrico_aplicado"):
+            resultado.setdefault("alertas", []).append({
+                "codigo": "ESTRUTURA_RECONSTRUIDA_PELO_INVENTARIO", "severidade": "revisao",
+                "mensagem": "A IA não produziu itens completos; caixas profundas do CDR reconstruíram a lista para conferência.",
             })
     else:
         por_indice = {p.get("indice"): p for p in propostas}

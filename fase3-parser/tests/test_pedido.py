@@ -10,7 +10,18 @@ _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent))
 
 from zcfreader import interpretar_nome_arquivo, parse_dimensoes, parse_material, parse_quantidade  # noqa: E402
-from zcfreader.pedido import _associar_um_a_um, _itens_de_instrucoes_explicitas  # noqa: E402
+from zcfreader.pedido import _associar_um_a_um, _inventario_geometrico, _itens_de_instrucoes_explicitas, selecionar_inventario_geometrico  # noqa: E402
+
+
+def _caixa_cm(x, y, largura, altura):
+    return SimpleNamespace(
+        esquerda=x * 100_000, base=y * 100_000,
+        direita=(x + largura) * 100_000, topo=(y + altura) * 100_000,
+    )
+
+
+def _objeto(tipo, caixa, ancestrais=()):
+    return SimpleNamespace(tipo="obj", tipo_objeto=tipo, caixa=caixa, ancestrais=ancestrais)
 
 
 class TestQuantidade(unittest.TestCase):
@@ -31,6 +42,51 @@ class TestQuantidade(unittest.TestCase):
         self.assertIsNone(parse_quantidade("Banner 90x120 cm"))
 
 
+class TestInventarioGeometrico(unittest.TestCase):
+    def test_encontra_produtos_dentro_de_grupo_profundo(self):
+        wheat_a = _caixa_cm(0, 0, 46, 49)
+        wheat_b = _caixa_cm(50, 0, 46, 49)
+        foto = _caixa_cm(120, 0, 13.44, 20.54)
+        grande = _caixa_cm(150, 0, 200, 190.11)
+        pequeno_a = _caixa_cm(370, 0, 106.25, 99.98)
+        pequeno_b = _caixa_cm(370, 110, 106.25, 99.98)
+        bitmap = _caixa_cm(500, 0, 20, 20)
+        numeros = _caixa_cm(-130, 0, 112.33, 63.64)
+        grupo = SimpleNamespace(tipo="grp", tipo_objeto=None, caixa=_caixa_cm(0, 0, 96, 60), ancestrais=())
+        estrutura = [
+            grupo,
+            _objeto("curva", wheat_a, ("grp",)), _objeto("curva", wheat_b, ("grp",)),
+            _objeto("retangulo", foto), _objeto("bitmap", foto),
+            _objeto("curva", grande), _objeto("curva", grande),
+            _objeto("curva", pequeno_a), _objeto("curva", pequeno_b),
+            _objeto("bitmap", bitmap), _objeto("texto", numeros),
+        ]
+        fluxo_numeros = SimpleNamespace(
+            fluxo=SimpleNamespace(texto="0102030405060708091011121314151617181920"),
+            objeto=estrutura[-1],
+        )
+        doc = SimpleNamespace(
+            estrutura=lambda: estrutura,
+            textos_por_objeto=lambda: [fluxo_numeros],
+        )
+
+        inventario = _inventario_geometrico(doc)
+        chaves = {(i["quantidade_sugerida"], round(i["largura_cm"], 2), round(i["altura_cm"], 2)) for i in inventario}
+
+        self.assertIn((1, 112.33, 63.64), chaves)
+        self.assertIn((1, 13.44, 20.54), chaves)
+        self.assertIn((1, 200.0, 190.11), chaves)
+        self.assertIn((2, 106.25, 99.98), chaves)
+        self.assertIn((1, 20.0, 20.0), chaves)
+        self.assertIn((1, 96.0, 49.0), chaves)
+
+        selecionados = selecionar_inventario_geometrico(inventario)
+        self.assertEqual(
+            {(i["quantidade_sugerida"], round(i["largura_cm"], 2), round(i["altura_cm"], 2)) for i in selecionados},
+            {(1, 112.33, 63.64), (1, 13.44, 20.54), (1, 200.0, 190.11), (2, 106.25, 99.98), (1, 20, 20), (1, 96, 49)},
+        )
+
+
 class TestMaterial(unittest.TestCase):
     def test_material_e_acabamento(self):
         self.assertEqual(
@@ -44,6 +100,10 @@ class TestMaterial(unittest.TestCase):
         self.assertEqual(
             parse_material("adesivo leitoso recortados"),
             {"material": "adesivo leitoso", "acabamento": "recortado"},
+        )
+        self.assertEqual(
+            parse_material("adesivo trasnparente com recorte especial"),
+            {"material": "adesivo transparente", "acabamento": "recorte especial"},
         )
 
     def test_texto_sem_material(self):

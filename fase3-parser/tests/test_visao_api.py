@@ -105,6 +105,9 @@ class TestMesclagemVisual(unittest.TestCase):
         mesclar_analise_visual(resultado, mapa)
         self.assertEqual(len(resultado["itens"]), 1)
 
+    def test_falha_exploratoria_forca_adjudicacao(self):
+        self.assertTrue(precisa_adjudicacao({"itens": [{"indice": 1}]}, {"itens": [], "_falha_modelo": "truncado"}))
+
     def test_normaliza_de_cada_e_contagem_visual(self):
         mapa = {"itens": [
             {"indice": 1, "quantidade": 2, "evidencia": "30 UNI DE CADA"},
@@ -202,6 +205,27 @@ class TestMesclagemVisual(unittest.TestCase):
 
         self.assertEqual(len(resultado["itens"]), 3)
         self.assertEqual(resultado["total_unidades"], 20)
+
+    def test_inventario_profundo_substitui_resposta_visual_sem_medidas(self):
+        resultado = {
+            "itens": [{"indice": 1, "quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 10, "altura_mm": 10}, "material": {"valor": None}, "acabamento": {"valor": None}}],
+            "evidencias_textuais": [], "alertas": [],
+            "hipoteses": {"inventario_geometrico": [
+                {"id": "G1", "origem": "bloco_numerico", "quantidade_sugerida": 1, "largura_cm": 112.33, "altura_cm": 63.64, "posicoes_centro_cm": [{"x": 0, "y": 0}], "tipos": ["texto_artistico"]},
+                {"id": "G2", "origem": "objetos_mesma_medida", "quantidade_sugerida": 2, "largura_cm": 106.25, "altura_cm": 99.98, "posicoes_centro_cm": [{"x": 200, "y": 0}, {"x": 200, "y": 110}], "tipos": ["curva"]},
+            ]},
+        }
+        visual = {
+            "_fase": "adjudicacao", "estrutura_confere": "incerto", "observacoes": [],
+            "instrucoes_visuais": [],
+            "itens": [{"indice": 1, "quantidade": 102304055, "largura_cm": None, "altura_cm": None, "material": None, "acabamento": None, "evidencia": "0102030405", "confianca": .98}],
+        }
+
+        mesclar_analise_visual(resultado, visual, fonte="modelo_local")
+
+        self.assertEqual([(i["quantidade"]["valor"], i["dimensoes"]["largura_mm"]) for i in resultado["itens"]], [(1, 1123.3), (2, 1062.5)])
+        self.assertEqual(resultado["total_unidades"], 3)
+        self.assertIn("ESTRUTURA_RECONSTRUIDA_PELO_INVENTARIO", [a["codigo"] for a in resultado["alertas"]])
 
 
 if __name__ == "__main__":

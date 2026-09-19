@@ -71,6 +71,8 @@ class TestModelosLocais(unittest.TestCase):
         self.assertIn("evidencia", item["properties"])
         self.assertIn("estrutura_confere", schema["properties"])
         self.assertEqual(schema["properties"]["observacoes"]["maxItems"], 0)
+        self.assertEqual(schema["properties"]["itens"]["maxItems"], 20)
+        self.assertEqual(item["properties"]["evidencia"]["maxLength"], 180)
 
     def test_asset_runtime_ignora_release_sem_binario(self):
         releases = [

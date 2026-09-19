@@ -207,6 +207,13 @@ def _evidencias_compactas(resultado: dict) -> dict:
 def _schema_resposta_local() -> dict:
     """Contrato enxuto para impedir que modelos pequenos entrem em repetição."""
     schema = _schema_resposta()
+    schema["properties"]["itens"]["maxItems"] = 20
+    schema["properties"]["instrucoes_visuais"]["maxItems"] = 20
+    item = schema["properties"]["itens"]["items"]["properties"]
+    item["material"]["maxLength"] = 80
+    item["acabamento"]["maxLength"] = 80
+    item["evidencia"]["maxLength"] = 180
+    schema["properties"]["instrucoes_visuais"]["items"]["properties"]["texto"]["maxLength"] = 180
     schema["properties"]["observacoes"] = {
         "type": "array", "maxItems": 0, "items": {"type": "string"},
     }
@@ -260,7 +267,14 @@ def analisar_com_modelo_local(caminho: Path, resultado_estrutural: dict | None, 
     if processo.returncode != 0:
         detalhe = (processo.stderr or processo.stdout).strip()[-1200:]
         raise RuntimeError("Falha ao executar o modelo local. " + detalhe)
-    resposta = _extrair_json(processo.stdout)
+    try:
+        resposta = _extrair_json(processo.stdout)
+    except RuntimeError as erro:
+        resposta = {
+            "estrutura_confere": "incerto", "documento_misto": False,
+            "instrucoes_visuais": [], "itens": [], "observacoes": [],
+            "_falha_modelo": str(erro),
+        }
     resposta["_imagem_origem"] = origem_imagem
     resposta["_ocr_visual"] = ocr_visual
     resposta["_fase"] = fase

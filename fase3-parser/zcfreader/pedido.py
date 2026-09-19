@@ -9,6 +9,7 @@ from collections import defaultdict
 from math import hypot
 from pathlib import Path
 import re
+from types import SimpleNamespace
 import unicodedata
 
 from .container import abrir_cdr
@@ -42,7 +43,7 @@ def parse_material(texto: str) -> dict | None:
         return None
     if banner:
         material = "lona" if "lona" in normalizado else "banner"
-    elif "transparente" in normalizado:
+    elif "transparente" in normalizado or "trasnparente" in normalizado:
         material = "adesivo transparente"
     elif "fosco" in normalizado:
         material = "adesivo fosco"
@@ -54,7 +55,11 @@ def parse_material(texto: str) -> dict | None:
         material = "adesivo normal"
     else:
         material = "adesivo"
-    if re.search(r"\bsem\s+rec(?:orte|ortad[oa]s?|\.)?\b", normalizado):
+    if "somente recorte" in normalizado:
+        acabamento = "somente recorte"
+    elif "recorte especial" in normalizado or "com recorte" in normalizado:
+        acabamento = "recorte especial"
+    elif re.search(r"\bsem\s+rec(?:orte|ortad[oa]s?|\.)?\b", normalizado):
         acabamento = "sem recorte"
     elif re.search(r"\brecortad[oa]s?\b", normalizado):
         acabamento = "recortado"
@@ -263,6 +268,170 @@ def _candidatos_arte(doc) -> list[dict]:
     return sorted(candidatos, key=lambda item: (item["caixa"].esquerda, -item["caixa"].topo))
 
 
+def _inventario_geometrico(doc) -> list[dict]:
+    """Expõe medidas profundas como hipóteses, sem promovê-las diretamente a itens.
+
+    Montagens reais costumam colocar vários produtos dentro de um único grupo de
+    topo. Caixas coincidentes (arte + contorno), repetições do mesmo tamanho,
+    bitmaps e blocos numéricos são sinais úteis para a adjudicação visual.
+    """
+    estrutura = list(doc.estrutura())
+    inventario: list[dict] = []
+    vistos = set()
+
+    def adicionar(origem: str, quantidade: int, largura_cm: float, altura_cm: float, caixas, tipos) -> None:
+        if largura_cm <= 0.1 or altura_cm <= 0.1:
+            return
+        if max(largura_cm / altura_cm, altura_cm / largura_cm) > 100:
+            return
+        centros = tuple(sorted(
+            (round((c.esquerda + c.direita) / 200_000, 2), round((c.base + c.topo) / 200_000, 2))
+            for c in caixas
+        ))
+        chave = (origem, quantidade, round(largura_cm, 2), round(altura_cm, 2), centros)
+        if chave in vistos:
+            return
+        vistos.add(chave)
+        inventario.append({
+            "id": f"G{len(inventario) + 1}", "origem": origem,
+            "quantidade_sugerida": quantidade,
+            "largura_cm": round(largura_cm, 3), "altura_cm": round(altura_cm, 3),
+            "posicoes_centro_cm": [{"x": x, "y": y} for x, y in centros],
+            "tipos": sorted(set(tipos)),
+        })
+
+    # União dos objetos imprimíveis de cada grupo de topo, descartando os
+    # cabeçalhos de texto. É especialmente útil em artes compostas por curvas.
+    for inicio, grupo in enumerate(estrutura):
+        if grupo.tipo != "grp" or grupo.ancestrais or grupo.caixa is None:
+            continue
+        fim = next((i for i in range(inicio + 1, len(estrutura)) if not estrutura[i].ancestrais), len(estrutura))
+        filhos = [
+            item for item in estrutura[inicio + 1:fim]
+            if item.tipo == "obj" and item.tipo_objeto != "texto" and item.caixa is not None
+        ]
+        if not filhos:
+            continue
+        esquerda = min(item.caixa.esquerda for item in filhos)
+        direita = max(item.caixa.direita for item in filhos)
+        base = min(item.caixa.base for item in filhos)
+        topo = max(item.caixa.topo for item in filhos)
+        caixa_uniao = SimpleNamespace(esquerda=esquerda, direita=direita, base=base, topo=topo)
+        adicionar(
+            "uniao_grupo_sem_textos", 1,
+            (direita - esquerda) / 100_000, (topo - base) / 100_000,
+            [caixa_uniao], [item.tipo_objeto or "desconhecido" for item in filhos],
+        )
+
+    # Objetos com a mesma medida podem ser duplicatas sobrepostas (arte e
+    # contorno) ou repetições físicas. Centros distintos definem a quantidade.
+    por_medida = defaultdict(list)
+    for item in estrutura:
+        if item.tipo != "obj" or item.tipo_objeto == "texto" or item.caixa is None:
+            continue
+        largura = (item.caixa.direita - item.caixa.esquerda) / 100_000
+        altura = (item.caixa.topo - item.caixa.base) / 100_000
+        if largura > 0.1 and altura > 0.1:
+            por_medida[(round(largura, 2), round(altura, 2))].append(item)
+    medidas_repetidas = []
+    for (largura, altura), objetos in por_medida.items():
+        if len(objetos) < 2 and not any(item.tipo_objeto == "bitmap" for item in objetos):
+            continue
+        posicoes = {}
+        for item in objetos:
+            centro = (
+                round((item.caixa.esquerda + item.caixa.direita) / 200_000, 2),
+                round((item.caixa.base + item.caixa.topo) / 200_000, 2),
+            )
+            posicoes.setdefault(centro, item.caixa)
+        medidas_repetidas.append({
+            "largura": largura, "altura": altura, "objetos": objetos,
+            "caixas": list(posicoes.values()), "quantidade": len(posicoes),
+        })
+    for candidato in medidas_repetidas:
+        area = candidato["largura"] * candidato["altura"]
+        dominado = any(
+            outro is not candidato
+            and outro["quantidade"] == candidato["quantidade"]
+            and outro["largura"] * outro["altura"] > area * 1.1
+            and all(any(_contem(caixa_maior, caixa) for caixa_maior in outro["caixas"])
+                    for caixa in candidato["caixas"])
+            for outro in medidas_repetidas
+        )
+        if dominado and not any(item.tipo_objeto == "bitmap" for item in candidato["objetos"]):
+            continue
+        adicionar(
+            "objetos_mesma_medida", candidato["quantidade"],
+            candidato["largura"], candidato["altura"], candidato["caixas"],
+            [item.tipo_objeto or "desconhecido" for item in candidato["objetos"]],
+        )
+
+    # Sequências como 01..20 podem ser a própria arte, não uma instrução.
+    for item in doc.textos_por_objeto() or ():
+        texto = "".join(item.fluxo.texto.split())
+        caixa = item.objeto.caixa
+        digitos = sum(caractere.isdigit() for caractere in texto)
+        if caixa is None or digitos < 8 or digitos / max(1, len(texto)) < 0.6:
+            continue
+        adicionar(
+            "bloco_numerico", 1,
+            (caixa.direita - caixa.esquerda) / 100_000,
+            (caixa.topo - caixa.base) / 100_000,
+            [caixa], ["texto_artistico"],
+        )
+
+    ordenado_bruto = sorted(inventario, key=lambda item: (
+        item["posicoes_centro_cm"][0]["x"] if item["posicoes_centro_cm"] else 0,
+        -(item["largura_cm"] * item["altura_cm"]),
+    ))
+    ordenado = []
+    for item in ordenado_bruto:
+        duplicado = any(
+            anterior["quantidade_sugerida"] == item["quantidade_sugerida"]
+            and abs(anterior["largura_cm"] - item["largura_cm"]) <= 0.02
+            and abs(anterior["altura_cm"] - item["altura_cm"]) <= 0.02
+            and anterior["posicoes_centro_cm"] == item["posicoes_centro_cm"]
+            for anterior in ordenado
+        )
+        if not duplicado:
+            ordenado.append(item)
+        if len(ordenado) >= 80:
+            break
+    for indice, item in enumerate(ordenado, 1):
+        item["id"] = f"G{indice}"
+    return ordenado
+
+
+def selecionar_inventario_geometrico(inventario: list[dict]) -> list[dict]:
+    """Remove agregados e partes internas usando contenção entre hipóteses."""
+    selecionados = [item for item in inventario if item.get("origem") != "uniao_grupo_sem_textos"]
+    unioes = [item for item in inventario if item.get("origem") == "uniao_grupo_sem_textos"]
+
+    def contem_centro(uniao: dict, centro: dict) -> bool:
+        origem = uniao.get("posicoes_centro_cm") or []
+        if not origem:
+            return False
+        cx, cy = origem[0]["x"], origem[0]["y"]
+        return (
+            cx - uniao["largura_cm"] / 2 <= centro["x"] <= cx + uniao["largura_cm"] / 2
+            and cy - uniao["altura_cm"] / 2 <= centro["y"] <= cy + uniao["altura_cm"] / 2
+        )
+
+    for uniao in unioes:
+        internos = [
+            item for item in selecionados
+            if item.get("id") != uniao.get("id")
+            and item.get("posicoes_centro_cm")
+            and all(contem_centro(uniao, centro) for centro in item["posicoes_centro_cm"])
+        ]
+        if len(internos) >= 2:
+            continue  # caixa agregada que engloba produtos distintos
+        if len(internos) == 1 and internos[0].get("quantidade_sugerida", 1) > 1:
+            selecionados.remove(internos[0])
+        selecionados.append(uniao)
+    return sorted(selecionados, key=lambda item: item["posicoes_centro_cm"][0]["x"])
+
+
 def _associar_um_a_um(candidatos: list[dict], referencias: list[dict]) -> dict[int, int]:
     pares = sorted(
         (_distancia(candidato["caixa"], referencia["objeto"].caixa), ci, ri)
@@ -450,6 +619,7 @@ def interpretar_pedido(caminho) -> dict:
         quantidades = _textos_quantidade(doc)
         instrucoes = _textos_material(doc)
         evidencias_textuais = _evidencias_textuais(doc)
+        inventario_geometrico = _inventario_geometrico(doc)
         evidencia_nome = interpretar_nome_arquivo(caminho.name)
         candidatos = _candidatos_arte(doc)
         associacoes = _associar_um_a_um(candidatos, quantidades)
@@ -548,6 +718,7 @@ def interpretar_pedido(caminho) -> dict:
             "total_unidades": sum(item["quantidade"]["valor"] or 0 for item in itens),
             "alertas": alertas,
             "hipoteses": {
+                "inventario_geometrico": inventario_geometrico,
                 "materiais_globais_ambiguos": [
                     {"material": item["material"], "acabamento": item["acabamento"], "texto_origem": item["texto_origem"]}
                     for item in materiais_ambiguos
