@@ -91,6 +91,33 @@ Depois dessa correção, o corpus completo voltou a produzir **7 associações, 
 
 Os outros oito arquivos não receberam associação regional automática. Isso é intencional: sem uma instrução reconhecida e uma relação espacial inequívoca, o protótipo se abstém. As sete linhas resolvidas representam precisão de 100% neste corpus, não conclusão automática das 31 linhas. O resultado passa a distinguir quantidade solicitada de ocorrências desenhadas e registra se a área confirma `uma por ocorrência` ou `repetir arte única`. Três associações possuíam legenda de área e as três foram confirmadas pela fórmula; nenhuma das sete permaneceu com ambiguidade semântica depois das provas disponíveis. A execução do OCR e das regras nos 11 arquivos levou cerca de 47 segundos no total, aproximadamente 4,3 segundos por pedido.
 
+## Resultado 5: material e acabamento por região
+
+O mesmo princípio foi aplicado a material e acabamento sem preencher o documento inteiro por propagação global. O protótipo combina texto nativo, OCR e nome do arquivo, mas só associa uma especificação quando encontra uma relação auditável:
+
+- medida escrita no mesmo rótulo do material;
+- cabeçalho imediatamente acima e alinhado ao produto;
+- legenda imediatamente abaixo e alinhada ao conjunto;
+- quantidade regional já confirmada;
+- nome do arquivo com medida compatível ou documento com um único candidato visível.
+
+O extrator também normaliza abreviações observadas (`ads`), palavras concatenadas (`papelcouche`) e acabamentos compostos, como `frente e verso + ilhós + verniz`. Materiais genéricos no gabarito, como `adesivo`, aceitam uma subcategoria mais específica como compatível, mas a evidência original continua registrada no manifesto.
+
+No corpus:
+
+- havia material preenchido no gabarito para 26 linhas;
+- 25 receberam uma associação regional e as 25 foram compatíveis com a revisão;
+- uma linha (`A07` de `adesivoss.cdr`) permaneceu sem material, em vez de herdar uma especificação distante;
+- foram emitidas associações para 28 IDs de candidato; sete desses IDs não correspondem diretamente a uma linha revisada e, portanto, **não podem ser chamados de acertos**. Eles mostram que ainda existe sobresegmentação no catálogo e devem permanecer fora da exportação automática;
+- havia 12 acabamentos produtivos válidos no gabarito: 11 coincidiram e um divergiu;
+- três acabamentos foram emitidos em candidatos sem acabamento comparável no gabarito.
+
+A divergência real ocorreu em `adesivoss.cdr`: o texto do próprio CDR associado a `A01` diz `adesivo leitoso somente recorte`, enquanto a correção do operador registra `adesivo` com `recorte especial`. O protótipo preserva a leitura do arquivo. Esse caso deve virar **conflito de fontes para revisão**, e não ser corrigido silenciosamente por uma regra criada depois de conhecer o gabarito.
+
+Há ainda uma anomalia no dado de revisão de `wadna banner e adesivo sem recorte.cdr`: `banner` foi preenchido no campo acabamento da lona. O avaliador registra isso como acabamento esperado sem previsão, mas não o considera um acabamento produtivo válido na interpretação dos resultados.
+
+Conclusão: a associação regional de material/acabamento é promissora e mantém a rastreabilidade, mas ainda não está pronta para alimentar exportação sem revisão. O próximo portão é eliminar ou classificar as sete emissões sem gabarito e apresentar conflitos de fonte explicitamente ao operador.
+
 ## Arquitetura recomendada após o ensaio
 
 1. Extrair preview, nome, textos nativos, cores e todas as caixas do CDR.
@@ -120,7 +147,8 @@ Esses tempos são faixas de engenharia, não SLA; variam com a quantidade de reg
 - Modelo local 3B reconstruindo o pedido inteiro: **reprovado (25% das linhas exatas no recorte)**.
 - Primeira regra de formação de bloco regional: **aprovada no caso Real Farma, sem falsos positivos nos outros dez casos**.
 - Primeiras regras de associação regional: **aprovadas (7/7 corretas, zero falsas)**.
-- Ampliação controlada para materiais e casos sem quantidade explícita: **próximo experimento**.
+- Ampliação controlada para materiais e acabamentos: **aprovada como experimento (25/25 materiais avaliados compatíveis; 11/12 acabamentos válidos compatíveis), ainda com uma abstenção de material, um conflito de fonte e sete emissões sem gabarito**.
+- Classificação das emissões extras e apresentação de conflitos ao operador: **próximo experimento**.
 - Modelo maior ou API como árbitro regional: testar somente depois da associação determinística, nos mesmos casos e com a mesma métrica.
 
 ## Reproduzir
@@ -130,6 +158,7 @@ $env:PYTHONPATH = "fase3-parser"
 python scripts/validar_arquitetura_agente.py `
   "$env:USERPROFILE\Documents\LeitorPedidosCDR\Relatorios" `
   "C:\caminho\para\saida" `
+  --com-ocr-regional `
   --gabaritos "C:\caminho\para\gabaritos-locais.json"
 
 python scripts/testar_agente_local.py "C:\caminho\para\saida" 03 06 08

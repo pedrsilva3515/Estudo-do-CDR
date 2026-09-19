@@ -13,7 +13,9 @@ from .pedido import (
     _evidencias_textuais,
     _inventario_geometrico,
     parse_dimensoes,
+    parse_material,
     parse_quantidade,
+    interpretar_nome_arquivo,
 )
 from .visao_api import extrair_imagem_analise
 
@@ -395,11 +397,227 @@ def extrair_associacoes_regionais(caminho: Path, catalogo: dict) -> dict:
     with Image.open(BytesIO(bytes_imagem)) as imagem:
         tamanho = imagem.size
     leituras = executar_ocr(bytes_imagem)
+    intervalo_x = limites["direita"] - limites["esquerda"]
+    intervalo_y = limites["topo"] - limites["base"]
+    leituras_cm = []
+    for leitura in leituras:
+        xs = [ponto[0] for ponto in leitura["poligono_px"]]
+        ys = [ponto[1] for ponto in leitura["poligono_px"]]
+        leituras_cm.append({**leitura, "caixa_cm": {
+            "esquerda": limites["esquerda"] + min(xs) / tamanho[0] * intervalo_x,
+            "direita": limites["esquerda"] + max(xs) / tamanho[0] * intervalo_x,
+            "topo": limites["topo"] - min(ys) / tamanho[1] * intervalo_y,
+            "base": limites["topo"] - max(ys) / tamanho[1] * intervalo_y,
+        }})
     hipoteses = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
     return {
-        "leituras_ocr": leituras,
+        "leituras_ocr": leituras_cm,
         "associacoes": associar_instrucoes_regionais(leituras, hipoteses, limites, tamanho),
     }
+
+
+def _especificacao_material(texto: str) -> dict | None:
+    normalizado = " ".join(texto.casefold().replace("+", " ").split())
+    compacto = re.sub(r"\s+", "", normalizado)
+    material = parse_material(texto)
+    if material is None and re.search(r"\bads\b", normalizado):
+        material = parse_material("adesivo " + texto)
+    if "papelcouche" in compacto or "papelcouchê" in compacto:
+        material = {"material": "papel couche", "acabamento": None}
+    if material is None:
+        return None
+    valor_material = material["material"]
+    if "branco" in normalizado and valor_material == "adesivo":
+        valor_material = "adesivo branco"
+    acabamento = material.get("acabamento")
+    especiais = []
+    if "frente e verso" in normalizado:
+        especiais.append("frente e verso")
+    if "ilh" in normalizado:
+        especiais.append("ilhós")
+    if "verniz" in normalizado:
+        especiais.append("verniz")
+    if especiais:
+        acabamento = " + ".join(especiais)
+    return {"material": valor_material, "acabamento": acabamento}
+
+
+def _dimensoes_instrucao_material(texto: str, especificacao: dict) -> dict | None:
+    dimensoes = parse_dimensoes(texto)
+    if dimensoes is not None:
+        return dimensoes
+    match = re.search(r"(?i)(?<!\d)(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)(?!\d)", texto)
+    if match and especificacao.get("material"):
+        return {
+            "largura_mm": float(match.group(1).replace(",", ".")) * 10,
+            "altura_mm": float(match.group(2).replace(",", ".")) * 10,
+            "texto_origem": match.group(0),
+        }
+    return None
+
+
+def associar_materiais_acabamentos(catalogo: dict) -> list[dict]:
+    """Associa especificações explícitas sem espalhá-las por documentos mistos."""
+    candidatos = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
+    por_id = {item["id"]: item for item in candidatos}
+    visiveis = [item for item in candidatos if item.get("visivel_inicialmente", True)]
+    confirmados = {
+        item["candidato_id"]
+        for item in catalogo.get("ocr_regional", {}).get("associacoes", [])
+    }
+    confirmados.update(item["id"] for item in catalogo.get("blocos_producao", []))
+
+    fontes = []
+    for evidencia in catalogo.get("evidencias_textuais", []):
+        especificacao = _especificacao_material(evidencia.get("texto", ""))
+        if especificacao and evidencia.get("caixa_mm"):
+            fontes.append({
+                **especificacao, "texto": evidencia["texto"], "fonte": "texto_cdr",
+                "caixa_cm": _caixa_texto_cm(evidencia),
+                "quantidade": evidencia.get("quantidade"),
+                "dimensoes": evidencia.get("dimensoes") or _dimensoes_instrucao_material(evidencia["texto"], especificacao),
+            })
+    for leitura in catalogo.get("ocr_regional", {}).get("leituras_ocr", []):
+        especificacao = _especificacao_material(leitura.get("texto", ""))
+        if especificacao and leitura.get("caixa_cm"):
+            duplicada = any(
+                fonte["material"] == especificacao["material"]
+                and _sobreposicao_horizontal(fonte["caixa_cm"], leitura["caixa_cm"]) > 0.7
+                for fonte in fontes
+            )
+            if not duplicada:
+                fontes.append({
+                    **especificacao, "texto": leitura["texto"], "fonte": "ocr",
+                    "caixa_cm": leitura["caixa_cm"],
+                    "quantidade": (parse_quantidade(leitura["texto"]) or (None,))[0],
+                    "dimensoes": _dimensoes_instrucao_material(leitura["texto"], especificacao),
+                })
+
+    propostas: dict[str, list[dict]] = {}
+
+    def propor(candidato_id: str, fonte: dict, regra: str, confianca: float) -> None:
+        propostas.setdefault(candidato_id, []).append({
+            "material": fonte.get("material"), "acabamento": fonte.get("acabamento"),
+            "texto": fonte.get("texto"), "fonte": fonte.get("fonte"),
+            "regra": regra, "confianca": confianca,
+        })
+
+    for bloco in catalogo.get("blocos_producao", []):
+        propor(bloco["id"], {
+            "material": bloco.get("material_sugerido"),
+            "acabamento": bloco.get("acabamento_sugerido"),
+            "texto": " / ".join(bloco.get("instrucoes", [])), "fonte": "bloco_producao",
+        }, "instrucao_do_bloco", 0.99)
+
+    for fonte in fontes:
+        dimensoes = fonte.get("dimensoes") or {}
+        largura = float(dimensoes.get("largura_mm") or 0) / 10
+        altura = float(dimensoes.get("altura_mm") or 0) / 10
+        compativeis_dimensao = []
+        if largura and altura:
+            for candidato in visiveis:
+                erro = min(
+                    abs(candidato["largura_cm"] - largura) + abs(candidato["altura_cm"] - altura),
+                    abs(candidato["largura_cm"] - altura) + abs(candidato["altura_cm"] - largura),
+                )
+                if erro <= 0.5:
+                    compativeis_dimensao.append(candidato)
+        if compativeis_dimensao:
+            for candidato in compativeis_dimensao:
+                propor(candidato["id"], fonte, "material_com_dimensao", 0.99)
+            continue
+        quantidade = fonte.get("quantidade")
+        if quantidade:
+            compativeis_quantidade = [
+                item for item in visiveis if item.get("quantidade_geometrica") == quantidade
+            ]
+            if len(compativeis_quantidade) == 1:
+                propor(compativeis_quantidade[0]["id"], fonte, "material_com_quantidade", 0.96)
+                continue
+        caixa_texto = fonte["caixa_cm"]
+        abaixo = []
+        margem = max(2.0, (caixa_texto["direita"] - caixa_texto["esquerda"]) * 0.15)
+        for candidato in visiveis:
+            caixa = candidato["caixa_cm"]
+            centro_x = (caixa["esquerda"] + caixa["direita"]) / 2
+            if not (caixa_texto["esquerda"] - margem <= centro_x <= caixa_texto["direita"] + margem):
+                continue
+            if caixa["topo"] >= caixa_texto["base"]:
+                continue
+            abaixo.append((caixa_texto["base"] - caixa["topo"], candidato))
+        if abaixo:
+            menor_distancia = min(item[0] for item in abaixo)
+            faixa_vertical = max(5.0, menor_distancia * 0.25)
+            alvos = [item for distancia, item in abaixo if distancia - menor_distancia <= faixa_vertical]
+            if len(alvos) <= 3:
+                for candidato in alvos:
+                    propor(candidato["id"], fonte, "cabecalho_regional", 0.92)
+                continue
+        acima = []
+        for candidato in visiveis:
+            caixa = candidato["caixa_cm"]
+            centro_x = (caixa["esquerda"] + caixa["direita"]) / 2
+            if not (caixa_texto["esquerda"] - margem <= centro_x <= caixa_texto["direita"] + margem):
+                continue
+            if caixa["base"] <= caixa_texto["topo"]:
+                continue
+            sobreposicao = _sobreposicao_horizontal(caixa_texto, caixa)
+            centro_texto_x = (caixa_texto["esquerda"] + caixa_texto["direita"]) / 2
+            texto_sobre_candidato = caixa["esquerda"] <= centro_texto_x <= caixa["direita"]
+            if sobreposicao >= 0.25 or texto_sobre_candidato:
+                acima.append((caixa["base"] - caixa_texto["topo"], -candidato.get("quantidade_geometrica", 1), candidato))
+        if acima:
+            menor_distancia = min(item[0] for item in acima)
+            proximos = [item for distancia, _, item in acima if distancia - menor_distancia <= max(3.0, menor_distancia * 0.2)]
+            melhor = max(proximos, key=lambda item: item.get("quantidade_geometrica", 1))
+            propor(melhor["id"], fonte, "legenda_regional_abaixo", 0.94)
+
+    nome = interpretar_nome_arquivo(catalogo["arquivo"])
+    especificacao_nome = _especificacao_material(nome["texto"])
+    if especificacao_nome:
+        fonte_nome = {**especificacao_nome, "texto": nome["texto"], "fonte": "nome_arquivo"}
+        alvos_nome = [por_id[item] for item in confirmados if item in por_id]
+        dimensoes_nome = nome.get("dimensoes") or {}
+        if not alvos_nome and dimensoes_nome:
+            largura = float(dimensoes_nome.get("largura_mm") or 0) / 10
+            altura = float(dimensoes_nome.get("altura_mm") or 0) / 10
+            alvos_nome = [
+                item for item in visiveis
+                if min(
+                    abs(item["largura_cm"] - largura) + abs(item["altura_cm"] - altura),
+                    abs(item["largura_cm"] - altura) + abs(item["altura_cm"] - largura),
+                ) <= 0.5
+            ]
+        if not alvos_nome and len(visiveis) == 1:
+            alvos_nome = visiveis
+        for candidato in alvos_nome:
+            propor(candidato["id"], fonte_nome, "nome_arquivo_em_alvo_confirmado", 0.75)
+
+    resultado = []
+    for candidato_id, opcoes in propostas.items():
+        materiais = {item["material"] for item in opcoes if item.get("material")}
+        familias = {
+            "adesivo" if material.startswith("adesivo") else "lona" if material in {"banner", "lona"} else material
+            for material in materiais
+        }
+        if len(familias) != 1:
+            continue
+        locais = [item for item in opcoes if item["fonte"] != "nome_arquivo"]
+        escolhida = max(
+            opcoes,
+            key=lambda item: (len(item.get("material") or ""), item["fonte"] != "nome_arquivo", item["confianca"]),
+        )
+        acabamentos = {
+            item["acabamento"] for item in (locais or opcoes) if item.get("acabamento")
+        }
+        acabamento = next(iter(acabamentos)) if len(acabamentos) == 1 else None
+        resultado.append({
+            "candidato_id": candidato_id, "material": escolhida["material"],
+            "acabamento": acabamento, "fonte": escolhida["fonte"],
+            "texto": escolhida["texto"], "regra": escolhida["regra"],
+            "confianca": escolhida["confianca"],
+        })
+    return sorted(resultado, key=lambda item: item["candidato_id"])
 
 
 def extrair_candidatos_agente(caminho: Path) -> dict:

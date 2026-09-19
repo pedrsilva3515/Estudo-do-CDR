@@ -6,6 +6,7 @@ from zcfreader.experimento_agente import (
     _anotar_hierarquia,
     _separar_regioes_contiguas,
     associar_instrucoes_regionais,
+    associar_materiais_acabamentos,
     avaliar_cobertura_geometrica,
     detectar_blocos_producao,
 )
@@ -228,6 +229,56 @@ class TestAssociacaoRegional(unittest.TestCase):
 
         self.assertTrue(resultado[0]["requer_confirmacao_semantica"])
         self.assertEqual(resultado[0]["interpretacao_quantidade"], "total_igual_as_ocorrencias_desenhadas_sem_area")
+
+
+class TestMateriaisRegionais(unittest.TestCase):
+    def test_dimensao_no_rotulo_e_legenda_abaixo_separam_documento_misto(self):
+        banner = candidato("A01", 80, 80, {"esquerda": 0, "direita": 80, "base": 20, "topo": 100})
+        adesivos = candidato("A02", 43, 43, {"esquerda": 100, "direita": 143, "base": 20, "topo": 63}, 5)
+        for item in (banner, adesivos):
+            item["visivel_inicialmente"] = True
+        catalogo = {
+            "arquivo": "banner e adesivo sem recorte.cdr",
+            "candidatos": [banner, adesivos], "blocos_producao": [],
+            "ocr_regional": {"associacoes": [], "leituras_ocr": []},
+            "evidencias_textuais": [
+                {
+                    "texto": "banner 80x80", "quantidade": None, "dimensoes": None,
+                    "material": {"material": "banner", "acabamento": None},
+                    "caixa_mm": {"esquerda": 100, "direita": 700, "base": 1050, "topo": 1150},
+                },
+                {
+                    "texto": "ads sem recorte", "quantidade": None, "dimensoes": None,
+                    "material": None,
+                    "caixa_mm": {"esquerda": 1000, "direita": 1430, "base": 0, "topo": 100},
+                },
+            ],
+        }
+
+        resultado = {item["candidato_id"]: item for item in associar_materiais_acabamentos(catalogo)}
+
+        self.assertEqual(resultado["A01"]["material"], "banner")
+        self.assertEqual(resultado["A02"]["material"], "adesivo")
+        self.assertEqual(resultado["A02"]["acabamento"], "sem recorte")
+
+    def test_preserva_acabamentos_compostos(self):
+        item = candidato("A01", 88, 88, {"esquerda": 0, "direita": 88, "base": 0, "topo": 88})
+        item["visivel_inicialmente"] = True
+        catalogo = {
+            "arquivo": "material.cdr", "candidatos": [item], "blocos_producao": [],
+            "ocr_regional": {"associacoes": [], "leituras_ocr": []},
+            "evidencias_textuais": [{
+                "texto": "LONA + VERNIZ - FRENTE E VERSO + ILHÓS",
+                "quantidade": None, "dimensoes": None,
+                "material": {"material": "lona", "acabamento": None},
+                "caixa_mm": {"esquerda": 0, "direita": 880, "base": 900, "topo": 1000},
+            }],
+        }
+
+        resultado = associar_materiais_acabamentos(catalogo)
+
+        self.assertEqual(resultado[0]["material"], "lona")
+        self.assertEqual(resultado[0]["acabamento"], "frente e verso + ilhós + verniz")
 
 
 if __name__ == "__main__":
