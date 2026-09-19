@@ -99,6 +99,12 @@ python scripts/avaliar_relatorios.py "$env:USERPROFILE\Documents\LeitorPedidosCD
 Ele compara itens sem depender da ordem da tabela e mede quantidade, dimensões,
 material, acabamento, total de unidades e correspondência integral.
 
+Uma arquitetura de agente por candidatos identificados está sendo validada fora
+do fluxo da aplicação. Ela preserva medidas determinísticas do CDR e usa visão
+somente para selecionar produtos e resolver ambiguidades. Método, resultados de
+hardware e critérios de decisão estão em
+[docs/validacao-arquitetura-agente.md](docs/validacao-arquitetura-agente.md).
+
 ### Revisão e diagnóstico
 
 Depois de cada análise, a interface permite confirmar o resultado ou corrigir,
