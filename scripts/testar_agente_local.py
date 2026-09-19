@@ -70,11 +70,13 @@ def schema(ids: list[str]) -> dict:
 def prompt(manifesto: dict) -> str:
     catalogo = manifesto["catalogo"]
     principais = [item for item in catalogo["candidatos"] if item["visivel_inicialmente"]]
+    principais += catalogo.get("blocos_producao", [])
     lista = [
         {
             "id": item["id"], "quantidade_geometrica": item["quantidade_geometrica"],
             "largura_cm": round(item["largura_cm"], 2), "altura_cm": round(item["altura_cm"], 2),
-            "tem_detalhes": bool(item["filhos_ids"]),
+            "tem_detalhes": bool(item.get("filhos_ids")),
+            "origem": item.get("origem"),
         }
         for item in principais
     ]
@@ -120,6 +122,7 @@ def memoria_processo_bytes(pid: int) -> int:
 def executar(caso: Path) -> dict:
     manifesto = json.loads((caso / "manifesto.json").read_text(encoding="utf-8"))
     ids = [item["id"] for item in manifesto["catalogo"]["candidatos"] if item["visivel_inicialmente"]]
+    ids += [item["id"] for item in manifesto["catalogo"].get("blocos_producao", [])]
     caminhos = caminhos_instalacao()
     with tempfile.TemporaryDirectory(prefix="cdr-agente-local-") as temporaria:
         pasta = Path(temporaria)

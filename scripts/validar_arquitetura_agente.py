@@ -43,7 +43,8 @@ for indice, (zip_path, membro_cdr, diagnostico) in enumerate(casos_revisados(arg
         caminho.write_bytes(pacote.read(membro_cdr))
         esperado = gabaritos.get(diagnostico["arquivo"]["nome"]) or json.loads(pacote.read("resultado-correto.json"))
         catalogo = extrair_candidatos_agente(caminho)
-        cobertura = avaliar_cobertura_geometrica(catalogo["candidatos"], esperado)
+        hipoteses_mediveis = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
+        cobertura = avaliar_cobertura_geometrica(hipoteses_mediveis, esperado)
         pasta_caso = args.pasta_saida / f"{indice:02d}-{diagnostico['arquivo']['sha256'][:8]}"
         pasta_caso.mkdir(parents=True, exist_ok=True)
         gravar_manifesto(catalogo, esperado, cobertura, pasta_caso / "manifesto.json")
@@ -51,6 +52,7 @@ for indice, (zip_path, membro_cdr, diagnostico) in enumerate(casos_revisados(arg
         resumo.append({
             "arquivo": diagnostico["arquivo"]["nome"],
             "candidatos": len(catalogo["candidatos"]),
+            "blocos_producao": len(catalogo.get("blocos_producao", [])),
             "cobertura_geometrica": cobertura,
             "imagens": [str(item) for item in imagens],
         })

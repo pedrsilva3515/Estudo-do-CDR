@@ -15,9 +15,18 @@ Em vez de pedir que um modelo visual reconstrua sozinho todo o pedido, o CDR é 
 
 ## Resultado 1: teto geométrico
 
-Foram encontradas no CDR geometrias compatíveis para 30 das 31 linhas esperadas: **96,77%**.
+O catálogo de objetos prontos encontrou geometrias compatíveis para 30 das 31 linhas esperadas: **96,77%**.
 
-O único item sem hipótese compatível foi 47,2 x 102,1 cm em `MATERIAL_DA_REAL_FARMA_1.cdr`. Isso indica que a dimensão corrigida pelo operador não existe como uma caixa mensurável no arquivo. Esse caso exige instrução textual, fonte externa ou correção manual; nenhum modelo deve fingir que conferiu a medida no CDR.
+O item inicialmente ausente era 47,2 x 102,1 cm em `MATERIAL_DA_REAL_FARMA_1.cdr`. A revisão do processo mostrou que essa caixa não existia como grupo no arquivo original: o operador agrupou os objetos soltos abaixo de “ADESIVOS BRANCO RECORTADOS / DO MESMO TAMANHO” para enviá-los juntos ao recorte.
+
+Foi acrescentado experimentalmente o conceito de **bloco de produção derivado**. O detector:
+
+- reconheceu a moldura que organiza a informação;
+- separou as duas linhas de instrução;
+- selecionou os 14 objetos produtivos posicionados abaixo delas;
+- calculou a união desses objetos, sem incluir cabeçalho ou moldura.
+
+O resultado foi **47,2105 x 102,1072 cm**, diferença total de apenas 0,17 mm em relação ao gabarito arredondado. Nenhum dos outros dez pedidos gerou um bloco derivado falso. Com hipóteses prontas e derivadas, a cobertura passou para **31 de 31 linhas (100%)**.
 
 O teste considera separadamente:
 
@@ -59,11 +68,12 @@ Uma marcação de candidato sobre o texto ocultou o primeiro caractere de uma li
 1. Extrair preview, nome, textos nativos, cores e todas as caixas do CDR.
 2. Rodar OCR na imagem original, preservando polígonos e confiança.
 3. Construir candidatos medíveis e uma hierarquia de composição/detalhe.
-4. Associar deterministicamente instruções a candidatos por dimensão, proximidade, alinhamento e abrangência (`de cada`, colchetes e grupos).
-5. Abrir uma tarefa visual pequena somente para regiões ambíguas. O modelo escolhe IDs existentes; não fornece medidas livres.
-6. Aplicar validações de consistência: área escrita, quantidade desenhada, quantidade pedida, duplicidade e soma.
-7. Mostrar ao operador a origem de cada campo e impedir exportação automática enquanto houver ambiguidade relevante.
-8. Exportar objetos apenas depois da confirmação, reutilizando os IDs/caixas já aprovados.
+4. Derivar blocos operacionais pela união de objetos quando uma instrução e uma região delimitada definirem o conjunto, mesmo que o cliente não o tenha agrupado.
+5. Associar deterministicamente instruções a candidatos por dimensão, proximidade, alinhamento e abrangência (`de cada`, colchetes e grupos).
+6. Abrir uma tarefa visual pequena somente para regiões ambíguas. O modelo escolhe IDs existentes; não fornece medidas livres.
+7. Aplicar validações de consistência: área escrita, quantidade desenhada, quantidade pedida, duplicidade e soma.
+8. Mostrar ao operador a origem de cada campo e impedir exportação automática enquanto houver ambiguidade relevante.
+9. Exportar objetos apenas depois da confirmação, reutilizando os IDs/caixas já aprovados.
 
 ## Hardware e tempo projetados
 
@@ -78,9 +88,10 @@ Esses tempos são faixas de engenharia, não SLA; variam com a quantidade de reg
 
 ## Portões de decisão
 
-- Cobertura geométrica mínima de 95%: **aprovado (96,77%)**.
+- Cobertura por geometrias prontas ou blocos derivados mínima de 95%: **aprovado (100%)**.
 - Modelo local 3B reconstruindo o pedido inteiro: **reprovado (25% das linhas exatas no recorte)**.
-- Associação regional OCR + geometria: **próximo experimento**.
+- Primeira regra de formação de bloco regional: **aprovada no caso Real Farma, sem falsos positivos nos outros dez casos**.
+- Associação regional completa de quantidades e dimensões: **próximo experimento**.
 - Modelo maior ou API como árbitro regional: testar somente depois da associação determinística, nos mesmos casos e com a mesma métrica.
 
 ## Reproduzir

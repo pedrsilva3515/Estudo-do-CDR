@@ -85,6 +85,90 @@ def _anotar_hierarquia(candidatos: list[dict]) -> None:
         ]
 
 
+def _caixa_texto_cm(evidencia: dict) -> dict:
+    caixa = evidencia["caixa_mm"]
+    return {chave: float(caixa[chave]) / 10 for chave in ("esquerda", "direita", "base", "topo")}
+
+
+def detectar_blocos_producao(candidatos: list[dict], evidencias: list[dict]) -> list[dict]:
+    """Deriva seleções operacionais que não estavam agrupadas no CDR.
+
+    A primeira regra validada cobre um quadro que contém uma instrução de
+    adesivos recortados "do mesmo tamanho" e, abaixo dela, os objetos soltos que
+    o operador enviará juntos para recorte. A medida vem da união dos objetos,
+    nunca da moldura nem do texto de instrução.
+    """
+    evidencias_caixa = [(item, _caixa_texto_cm(item)) for item in evidencias if item.get("caixa_mm")]
+    materiais = [
+        (item, caixa) for item, caixa in evidencias_caixa
+        if item.get("material") and "recort" in str(item["material"].get("acabamento") or "").casefold()
+    ]
+    mesmo_tamanho = [
+        (item, caixa) for item, caixa in evidencias_caixa
+        if "mesmo tamanho" in item.get("texto", "").casefold()
+    ]
+    blocos = []
+    for instrucao, caixa_instrucao in materiais:
+        complementos = [
+            (item, caixa) for item, caixa in mesmo_tamanho
+            if abs((caixa["esquerda"] + caixa["direita"]) / 2 - (caixa_instrucao["esquerda"] + caixa_instrucao["direita"]) / 2) <= 20
+            and abs(caixa["topo"] - caixa_instrucao["base"]) <= 20
+        ]
+        if not complementos:
+            continue
+        complemento, caixa_complemento = min(
+            complementos, key=lambda par: abs(par[1]["topo"] - caixa_instrucao["base"])
+        )
+        cabecalhos = [(instrucao, caixa_instrucao), (complemento, caixa_complemento)]
+        molduras = []
+        for candidato in candidatos:
+            caixa = candidato["caixa_cm"]
+            if all(_contem_caixa(caixa, caixa_cabecalho, tolerancia_cm=0.2) for _, caixa_cabecalho in cabecalhos):
+                contidos = [item for item, caixa_texto in evidencias_caixa if _contem_caixa(caixa, caixa_texto, 0.2)]
+                if len(contidos) >= 5:
+                    molduras.append(candidato)
+        if not molduras:
+            continue
+        moldura = min(molduras, key=lambda item: _area_caixa(item["caixa_cm"]))
+        limite_superior = min(caixa["base"] for _, caixa in cabecalhos)
+        ids_cabecalho = {id(item) for item, _ in cabecalhos}
+        conteudo = [
+            (item, caixa) for item, caixa in evidencias_caixa
+            if id(item) not in ids_cabecalho
+            and _contem_caixa(moldura["caixa_cm"], caixa, tolerancia_cm=0.2)
+            and caixa["topo"] < limite_superior
+            and not item.get("dimensoes")
+            and not item.get("material")
+        ]
+        if len(conteudo) < 2:
+            continue
+        uniao = {
+            "esquerda": min(caixa["esquerda"] for _, caixa in conteudo),
+            "direita": max(caixa["direita"] for _, caixa in conteudo),
+            "base": min(caixa["base"] for _, caixa in conteudo),
+            "topo": max(caixa["topo"] for _, caixa in conteudo),
+        }
+        texto_instrucao = instrucao.get("texto", "")
+        material = "adesivo branco" if "branco" in texto_instrucao.casefold() else instrucao["material"].get("material")
+        blocos.append({
+            "id": f"P{len(blocos) + 1:02d}", "origem": "bloco_producao_derivado",
+            "quantidade_geometrica": 1,
+            "largura_cm": round(uniao["direita"] - uniao["esquerda"], 3),
+            "altura_cm": round(uniao["topo"] - uniao["base"], 3),
+            "caixa_cm": uniao, "posicoes_centro_cm": [{
+                "x": round((uniao["esquerda"] + uniao["direita"]) / 2, 3),
+                "y": round((uniao["base"] + uniao["topo"]) / 2, 3),
+            }],
+            "tipos": ["selecao_operacional"], "moldura_id": moldura["id"],
+            "instrucoes": [item.get("texto") for item, _ in cabecalhos],
+            "objetos_incluidos": [item.get("texto") for item, _ in conteudo],
+            "material_sugerido": material,
+            "acabamento_sugerido": instrucao["material"].get("acabamento"),
+            "regra": "mesmo_tamanho_em_moldura_com_uniao_dos_objetos_abaixo",
+        })
+    return blocos
+
+
 def extrair_candidatos_agente(caminho: Path) -> dict:
     """Cria um catálogo de caixas medíveis sem decidir quais são produtos."""
     with abrir_cdr(caminho) as doc:
@@ -138,6 +222,7 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
     for indice, item in enumerate(candidatos, 1):
         item["id"] = f"A{indice:02d}"
     _anotar_hierarquia(candidatos)
+    blocos_producao = detectar_blocos_producao(candidatos, evidencias)
 
     caixas_topo = [
         item.caixa for item in estrutura
@@ -155,6 +240,7 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
         "arquivo": Path(caminho).name,
         "limites_conteudo_cm": limites,
         "candidatos": candidatos,
+        "blocos_producao": blocos_producao,
         "evidencias_textuais": evidencias,
     }
 
@@ -260,6 +346,19 @@ def gerar_atlas_candidatos(caminho: Path, catalogo: dict, pasta_saida: Path, por
     entrada_path = pasta_saida / "entrada-agente.png"
     folha.save(entrada_path)
     saidas.append(entrada_path)
+
+    if catalogo.get("blocos_producao"):
+        blocos = imagem.copy()
+        desenho_blocos = ImageDraw.Draw(blocos)
+        for bloco in catalogo["blocos_producao"]:
+            caixa = bloco["caixa_cm"]
+            retangulo = (pixel_x(caixa["esquerda"]), pixel_y(caixa["topo"]), pixel_x(caixa["direita"]), pixel_y(caixa["base"]))
+            desenho_blocos.rectangle(retangulo, outline="#00a060", width=6)
+            rotulo = f"{bloco['id']} {bloco['largura_cm']:.2f} x {bloco['altura_cm']:.2f} cm"
+            desenho_blocos.text((retangulo[0] + 4, retangulo[1] + 4), rotulo, fill="#008050", font=fonte, stroke_width=2, stroke_fill="white")
+        blocos_path = pasta_saida / "blocos-producao.png"
+        blocos.save(blocos_path)
+        saidas.append(blocos_path)
 
     candidatos = catalogo["candidatos"]
     for pagina, inicio in enumerate(range(0, len(candidatos), por_pagina), 1):
