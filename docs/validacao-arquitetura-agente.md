@@ -140,7 +140,24 @@ O catálogo agora diferencia:
 
 Conflitos também deixaram de causar descarte silencioso. Materiais de famílias incompatíveis ou acabamentos diferentes são preservados com suas fontes e textos. Depois da revisão humana, o comparador registra separadamente `valor_do_arquivo` e `valor_confirmado`. No corpus, foi encontrado exatamente o conflito conhecido de `adesivoss.cdr`: `somente recorte` no arquivo contra `recorte especial` confirmado pelo operador.
 
-A interface foi preparada para esse estado sem ativar o novo analisador na v0.7.3. Quando um resultado futuro trouxer conflitos, o status muda para revisão necessária, surge o botão `Ver conflitos` e o operador pode consultar valores e evidências. Na ausência desses campos, o comportamento atual permanece inalterado.
+A interface apresenta esse estado quando a camada experimental está habilitada: o status muda para revisão necessária, surge o botão `Ver conflitos` e o operador pode consultar valores e evidências. Com a opção desligada, o comportamento da v0.7.3 permanece inalterado.
+
+## Resultado 7: integração paralela opcional
+
+A configuração da aplicação passou a oferecer `Ativar arquitetura regional experimental`, desligada por padrão. Quando ativada, a camada regional roda depois da leitura estrutural e anexa uma auditoria compacta ao resultado original e ao pacote de diagnóstico. Ela não altera nem substitui a tabela principal.
+
+A janela `Ver análise regional` apresenta:
+
+- ID e papel estrutural do candidato;
+- estado da decisão;
+- quantidade pedida ou quantidade desenhada;
+- medidas determinísticas do CDR;
+- material e acabamento associados;
+- regra, fonte e texto de cada evidência.
+
+O isolamento foi testado nos dois caminhos: sucesso da camada experimental e falha forçada. Em ambos, os itens do resultado estável permaneceram iguais. Em caso de falha, a aplicação registra `FALHA_ARQUITETURA_REGIONAL_EXPERIMENTAL` e continua a análise normal.
+
+Um ensaio completo pela mesma função usada na interface, com `VINIL_FOSCO_-_CAIXA_MONET.cdr`, levou 4,28 segundos nesta máquina e retornou três produtos confirmados: 30 de 28 x 33 cm, 30 de 24 x 94 cm e 60 de 20 x 25 cm, todos associados a adesivo fosco, sem estruturas auxiliares ou revisões pendentes.
 
 ## Arquitetura recomendada após o ensaio
 
@@ -173,8 +190,9 @@ Esses tempos são faixas de engenharia, não SLA; variam com a quantidade de reg
 - Primeiras regras de associação regional: **aprovadas (7/7 corretas, zero falsas)**.
 - Ampliação controlada para materiais e acabamentos: **aprovada como experimento (25/25 materiais avaliados compatíveis; 11/12 acabamentos válidos compatíveis), ainda com uma abstenção de material, um conflito de fonte e sete emissões sem gabarito**.
 - Classificação das emissões extras: **aprovada no corpus (7/7 explicadas; nenhum item revisado rebaixado)**.
-- Estado de conflito na interface: **implementado de forma compatível e ainda inativo no fluxo v0.7.3**.
-- Integração do catálogo regional ao resultado principal: **próximo experimento, inicialmente atrás de uma opção experimental**.
+- Estado de conflito na interface: **implementado**.
+- Integração paralela do catálogo regional: **implementada atrás de opção experimental, desligada por padrão e sem substituir o resultado principal**.
+- Comparação assistida entre tabela estável e produtos regionais dentro da revisão: **próximo experimento**.
 - Modelo maior ou API como árbitro regional: testar somente depois da associação determinística, nos mesmos casos e com a mesma métrica.
 
 ## Reproduzir

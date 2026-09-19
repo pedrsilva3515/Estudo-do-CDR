@@ -18,6 +18,7 @@ from .configuracao import (
     salvar_chave_openai,
     salvar_configuracao,
 )
+from .experimento_agente import executar_arquitetura_regional
 from .pedido import interpretar_pedido
 from .relatorios import VERSAO_APLICACAO, gerar_pacote_diagnostico, normalizar_resultado_corrigido
 from .modelos_locais import (
@@ -194,6 +195,10 @@ class AplicacaoPedido:
 
         rodape = ttk.Frame(conteudo, padding=(0, 14, 0, 0))
         rodape.pack(fill="x")
+        self.botao_auditoria_regional = ttk.Button(
+            rodape, text="Ver análise regional", style="Secondary.TButton",
+            command=self.ver_analise_regional,
+        )
         self.botao_conflitos = ttk.Button(
             rodape, text="Ver conflitos", style="Secondary.TButton", command=self.ver_conflitos,
         )
@@ -208,13 +213,16 @@ class AplicacaoPedido:
     def configurar_ia(self) -> None:
         janela = tk.Toplevel(self.raiz)
         janela.title("Configurar processamento")
-        janela.geometry("540x600")
+        janela.geometry("540x680")
         janela.resizable(False, False)
         janela.configure(bg=COR_FUNDO)
         janela.transient(self.raiz)
         janela.grab_set()
         corpo = ttk.Frame(janela, padding=24)
         corpo.pack(fill="both", expand=True)
+        var_arquitetura = tk.BooleanVar(
+            value=self.configuracao.get("arquitetura_regional_experimental") is True
+        )
         ttk.Label(corpo, text="Processamento visual", style="Titulo.TLabel", font=("Segoe UI", 16, "bold")).pack(anchor="w")
         ttk.Label(corpo, text="O modelo local roda na CPU e nunca envia o pedido para a internet.", style="Subtitulo.TLabel").pack(anchor="w", pady=(4, 14))
 
@@ -272,6 +280,7 @@ class AplicacaoPedido:
                         self.configuracao = {
                             "modo": "local", "provedor": "openai",
                             "modelo": var_modelo.get() or MODELOS_OPENAI[0],
+                            "arquitetura_regional_experimental": var_arquitetura.get(),
                         }
                         salvar_configuracao(self.configuracao)
                         atualizar_status_modelo()
@@ -306,6 +315,19 @@ class AplicacaoPedido:
         combo_modo = ttk.Combobox(corpo, textvariable=var_modo, values=list(modos), state="readonly")
         combo_modo.pack(fill="x", pady=(4, 12))
 
+        ttk.Checkbutton(
+            corpo, variable=var_arquitetura,
+            text="Ativar arquitetura regional experimental",
+        ).pack(anchor="w", pady=(0, 3))
+        ttk.Label(
+            corpo,
+            text=(
+                "Executa uma segunda análise auditável de produtos, estruturas e conflitos. "
+                "Ela não substitui automaticamente o resultado principal."
+            ),
+            style="Subtitulo.TLabel", wraplength=450, justify="left",
+        ).pack(anchor="w", pady=(0, 12))
+
         ttk.Label(corpo, text="Modelo OpenAI", style="Subtitulo.TLabel").pack(anchor="w")
         var_modelo = tk.StringVar(value=self.configuracao.get("modelo", MODELOS_OPENAI[0]))
         ttk.Combobox(corpo, textvariable=var_modelo, values=MODELOS_OPENAI, state="readonly").pack(fill="x", pady=(4, 12))
@@ -329,7 +351,10 @@ class AplicacaoPedido:
             if modo == "api" and not chave_existente and not var_chave.get().strip():
                 messagebox.showwarning("Chave necessária", "Informe uma chave da API para ativar este modo.", parent=janela)
                 return
-            self.configuracao = {"modo": modo, "provedor": "openai", "modelo": var_modelo.get()}
+            self.configuracao = {
+                "modo": modo, "provedor": "openai", "modelo": var_modelo.get(),
+                "arquitetura_regional_experimental": var_arquitetura.get(),
+            }
             salvar_configuracao(self.configuracao)
             if var_chave.get() != marcador:
                 salvar_chave_openai(var_chave.get())
@@ -363,6 +388,7 @@ class AplicacaoPedido:
         self.rotulo_total.configure(text="…")
         self.rotulo_alertas.configure(text="")
         self.botao_conflitos.pack_forget()
+        self.botao_auditoria_regional.pack_forget()
         for linha in self.tabela.get_children():
             self.tabela.delete(linha)
         self.progresso.grid(row=1, column=1, sticky="e", padx=(20, 0), pady=(8, 0))
@@ -392,6 +418,13 @@ class AplicacaoPedido:
                 visual_inicial = analisar_com_openai(caminho, None, chave, self.configuracao["modelo"])
 
             estrutural = interpretar_pedido(caminho)
+            auditoria_regional = None
+            falha_regional = None
+            if self.configuracao.get("arquitetura_regional_experimental") is True:
+                try:
+                    auditoria_regional = executar_arquitetura_regional(caminho)
+                except Exception as erro_regional:
+                    falha_regional = str(erro_regional)
             resultado = deepcopy(estrutural)
             if visual_inicial is not None:
                 visual = visual_inicial
@@ -411,6 +444,22 @@ class AplicacaoPedido:
                 }
             else:
                 resultado["processamento"] = {"modo": "estrutural", "provedor": None, "modelo": None}
+            if self.configuracao.get("arquitetura_regional_experimental") is True:
+                resultado["processamento"]["arquitetura_regional_experimental"] = True
+                if auditoria_regional is not None:
+                    resultado["analise_regional_experimental"] = auditoria_regional
+                    resultado["conflitos_fontes"] = auditoria_regional.get("conflitos_fontes", [])
+                    resultado.setdefault("alertas", []).append({
+                        "codigo": "ARQUITETURA_REGIONAL_EXPERIMENTAL",
+                        "severidade": "informacao",
+                        "mensagem": "A análise regional experimental foi executada em paralelo.",
+                    })
+                else:
+                    resultado.setdefault("alertas", []).append({
+                        "codigo": "FALHA_ARQUITETURA_REGIONAL_EXPERIMENTAL",
+                        "severidade": "revisao",
+                        "mensagem": falha_regional or "A camada experimental não retornou resultado.",
+                    })
             self.fila.put(("ok", {
                 "resultado": resultado, "estrutural": estrutural,
                 "visual": {"mapa_visual_inicial": visual_inicial, "adjudicacao": adjudicacao},
@@ -465,6 +514,7 @@ class AplicacaoPedido:
         modo = resultado.get("modo_cor", {}).get("documento") or "não identificado"
         pendencias = resultado.get("pendencias", [])
         conflitos = coletar_conflitos(resultado)
+        auditoria_regional = resultado.get("analise_regional_experimental")
         nome_usado = any(
             item.get(campo, {}).get("fonte") == "nome_arquivo"
             for item in itens for campo in ("quantidade", "material", "acabamento")
@@ -477,8 +527,9 @@ class AplicacaoPedido:
             origem_ia = f" • OCR + IA: {processamento.get('modelo')}"
         else:
             origem_ia = " • análise estrutural"
+        origem_regional = " • arquitetura regional experimental" if auditoria_regional else ""
         self.rotulo_status.configure(
-            text=f"{len(itens)} item(ns) • modo de cor {modo}{origem_nome}{origem_ia} • "
+            text=f"{len(itens)} item(ns) • modo de cor {modo}{origem_nome}{origem_ia}{origem_regional} • "
             + ("revisão necessária" if pendencias or conflitos else "análise concluída"),
             foreground=COR_SUCESSO if not pendencias and not conflitos else "#9a6700",
         )
@@ -494,6 +545,15 @@ class AplicacaoPedido:
             self.botao_conflitos.pack(side="right", padx=(10, 0))
         else:
             self.botao_conflitos.pack_forget()
+        if auditoria_regional:
+            resumo_regional = auditoria_regional.get("resumo", {})
+            detalhes.append(
+                f"regional: {resumo_regional.get('produtos_propostos', 0)} produto(s), "
+                f"{resumo_regional.get('revisoes_necessarias', 0)} revisão(ões)"
+            )
+            self.botao_auditoria_regional.pack(side="right", padx=(10, 0))
+        else:
+            self.botao_auditoria_regional.pack_forget()
         reconstruida = any(a.get("codigo") == "ESTRUTURA_RECONSTRUIDA_PELA_VISAO" for a in alertas_lista)
         if reconstruida:
             detalhes.append("A IA reconstruiu os itens — confira antes de confirmar")
@@ -530,6 +590,77 @@ class AplicacaoPedido:
             "O sistema encontrou informações incompatíveis e não escolheu silenciosamente entre elas.\n\n"
             + "\n".join(linhas),
         )
+
+    def ver_analise_regional(self) -> None:
+        if self.resultado is None:
+            return
+        auditoria = self.resultado.get("analise_regional_experimental")
+        if not auditoria:
+            return
+        janela = tk.Toplevel(self.raiz)
+        janela.title("Análise regional experimental")
+        janela.geometry("1080x580")
+        janela.minsize(900, 480)
+        janela.transient(self.raiz)
+        corpo = ttk.Frame(janela, padding=18)
+        corpo.pack(fill="both", expand=True)
+        resumo = auditoria.get("resumo", {})
+        ttk.Label(
+            corpo, text="Análise regional experimental",
+            style="Titulo.TLabel", font=("Segoe UI", 16, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            corpo,
+            text=(
+                f"{resumo.get('produtos_propostos', 0)} produto(s) proposto(s) • "
+                f"{resumo.get('produtos_confirmados', 0)} confirmado(s) por evidência • "
+                f"{resumo.get('estruturas_auxiliares', 0)} estrutura(s) auxiliar(es) • "
+                f"{resumo.get('revisoes_necessarias', 0)} revisão(ões)"
+            ),
+            style="Subtitulo.TLabel",
+        ).pack(anchor="w", pady=(3, 12))
+        colunas = ("id", "papel", "estado", "quantidade", "tamanho", "material", "acabamento")
+        tabela = ttk.Treeview(corpo, columns=colunas, show="headings", height=12)
+        titulos = {
+            "id": "ID", "papel": "Papel", "estado": "Estado", "quantidade": "Qtd.",
+            "tamanho": "Tamanho (cm)", "material": "Material", "acabamento": "Acabamento",
+        }
+        larguras = {"id": 55, "papel": 190, "estado": 150, "quantidade": 65, "tamanho": 120, "material": 160, "acabamento": 145}
+        itens_por_id = {}
+        for coluna in colunas:
+            tabela.heading(coluna, text=titulos[coluna])
+            tabela.column(coluna, width=larguras[coluna], anchor="center" if coluna not in {"papel", "material"} else "w")
+        for item in auditoria.get("itens", []):
+            candidato_id = item.get("candidato_id")
+            itens_por_id[candidato_id] = item
+            quantidade = item.get("quantidade_pedido")
+            if quantidade is None:
+                quantidade = f"desenho: {item.get('quantidade_desenhada', 1)}"
+            tabela.insert("", "end", iid=candidato_id, values=(
+                candidato_id, item.get("papel"), item.get("estado"), quantidade,
+                f"{_numero(item.get('largura_cm', 0))} × {_numero(item.get('altura_cm', 0))}",
+                item.get("material") or "—", item.get("acabamento") or "—",
+            ))
+        tabela.pack(fill="both", expand=True)
+
+        def ver_evidencias() -> None:
+            selecionado = tabela.selection()
+            if not selecionado:
+                messagebox.showinfo("Selecione um candidato", "Selecione uma linha da auditoria.", parent=janela)
+                return
+            item = itens_por_id[selecionado[0]]
+            linhas = [f"Papel: {item.get('papel')}", f"Motivo: {item.get('motivo')}"]
+            for evidencia in item.get("evidencias", []):
+                linhas.append(
+                    f"- {evidencia.get('fonte') or '?'} / {evidencia.get('regra') or '?'}: "
+                    f"{evidencia.get('texto') or 'sem texto'}"
+                )
+            messagebox.showinfo("Evidências do candidato", "\n".join(linhas), parent=janela)
+
+        ttk.Button(
+            corpo, text="Ver evidências do candidato", style="Secondary.TButton",
+            command=ver_evidencias,
+        ).pack(anchor="e", pady=(10, 0))
 
     def _salvar_feedback(self, correto: dict, situacao: str, observacao: str = "") -> None:
         if self.arquivo is None or self.resultado_original is None:

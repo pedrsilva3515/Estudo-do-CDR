@@ -48,6 +48,13 @@ escolhido para os computadores da gráfica com 32 GB de RAM e sem placa de víde
 Também permanecem disponíveis o modo estrutural rápido e a análise opcional pela
 API da OpenAI.
 
+A mesma janela contém a opção **Ativar arquitetura regional experimental**.
+Quando marcada, ela executa uma segunda leitura em paralelo, sem substituir os
+itens do fluxo estável. O botão **Ver análise regional** mostra candidatos,
+papel estrutural, quantidade, medidas, material, acabamento e evidências. Uma
+falha nessa camada gera um alerta, mas não impede a entrega do resultado
+principal. A opção vem desligada por padrão.
+
 ### Fluxo 0.7
 
 A versão 0.7 trata o resultado estrutural como hipótese. A etapa visual recebe

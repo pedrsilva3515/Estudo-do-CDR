@@ -10,6 +10,7 @@ from zcfreader.experimento_agente import (
     avaliar_cobertura_geometrica,
     comparar_materiais_com_revisao,
     detectar_blocos_producao,
+    resumir_catalogo_regional,
 )
 
 
@@ -390,6 +391,36 @@ class TestMateriaisRegionais(unittest.TestCase):
         self.assertEqual(conflitos[0]["valor_do_arquivo"], "somente recorte")
         self.assertEqual(conflitos[0]["valor_confirmado"], "recorte especial")
         self.assertEqual(conflitos[0]["evidencias"][0]["texto"], "SOMENTE RECORTE")
+
+    def test_resumo_regional_separa_produto_estrutura_e_pendencia(self):
+        produto = candidato("A01", 80, 80, {"esquerda": 0, "direita": 80, "base": 0, "topo": 80})
+        estrutura = candidato("A02", 10, 10, {"esquerda": 5, "direita": 15, "base": 5, "topo": 15})
+        pendente = candidato("A03", 20, 20, {"esquerda": 100, "direita": 120, "base": 0, "topo": 20})
+        for item in (produto, estrutura, pendente):
+            item["visivel_inicialmente"] = True
+        catalogo = {
+            "arquivo": "pedido.cdr", "candidatos": [produto, estrutura, pendente], "blocos_producao": [],
+            "ocr_regional": {"associacoes": [{
+                "candidato_id": "A01", "quantidade": 2, "requer_confirmacao_semantica": False,
+            }]},
+            "materiais_regionais": [{
+                "candidato_id": "A01", "material": "adesivo", "acabamento": "sem recorte",
+                "papel_candidato": "produto_confirmado", "exportavel_automaticamente": True,
+                "motivo_classificacao": "evidencia_explicita", "evidencias": [], "conflitos": [],
+            }, {
+                "candidato_id": "A02", "material": "adesivo", "acabamento": None,
+                "papel_candidato": "detalhe_interno_do_produto", "exportavel_automaticamente": False,
+                "motivo_classificacao": "contido", "evidencias": [], "conflitos": [],
+            }],
+        }
+
+        resumo = resumir_catalogo_regional(catalogo)
+
+        self.assertEqual(resumo["resumo"]["produtos_propostos"], 1)
+        self.assertEqual(resumo["resumo"]["estruturas_auxiliares"], 1)
+        self.assertEqual(resumo["resumo"]["revisoes_necessarias"], 1)
+        self.assertEqual(resumo["itens"][0]["quantidade_pedido"], 2)
+        self.assertEqual(resumo["itens"][2]["estado"], "revisao_necessaria")
 
 
 if __name__ == "__main__":

@@ -895,6 +895,86 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
     }
 
 
+def resumir_catalogo_regional(catalogo: dict) -> dict:
+    """Converte o catálogo pesado em uma auditoria adequada à interface e ao log."""
+    candidatos = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
+    visiveis = [item for item in candidatos if item.get("visivel_inicialmente", True)]
+    materiais = {
+        item["candidato_id"]: item for item in catalogo.get("materiais_regionais", [])
+    }
+    quantidades: dict[str, list[dict]] = {}
+    for associacao in catalogo.get("ocr_regional", {}).get("associacoes", []):
+        quantidades.setdefault(associacao["candidato_id"], []).append(associacao)
+    itens = []
+    conflitos = []
+    for candidato in visiveis:
+        candidato_id = candidato["id"]
+        material = materiais.get(candidato_id) or {}
+        associacoes = quantidades.get(candidato_id, [])
+        valores_quantidade = {int(item["quantidade"]) for item in associacoes}
+        quantidade_pedido = next(iter(valores_quantidade)) if len(valores_quantidade) == 1 else None
+        papel = material.get("papel_candidato", "sem_classificacao")
+        conflitos_item = material.get("conflitos", [])
+        requer_confirmacao_quantidade = any(
+            item.get("requer_confirmacao_semantica") is True for item in associacoes
+        )
+        if conflitos_item or papel in {"estrutura_ambigua", "sem_classificacao"} or requer_confirmacao_quantidade:
+            estado = "revisao_necessaria"
+        elif papel == "produto_confirmado":
+            estado = "confirmado_por_evidencia"
+        elif papel == "produto_plausivel":
+            estado = "produto_plausivel"
+        else:
+            estado = "estrutura_auxiliar"
+        evidencias = [{
+            "fonte": item.get("fonte"), "regra": item.get("regra"),
+            "texto": item.get("texto"), "confianca": item.get("confianca"),
+        } for item in material.get("evidencias", [])]
+        itens.append({
+            "candidato_id": candidato_id,
+            "papel": papel, "estado": estado,
+            "quantidade_pedido": quantidade_pedido,
+            "quantidade_desenhada": candidato.get("quantidade_geometrica", 1),
+            "largura_cm": round(float(candidato["largura_cm"]), 3),
+            "altura_cm": round(float(candidato["altura_cm"]), 3),
+            "material": material.get("material"),
+            "acabamento": material.get("acabamento"),
+            "exportavel_automaticamente": material.get("exportavel_automaticamente", False),
+            "motivo": material.get("motivo_classificacao", "sem_associacao_regional"),
+            "evidencias": evidencias,
+        })
+        for conflito in conflitos_item:
+            conflitos.append({
+                **conflito, "candidato_id": candidato_id,
+                "evidencias": evidencias, "requer_revisao": True,
+            })
+    produtivos = [item for item in itens if item["papel"] in {"produto_confirmado", "produto_plausivel"}]
+    auxiliares = [item for item in itens if item["estado"] == "estrutura_auxiliar"]
+    ambiguos = [item for item in itens if item["estado"] == "revisao_necessaria"]
+    return {
+        "schema_version": "1.0-experimental",
+        "arquivo": catalogo.get("arquivo"),
+        "itens": itens,
+        "resumo": {
+            "candidatos_visiveis": len(itens),
+            "produtos_propostos": len(produtivos),
+            "produtos_confirmados": sum(item["papel"] == "produto_confirmado" for item in itens),
+            "estruturas_auxiliares": len(auxiliares),
+            "revisoes_necessarias": len(ambiguos),
+            "conflitos_entre_fontes": len(conflitos),
+        },
+        "conflitos_fontes": conflitos,
+    }
+
+
+def executar_arquitetura_regional(caminho: Path) -> dict:
+    """Executa a camada experimental completa sem alterar o resultado estável."""
+    catalogo = extrair_candidatos_agente(caminho)
+    catalogo["ocr_regional"] = extrair_associacoes_regionais(caminho, catalogo)
+    catalogo["materiais_regionais"] = associar_materiais_acabamentos(catalogo)
+    return resumir_catalogo_regional(catalogo)
+
+
 def avaliar_cobertura_geometrica(candidatos: list[dict], esperado: dict, tolerancia_mm: float = 2.0) -> dict:
     """Mede o teto da arquitetura: existe algum candidato para cada item correto?"""
     detalhes = []

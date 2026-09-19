@@ -18,7 +18,10 @@ def caminho_configuracao() -> Path:
 
 
 def carregar_configuracao() -> dict:
-    padrao = {"modo": "estrutural", "provedor": "openai", "modelo": MODELOS_OPENAI[0]}
+    padrao = {
+        "modo": "estrutural", "provedor": "openai", "modelo": MODELOS_OPENAI[0],
+        "arquitetura_regional_experimental": False,
+    }
     caminho = caminho_configuracao()
     if not caminho.is_file():
         return padrao
@@ -32,17 +35,21 @@ def carregar_configuracao() -> dict:
     if dados.get("versao_config", 1) < 2 and modo == "local":
         modo = "estrutural"
     modelo = dados.get("modelo") if dados.get("modelo") in MODELOS_OPENAI else padrao["modelo"]
-    return {"modo": modo, "provedor": "openai", "modelo": modelo}
+    return {
+        "modo": modo, "provedor": "openai", "modelo": modelo,
+        "arquitetura_regional_experimental": dados.get("arquitetura_regional_experimental") is True,
+    }
 
 
 def salvar_configuracao(configuracao: dict) -> None:
     caminho = caminho_configuracao()
     caminho.parent.mkdir(parents=True, exist_ok=True)
     publico = {
-        "versao_config": 2,
+        "versao_config": 3,
         "modo": configuracao.get("modo", "estrutural"),
         "provedor": "openai",
         "modelo": configuracao.get("modelo", MODELOS_OPENAI[0]),
+        "arquitetura_regional_experimental": configuracao.get("arquitetura_regional_experimental") is True,
     }
     caminho.write_text(json.dumps(publico, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
