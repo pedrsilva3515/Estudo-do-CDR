@@ -1,7 +1,13 @@
+param(
+    [string]$Nome = "Leitor-de-Pedidos-CDR",
+    [string]$DistDir = "dist",
+    [string]$BuildDir = "build"
+)
+
 $ErrorActionPreference = "Stop"
 $raiz = Split-Path -Parent $PSScriptRoot
-$saida = Join-Path $raiz "dist"
-$temporarios = Join-Path $raiz "build"
+$saida = Join-Path $raiz $DistDir
+$temporarios = Join-Path $raiz $BuildDir
 
 Push-Location $raiz
 try {
@@ -11,7 +17,7 @@ try {
         --clean `
         --onefile `
         --windowed `
-        --name "Leitor-de-Pedidos-CDR" `
+        --name $Nome `
         --paths "fase3-parser" `
         --collect-all tkinterdnd2 `
         --collect-all keyring `
@@ -27,4 +33,4 @@ try {
     Pop-Location
 }
 
-Write-Output "Executável criado em $saida\Leitor-de-Pedidos-CDR.exe"
+Write-Output "Executável criado em $saida\$Nome.exe"

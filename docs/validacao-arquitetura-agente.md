@@ -1,7 +1,7 @@
 # Validação da arquitetura de agente visual
 
 Data: 19/09/2026
-Estado: experimento separado; o fluxo do aplicativo v0.7.3 não foi alterado.
+Estado: integrado opcionalmente na v0.8.0 experimental; desligado por padrão e executado em paralelo ao fluxo estável.
 
 ## Hipótese avaliada
 
