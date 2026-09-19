@@ -10,6 +10,7 @@ import threading
 from time import perf_counter
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+import unicodedata
 
 from .configuracao import (
     MODELOS_OPENAI,
@@ -73,6 +74,111 @@ def coletar_conflitos(resultado: dict) -> list[dict]:
             vistos.add(chave)
             unicos.append(conflito)
     return unicos
+
+
+def _texto_comparavel(valor) -> str:
+    texto = "".join(
+        caractere for caractere in unicodedata.normalize("NFKD", str(valor or "").casefold())
+        if not unicodedata.combining(caractere)
+    )
+    return " ".join(texto.split())
+
+
+def _materiais_compativeis(principal, regional) -> bool:
+    a, b = _texto_comparavel(principal), _texto_comparavel(regional)
+    if a == b:
+        return True
+    if {a, b} <= {"banner", "lona"}:
+        return True
+    return (a == "adesivo" and b.startswith("adesivo ")) or (b == "adesivo" and a.startswith("adesivo "))
+
+
+def comparar_resultado_com_regional(principal: dict, auditoria: dict) -> dict:
+    """Pareia produtos por medida e explica divergências sem alterar resultados."""
+    itens_principais = principal.get("itens", [])
+    itens_regionais = [
+        item for item in auditoria.get("itens", [])
+        if item.get("papel") in {"produto_confirmado", "produto_plausivel"}
+    ]
+    pares = []
+    for indice_principal, item_principal in enumerate(itens_principais):
+        dimensoes = item_principal.get("dimensoes") or {}
+        largura = float(dimensoes.get("largura_mm") or 0) / 10
+        altura = float(dimensoes.get("altura_mm") or 0) / 10
+        if largura <= 0 or altura <= 0:
+            continue
+        for indice_regional, item_regional in enumerate(itens_regionais):
+            rw = float(item_regional.get("largura_cm") or 0)
+            rh = float(item_regional.get("altura_cm") or 0)
+            erro = min(abs(largura - rw) + abs(altura - rh), abs(largura - rh) + abs(altura - rw))
+            if erro <= 1.0:
+                quantidade_principal = (item_principal.get("quantidade") or {}).get("valor")
+                quantidade_regional = item_regional.get("quantidade_pedido")
+                penalidade_quantidade = int(
+                    quantidade_regional is not None
+                    and int(quantidade_principal or 0) != int(quantidade_regional)
+                )
+                material_principal = (item_principal.get("material") or {}).get("valor")
+                material_regional = item_regional.get("material")
+                penalidade_material = int(
+                    bool(material_principal and material_regional)
+                    and not _materiais_compativeis(material_principal, material_regional)
+                )
+                pares.append((erro, penalidade_quantidade, penalidade_material, indice_principal, indice_regional))
+    usados_principais = set()
+    usados_regionais = set()
+    correspondencias = []
+    for erro, _, _, indice_principal, indice_regional in sorted(pares):
+        if indice_principal in usados_principais or indice_regional in usados_regionais:
+            continue
+        usados_principais.add(indice_principal)
+        usados_regionais.add(indice_regional)
+        item_principal = itens_principais[indice_principal]
+        item_regional = itens_regionais[indice_regional]
+        diferencas = []
+        if erro > 0.1:
+            diferencas.append("dimensoes")
+        quantidade_principal = (item_principal.get("quantidade") or {}).get("valor")
+        quantidade_regional = item_regional.get("quantidade_pedido")
+        if quantidade_regional is not None and int(quantidade_principal or 0) != int(quantidade_regional):
+            diferencas.append("quantidade")
+        material_principal = (item_principal.get("material") or {}).get("valor")
+        material_regional = item_regional.get("material")
+        if material_regional and (not material_principal or not _materiais_compativeis(material_principal, material_regional)):
+            diferencas.append("material")
+        acabamento_principal = (item_principal.get("acabamento") or {}).get("valor")
+        acabamento_regional = item_regional.get("acabamento")
+        if acabamento_regional and _texto_comparavel(acabamento_principal) != _texto_comparavel(acabamento_regional):
+            diferencas.append("acabamento")
+        correspondencias.append({
+            "estado": "divergencia" if diferencas else "compativel",
+            "diferencas": diferencas, "erro_dimensoes_cm": round(erro, 3),
+            "indice_principal": indice_principal, "item_principal": item_principal,
+            "indice_regional": indice_regional, "item_regional": item_regional,
+        })
+    for indice_principal, item_principal in enumerate(itens_principais):
+        if indice_principal not in usados_principais:
+            correspondencias.append({
+                "estado": "somente_principal", "diferencas": ["sem_par_regional"],
+                "indice_principal": indice_principal, "item_principal": item_principal,
+                "indice_regional": None, "item_regional": None,
+            })
+    for indice_regional, item_regional in enumerate(itens_regionais):
+        if indice_regional not in usados_regionais:
+            correspondencias.append({
+                "estado": "somente_regional", "diferencas": ["sem_par_principal"],
+                "indice_principal": None, "item_principal": None,
+                "indice_regional": indice_regional, "item_regional": item_regional,
+            })
+    return {
+        "correspondencias": correspondencias,
+        "resumo": {
+            "compativeis": sum(item["estado"] == "compativel" for item in correspondencias),
+            "divergencias": sum(item["estado"] == "divergencia" for item in correspondencias),
+            "somente_principal": sum(item["estado"] == "somente_principal" for item in correspondencias),
+            "somente_regional": sum(item["estado"] == "somente_regional" for item in correspondencias),
+        },
+    }
 
 
 class AplicacaoPedido:
@@ -449,6 +555,9 @@ class AplicacaoPedido:
                 if auditoria_regional is not None:
                     resultado["analise_regional_experimental"] = auditoria_regional
                     resultado["conflitos_fontes"] = auditoria_regional.get("conflitos_fontes", [])
+                    resultado["comparacao_regional"] = comparar_resultado_com_regional(
+                        resultado, auditoria_regional
+                    )
                     resultado.setdefault("alertas", []).append({
                         "codigo": "ARQUITETURA_REGIONAL_EXPERIMENTAL",
                         "severidade": "informacao",
@@ -515,6 +624,12 @@ class AplicacaoPedido:
         pendencias = resultado.get("pendencias", [])
         conflitos = coletar_conflitos(resultado)
         auditoria_regional = resultado.get("analise_regional_experimental")
+        comparacao_regional = resultado.get("comparacao_regional") or {}
+        resumo_comparacao = comparacao_regional.get("resumo", {})
+        divergencia_regional = any(
+            resumo_comparacao.get(campo, 0) > 0
+            for campo in ("divergencias", "somente_principal", "somente_regional")
+        )
         nome_usado = any(
             item.get(campo, {}).get("fonte") == "nome_arquivo"
             for item in itens for campo in ("quantidade", "material", "acabamento")
@@ -530,8 +645,8 @@ class AplicacaoPedido:
         origem_regional = " • arquitetura regional experimental" if auditoria_regional else ""
         self.rotulo_status.configure(
             text=f"{len(itens)} item(ns) • modo de cor {modo}{origem_nome}{origem_ia}{origem_regional} • "
-            + ("revisão necessária" if pendencias or conflitos else "análise concluída"),
-            foreground=COR_SUCESSO if not pendencias and not conflitos else "#9a6700",
+            + ("revisão necessária" if pendencias or conflitos or divergencia_regional else "análise concluída"),
+            foreground=COR_SUCESSO if not pendencias and not conflitos and not divergencia_regional else "#9a6700",
         )
         alertas_lista = resultado.get("alertas", [])
         alertas = len(alertas_lista)
@@ -551,6 +666,11 @@ class AplicacaoPedido:
                 f"regional: {resumo_regional.get('produtos_propostos', 0)} produto(s), "
                 f"{resumo_regional.get('revisoes_necessarias', 0)} revisão(ões)"
             )
+            if divergencia_regional:
+                detalhes.append(
+                    f"comparação: {resumo_comparacao.get('divergencias', 0)} divergência(s), "
+                    f"{resumo_comparacao.get('somente_regional', 0)} somente regional"
+                )
             self.botao_auditoria_regional.pack(side="right", padx=(10, 0))
         else:
             self.botao_auditoria_regional.pack_forget()
@@ -796,11 +916,128 @@ class AplicacaoPedido:
             del dados["itens"][int(selecionado[0])]
             atualizar_tabela()
 
+        def comparar_com_regional() -> None:
+            auditoria = self.resultado.get("analise_regional_experimental") if self.resultado else None
+            if not auditoria:
+                return
+            comparacao = comparar_resultado_com_regional(dados, auditoria)
+            janela_comparacao = tk.Toplevel(janela)
+            janela_comparacao.title("Comparar resultado principal e análise regional")
+            janela_comparacao.geometry("1180x590")
+            janela_comparacao.minsize(960, 480)
+            janela_comparacao.transient(janela)
+            frame = ttk.Frame(janela_comparacao, padding=18)
+            frame.pack(fill="both", expand=True)
+            ttk.Label(
+                frame, text="Comparação com a análise regional",
+                style="Titulo.TLabel", font=("Segoe UI", 16, "bold"),
+            ).pack(anchor="w")
+            resumo = comparacao["resumo"]
+            resumo_auditoria = auditoria.get("resumo", {})
+            ttk.Label(
+                frame,
+                text=(
+                    f"{resumo['compativeis']} compatível(is) • {resumo['divergencias']} divergência(s) • "
+                    f"{resumo['somente_principal']} somente no principal • "
+                    f"{resumo['somente_regional']} somente no regional • "
+                    f"{resumo_auditoria.get('revisoes_necessarias', 0)} estrutura(s) regional(is) em revisão"
+                ),
+                style="Subtitulo.TLabel",
+            ).pack(anchor="w", pady=(3, 4))
+            ttk.Label(
+                frame,
+                text="Esta comparação é somente para conferência; nenhum valor será alterado automaticamente.",
+                style="Subtitulo.TLabel",
+            ).pack(anchor="w", pady=(0, 12))
+            colunas_comparacao = ("principal", "regional", "estado", "diferencas", "resumo_principal", "resumo_regional")
+            tabela_comparacao = ttk.Treeview(frame, columns=colunas_comparacao, show="headings", height=13)
+            titulos_comparacao = {
+                "principal": "Principal", "regional": "Regional", "estado": "Estado",
+                "diferencas": "Diferenças", "resumo_principal": "Valores principais",
+                "resumo_regional": "Valores regionais",
+            }
+            larguras_comparacao = {
+                "principal": 75, "regional": 75, "estado": 115, "diferencas": 145,
+                "resumo_principal": 330, "resumo_regional": 330,
+            }
+            detalhes_por_linha = {}
+            for coluna in colunas_comparacao:
+                tabela_comparacao.heading(coluna, text=titulos_comparacao[coluna])
+                tabela_comparacao.column(coluna, width=larguras_comparacao[coluna], anchor="w")
+
+            def resumo_principal(item) -> str:
+                if not item:
+                    return "—"
+                dimensoes = item.get("dimensoes") or {}
+                return (
+                    f"{(item.get('quantidade') or {}).get('valor') or '?'} un; "
+                    f"{_numero(float(dimensoes.get('largura_mm') or 0) / 10)} × "
+                    f"{_numero(float(dimensoes.get('altura_mm') or 0) / 10)} cm; "
+                    f"{(item.get('material') or {}).get('valor') or '?'}; "
+                    f"{(item.get('acabamento') or {}).get('valor') or '?'}"
+                )
+
+            def resumo_regional(item) -> str:
+                if not item:
+                    return "—"
+                quantidade = item.get("quantidade_pedido")
+                quantidade_texto = str(quantidade) if quantidade is not None else f"desenho {item.get('quantidade_desenhada', 1)}"
+                return (
+                    f"{quantidade_texto} un; {_numero(item.get('largura_cm', 0))} × "
+                    f"{_numero(item.get('altura_cm', 0))} cm; {item.get('material') or '?'}; "
+                    f"{item.get('acabamento') or '?'}"
+                )
+
+            for numero, correspondencia in enumerate(comparacao["correspondencias"]):
+                indice_principal = correspondencia.get("indice_principal")
+                item_regional = correspondencia.get("item_regional")
+                linha_id = f"comparacao-{numero}"
+                detalhes_por_linha[linha_id] = correspondencia
+                tabela_comparacao.insert("", "end", iid=linha_id, values=(
+                    f"Item {indice_principal + 1}" if indice_principal is not None else "—",
+                    item_regional.get("candidato_id") if item_regional else "—",
+                    correspondencia["estado"],
+                    ", ".join(correspondencia["diferencas"]) or "nenhuma",
+                    resumo_principal(correspondencia.get("item_principal")),
+                    resumo_regional(item_regional),
+                ))
+            tabela_comparacao.pack(fill="both", expand=True)
+
+            def ver_detalhes_comparacao() -> None:
+                selecionado = tabela_comparacao.selection()
+                if not selecionado:
+                    return
+                correspondencia = detalhes_por_linha[selecionado[0]]
+                regional = correspondencia.get("item_regional") or {}
+                linhas = [
+                    f"Estado: {correspondencia['estado']}",
+                    "Diferenças: " + (", ".join(correspondencia["diferencas"]) or "nenhuma"),
+                    f"Papel regional: {regional.get('papel') or '—'}",
+                    f"Motivo regional: {regional.get('motivo') or '—'}",
+                ]
+                for evidencia in regional.get("evidencias", []):
+                    linhas.append(
+                        f"- {evidencia.get('fonte') or '?'} / {evidencia.get('regra') or '?'}: "
+                        f"{evidencia.get('texto') or 'sem texto'}"
+                    )
+                messagebox.showinfo("Detalhes da comparação", "\n".join(linhas), parent=janela_comparacao)
+
+            ttk.Button(
+                frame, text="Ver detalhes e evidências", style="Secondary.TButton",
+                command=ver_detalhes_comparacao,
+            ).pack(anchor="e", pady=(10, 0))
+            tabela_comparacao.bind("<Double-1>", lambda _evento: ver_detalhes_comparacao())
+
         botoes = ttk.Frame(corpo, padding=(0, 10, 0, 0))
         botoes.pack(fill="x")
         ttk.Button(botoes, text="Editar item", command=editar_selecionado).pack(side="left")
         ttk.Button(botoes, text="Adicionar item", command=lambda: formulario_item()).pack(side="left", padx=6)
         ttk.Button(botoes, text="Excluir item", command=excluir_selecionado).pack(side="left")
+        if self.resultado.get("analise_regional_experimental"):
+            ttk.Button(
+                botoes, text="Comparar com análise regional", style="Secondary.TButton",
+                command=comparar_com_regional,
+            ).pack(side="right")
         ttk.Label(corpo, text="Observação para o diagnóstico", style="Subtitulo.TLabel").pack(anchor="w", pady=(12, 3))
         var_observacao = tk.StringVar()
         ttk.Entry(corpo, textvariable=var_observacao).pack(fill="x")

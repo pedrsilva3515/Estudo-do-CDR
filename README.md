@@ -122,6 +122,12 @@ O CDR original não é incluído por padrão e só entra no pacote quando o oper
 marca essa opção. Um histórico local em JSONL registra os casos para futuras
 avaliações e testes de regressão.
 
+Quando a arquitetura regional experimental está ativa, a janela de correção
+oferece **Comparar com análise regional**. O pareamento usa medidas do CDR e
+desempata produtos de mesmo tamanho por quantidade e material. A comparação é
+somente informativa: mostra divergências e itens exclusivos de cada leitura sem
+alterar silenciosamente o pedido corrigido.
+
 Para atualizar uma cópia existente, execute `git pull` na mesma branch.
 
 > Para continuar o trabalho em outro computador, comece por

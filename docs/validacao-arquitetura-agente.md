@@ -159,6 +159,24 @@ O isolamento foi testado nos dois caminhos: sucesso da camada experimental e fal
 
 Um ensaio completo pela mesma função usada na interface, com `VINIL_FOSCO_-_CAIXA_MONET.cdr`, levou 4,28 segundos nesta máquina e retornou três produtos confirmados: 30 de 28 x 33 cm, 30 de 24 x 94 cm e 60 de 20 x 25 cm, todos associados a adesivo fosco, sem estruturas auxiliares ou revisões pendentes.
 
+## Resultado 8: comparação dentro da revisão
+
+A janela de correção passou a oferecer uma comparação somente para leitura entre a tabela principal e os produtos regionais. O pareamento é independente da ordem, aceita orientação invertida e usa medida como chave principal. Quando dois produtos possuem a mesma medida, quantidade e compatibilidade de material servem como desempate.
+
+Cada correspondência recebe um dos estados:
+
+- `compativel`;
+- `divergencia`, com os campos diferentes listados;
+- `somente_principal`;
+- `somente_regional`.
+
+Estruturas auxiliares não participam da comparação. Material genérico e subtipo, como `adesivo` e `adesivo fosco`, são compatíveis; valores ausentes, quantidade diferente e acabamento contraditório permanecem visíveis. O resumo é salvo automaticamente no resultado original e, portanto, no pacote de diagnóstico. Com a opção experimental ativa, qualquer divergência muda o estado da tela para revisão necessária, mas não altera os itens automaticamente.
+
+Nos ensaios reais:
+
+- Vinil Fosco: três correspondências compatíveis, nenhuma divergência ou item exclusivo;
+- Super Cola: o principal atual apresentou dois itens, enquanto a análise regional apresentou três. O conjunto adicional de quatro unidades ficou corretamente marcado como `somente_regional`; as duas linhas pareadas mostraram material ausente no principal.
+
 ## Arquitetura recomendada após o ensaio
 
 1. Extrair preview, nome, textos nativos, cores e todas as caixas do CDR.
@@ -192,7 +210,8 @@ Esses tempos são faixas de engenharia, não SLA; variam com a quantidade de reg
 - Classificação das emissões extras: **aprovada no corpus (7/7 explicadas; nenhum item revisado rebaixado)**.
 - Estado de conflito na interface: **implementado**.
 - Integração paralela do catálogo regional: **implementada atrás de opção experimental, desligada por padrão e sem substituir o resultado principal**.
-- Comparação assistida entre tabela estável e produtos regionais dentro da revisão: **próximo experimento**.
+- Comparação assistida entre tabela estável e produtos regionais dentro da revisão: **implementada e somente para leitura**.
+- Aplicação seletiva de valores regionais pelo operador: **próximo experimento, depois de ampliar os testes de pareamento**.
 - Modelo maior ou API como árbitro regional: testar somente depois da associação determinística, nos mesmos casos e com a mesma métrica.
 
 ## Reproduzir
