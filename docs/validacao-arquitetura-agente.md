@@ -63,6 +63,22 @@ O OCR local leu corretamente, com alta confiança, instruções centrais dos cas
 
 Uma marcação de candidato sobre o texto ocultou o primeiro caractere de uma linha do Super Cola. Portanto, OCR deve rodar na imagem original antes de qualquer anotação. A associação quantidade/tamanho deve usar posição e abrangência regional; a IA entra somente quando essas regras deixam mais de uma solução plausível.
 
+## Resultado 4: associação regional determinística
+
+O protótipo passou a converter as caixas do OCR para as coordenadas físicas do CDR e aplicar três regras auditáveis:
+
+- dimensão explícita seleciona uma hipótese com a mesma medida, priorizando a quantidade geométrica compatível;
+- `N DE CADA` aplica a quantidade às artes abaixo abrangidas horizontalmente pela instrução;
+- quantidade isolada seleciona a arte imediatamente abaixo com sobreposição horizontal.
+
+No corpus completo, foram emitidas **7 associações, todas corretas e nenhuma falsa**:
+
+- 1 no Vinil Transparente: `9 UN (23,4X18,4 CM)`;
+- 3 no Super Cola: `4 UN (37X24,5 CM)`, `4 UN (46,5X9)` e `12 UN (46,5X9 CM)`;
+- 3 no Vinil Fosco: 30 unidades para cada uma das duas artes abrangidas e 60 para a terceira.
+
+Os outros oito arquivos não receberam associação regional automática. Isso é intencional: sem uma instrução reconhecida e uma relação espacial inequívoca, o protótipo se abstém. As sete linhas resolvidas representam precisão de 100% neste corpus, não conclusão automática das 31 linhas. A execução do OCR e das regras nos 11 arquivos levou cerca de 47 segundos no total, aproximadamente 4,3 segundos por pedido.
+
 ## Arquitetura recomendada após o ensaio
 
 1. Extrair preview, nome, textos nativos, cores e todas as caixas do CDR.
@@ -91,7 +107,8 @@ Esses tempos são faixas de engenharia, não SLA; variam com a quantidade de reg
 - Cobertura por geometrias prontas ou blocos derivados mínima de 95%: **aprovado (100%)**.
 - Modelo local 3B reconstruindo o pedido inteiro: **reprovado (25% das linhas exatas no recorte)**.
 - Primeira regra de formação de bloco regional: **aprovada no caso Real Farma, sem falsos positivos nos outros dez casos**.
-- Associação regional completa de quantidades e dimensões: **próximo experimento**.
+- Primeiras regras de associação regional: **aprovadas (7/7 corretas, zero falsas)**.
+- Ampliação controlada para materiais e casos sem quantidade explícita: **próximo experimento**.
 - Modelo maior ou API como árbitro regional: testar somente depois da associação determinística, nos mesmos casos e com a mesma métrica.
 
 ## Reproduzir

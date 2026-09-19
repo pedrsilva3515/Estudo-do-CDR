@@ -6,7 +6,14 @@ import json
 from pathlib import Path
 
 from .container import abrir_cdr
-from .pedido import _candidatos_arte, _evidencias_textuais, _inventario_geometrico
+from .ocr import executar_ocr
+from .pedido import (
+    _candidatos_arte,
+    _evidencias_textuais,
+    _inventario_geometrico,
+    parse_dimensoes,
+    parse_quantidade,
+)
 from .visao_api import extrair_imagem_analise
 
 
@@ -167,6 +174,131 @@ def detectar_blocos_producao(candidatos: list[dict], evidencias: list[dict]) -> 
             "regra": "mesmo_tamanho_em_moldura_com_uniao_dos_objetos_abaixo",
         })
     return blocos
+
+
+def _sobreposicao_horizontal(a: dict, b: dict) -> float:
+    intersecao = max(0.0, min(a["direita"], b["direita"]) - max(a["esquerda"], b["esquerda"]))
+    return intersecao / max(1e-9, min(a["direita"] - a["esquerda"], b["direita"] - b["esquerda"]))
+
+
+def associar_instrucoes_regionais(
+    leituras_ocr: list[dict], candidatos: list[dict], limites: dict, tamanho_imagem: tuple[int, int],
+) -> list[dict]:
+    """Liga quantidade/dimensão do OCR a candidatos usando medida e posição."""
+    largura_px, altura_px = tamanho_imagem
+    intervalo_x = limites["direita"] - limites["esquerda"]
+    intervalo_y = limites["topo"] - limites["base"]
+
+    def caixa_ocr_cm(leitura: dict) -> dict:
+        pontos = leitura["poligono_px"]
+        xs = [p[0] for p in pontos]
+        ys = [p[1] for p in pontos]
+        return {
+            "esquerda": limites["esquerda"] + min(xs) / largura_px * intervalo_x,
+            "direita": limites["esquerda"] + max(xs) / largura_px * intervalo_x,
+            "topo": limites["topo"] - min(ys) / altura_px * intervalo_y,
+            "base": limites["topo"] - max(ys) / altura_px * intervalo_y,
+        }
+
+    principais = [item for item in candidatos if item.get("visivel_inicialmente", True)]
+    associacoes = []
+    for leitura in leituras_ocr:
+        texto = leitura.get("texto", "")
+        quantidade = parse_quantidade(texto)
+        if quantidade is None:
+            continue
+        valor = quantidade[0]
+        dimensoes = parse_dimensoes(texto)
+        caixa_texto = caixa_ocr_cm(leitura)
+        alvos: list[tuple[dict, str, float]] = []
+        if dimensoes:
+            largura_cm = dimensoes["largura_mm"] / 10
+            altura_cm = dimensoes["altura_mm"] / 10
+            compativeis = []
+            for candidato in principais:
+                cw, ch = candidato["largura_cm"], candidato["altura_cm"]
+                erro = min(abs(cw - largura_cm) + abs(ch - altura_cm), abs(cw - altura_cm) + abs(ch - largura_cm))
+                if erro > 0.5:
+                    continue
+                caixa = candidato["caixa_cm"]
+                centro_x = (caixa["esquerda"] + caixa["direita"]) / 2
+                centro_texto_x = (caixa_texto["esquerda"] + caixa_texto["direita"]) / 2
+                distancia_x = abs(centro_x - centro_texto_x) / max(1.0, intervalo_x)
+                abaixo = caixa["topo"] <= caixa_texto["base"] + intervalo_y * 0.03
+                penalidade_posicao = distancia_x + (0 if abaixo else 0.2)
+                bonus_quantidade = -0.3 if candidato.get("quantidade_geometrica") == valor else 0
+                bonus_repeticao = -0.05 if candidato.get("quantidade_geometrica", 1) > 1 else 0
+                compativeis.append((erro + penalidade_posicao + bonus_quantidade + bonus_repeticao, candidato))
+            if compativeis:
+                _, melhor = min(compativeis, key=lambda par: par[0])
+                alvos = [(melhor, "dimensao_explicita", 0.99)]
+        elif "de cada" in texto.casefold():
+            margem = max(2.0, (caixa_texto["direita"] - caixa_texto["esquerda"]) * 0.08)
+            faixa = {**caixa_texto, "esquerda": caixa_texto["esquerda"] - margem, "direita": caixa_texto["direita"] + margem}
+            elegiveis = [
+                candidato for candidato in principais
+                if faixa["esquerda"] <= (candidato["caixa_cm"]["esquerda"] + candidato["caixa_cm"]["direita"]) / 2 <= faixa["direita"]
+                and candidato["caixa_cm"]["topo"] < caixa_texto["base"]
+            ]
+            if elegiveis:
+                topo_mais_proximo = max(item["caixa_cm"]["topo"] for item in elegiveis)
+                tolerancia_vertical = max(5.0, intervalo_y * 0.08)
+                alvos = [
+                    (item, "quantidade_de_cada", 0.97) for item in elegiveis
+                    if topo_mais_proximo - item["caixa_cm"]["topo"] <= tolerancia_vertical
+                ]
+        else:
+            elegiveis = []
+            for candidato in principais:
+                caixa = candidato["caixa_cm"]
+                if caixa["topo"] >= caixa_texto["base"]:
+                    continue
+                sobreposicao = _sobreposicao_horizontal(caixa_texto, caixa)
+                centro_x = (caixa["esquerda"] + caixa["direita"]) / 2
+                dentro = caixa_texto["esquerda"] <= centro_x <= caixa_texto["direita"]
+                if sobreposicao >= 0.25 or dentro:
+                    distancia_vertical = caixa_texto["base"] - caixa["topo"]
+                    elegiveis.append((distancia_vertical, -sobreposicao, candidato))
+            if elegiveis:
+                _, _, melhor = min(elegiveis, key=lambda item: (item[0], item[1]))
+                alvos = [(melhor, "quantidade_proxima", 0.9)]
+
+        for candidato, regra, confianca in alvos:
+            associacoes.append({
+                "texto": texto, "confianca_ocr": leitura.get("confianca"),
+                "quantidade": valor, "candidato_id": candidato["id"],
+                "largura_cm": round(candidato["largura_cm"], 3),
+                "altura_cm": round(candidato["altura_cm"], 3),
+                "regra": regra, "confianca_associacao": confianca,
+                "caixa_texto_cm": {chave: round(valor_caixa, 3) for chave, valor_caixa in caixa_texto.items()},
+            })
+    vistos = set()
+    unicas = []
+    for associacao in associacoes:
+        chave = (associacao["texto"].casefold(), associacao["candidato_id"], associacao["quantidade"])
+        if chave not in vistos:
+            vistos.add(chave)
+            unicas.append(associacao)
+    return unicas
+
+
+def extrair_associacoes_regionais(caminho: Path, catalogo: dict) -> dict:
+    """Executa OCR na imagem limpa e devolve suas associações auditáveis."""
+    from PIL import Image
+
+    imagem_extraida = extrair_imagem_analise(caminho)
+    limites = catalogo.get("limites_conteudo_cm")
+    if imagem_extraida is None or not limites:
+        return {"leituras_ocr": [], "associacoes": []}
+    bytes_imagem = imagem_extraida[0]
+    with Image.open(BytesIO(bytes_imagem)) as imagem:
+        tamanho = imagem.size
+    leituras = executar_ocr(bytes_imagem)
+    hipoteses = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
+    return {
+        "leituras_ocr": leituras,
+        "associacoes": associar_instrucoes_regionais(leituras, hipoteses, limites, tamanho),
+    }
 
 
 def extrair_candidatos_agente(caminho: Path) -> dict:
@@ -359,6 +491,33 @@ def gerar_atlas_candidatos(caminho: Path, catalogo: dict, pasta_saida: Path, por
         blocos_path = pasta_saida / "blocos-producao.png"
         blocos.save(blocos_path)
         saidas.append(blocos_path)
+
+    associacoes = catalogo.get("ocr_regional", {}).get("associacoes", [])
+    if associacoes:
+        mapa = imagem.copy()
+        desenho_mapa = ImageDraw.Draw(mapa)
+        por_id = {
+            item["id"]: item
+            for item in catalogo["candidatos"] + catalogo.get("blocos_producao", [])
+        }
+        for associacao in associacoes:
+            candidato = por_id.get(associacao["candidato_id"])
+            if candidato is None:
+                continue
+            texto = associacao["caixa_texto_cm"]
+            alvo = candidato["caixa_cm"]
+            caixa_texto_px = (pixel_x(texto["esquerda"]), pixel_y(texto["topo"]), pixel_x(texto["direita"]), pixel_y(texto["base"]))
+            caixa_alvo_px = (pixel_x(alvo["esquerda"]), pixel_y(alvo["topo"]), pixel_x(alvo["direita"]), pixel_y(alvo["base"]))
+            desenho_mapa.rectangle(caixa_texto_px, outline="#ff8c00", width=5)
+            desenho_mapa.rectangle(caixa_alvo_px, outline="#0068d9", width=5)
+            origem = ((caixa_texto_px[0] + caixa_texto_px[2]) // 2, caixa_texto_px[3])
+            destino = ((caixa_alvo_px[0] + caixa_alvo_px[2]) // 2, caixa_alvo_px[1])
+            desenho_mapa.line((origem, destino), fill="#00a060", width=4)
+            rotulo = f"{associacao['quantidade']} un -> {associacao['candidato_id']}"
+            desenho_mapa.text((origem[0] + 4, origem[1] + 4), rotulo, fill="#006840", font=fonte, stroke_width=2, stroke_fill="white")
+        mapa_path = pasta_saida / "associacoes-regionais.png"
+        mapa.save(mapa_path)
+        saidas.append(mapa_path)
 
     candidatos = catalogo["candidatos"]
     for pagina, inicio in enumerate(range(0, len(candidatos), por_pagina), 1):

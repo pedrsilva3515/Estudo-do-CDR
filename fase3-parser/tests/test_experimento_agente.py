@@ -4,6 +4,7 @@ import unittest
 
 from zcfreader.experimento_agente import (
     _anotar_hierarquia,
+    associar_instrucoes_regionais,
     avaliar_cobertura_geometrica,
     detectar_blocos_producao,
 )
@@ -117,6 +118,59 @@ class TestBlocoProducaoDerivado(unittest.TestCase):
         }]
 
         self.assertEqual(detectar_blocos_producao([moldura], evidencias), [])
+
+
+class TestAssociacaoRegional(unittest.TestCase):
+    def test_de_cada_e_quantidade_individual_usam_faixa_horizontal(self):
+        candidatos = [
+            candidato("A01", 28, 33, {"esquerda": 10, "direita": 30, "base": 20, "topo": 40}),
+            candidato("A02", 24, 94, {"esquerda": 40, "direita": 60, "base": 20, "topo": 40}),
+            candidato("A03", 20, 25, {"esquerda": 70, "direita": 90, "base": 20, "topo": 40}),
+        ]
+        for item in candidatos:
+            item["visivel_inicialmente"] = True
+        leituras = [
+            {
+                "texto": "30 UNI DE CADA", "confianca": 0.99,
+                "poligono_px": [[100, 100], [600, 100], [600, 150], [100, 150]],
+            },
+            {
+                "texto": "60 UNI", "confianca": 0.99,
+                "poligono_px": [[700, 100], [900, 100], [900, 150], [700, 150]],
+            },
+        ]
+
+        resultado = associar_instrucoes_regionais(
+            leituras, candidatos,
+            {"esquerda": 0, "direita": 100, "base": 0, "topo": 100},
+            (1000, 1000),
+        )
+
+        self.assertEqual(
+            {(item["candidato_id"], item["quantidade"]) for item in resultado},
+            {("A01", 30), ("A02", 30), ("A03", 60)},
+        )
+
+    def test_dimensao_explicita_prevalece_sobre_distancia(self):
+        candidatos = [
+            candidato("A01", 37, 24.5, {"esquerda": 70, "direita": 90, "base": 20, "topo": 40}, 4),
+            candidato("A02", 20, 10, {"esquerda": 10, "direita": 30, "base": 60, "topo": 75}),
+        ]
+        for item in candidatos:
+            item["visivel_inicialmente"] = True
+        leituras = [{
+            "texto": "4 UN (37X24,5 CM)", "confianca": 0.99,
+            "poligono_px": [[100, 100], [400, 100], [400, 150], [100, 150]],
+        }]
+
+        resultado = associar_instrucoes_regionais(
+            leituras, candidatos,
+            {"esquerda": 0, "direita": 100, "base": 0, "topo": 100},
+            (1000, 1000),
+        )
+
+        self.assertEqual(resultado[0]["candidato_id"], "A01")
+        self.assertEqual(resultado[0]["regra"], "dimensao_explicita")
 
 
 if __name__ == "__main__":
