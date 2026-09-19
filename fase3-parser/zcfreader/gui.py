@@ -49,6 +49,31 @@ def _numero(valor: float) -> str:
     return f"{valor:.2f}".rstrip("0").rstrip(",").rstrip(".")
 
 
+def coletar_conflitos(resultado: dict) -> list[dict]:
+    """Normaliza conflitos do pedido ou do catálogo regional para apresentação."""
+    conflitos = list(resultado.get("conflitos_fontes", []))
+    conflitos.extend(resultado.get("conflitos_revisao", []))
+    for associacao in resultado.get("materiais_regionais", []):
+        for conflito in associacao.get("conflitos", []):
+            conflitos.append({
+                **conflito, "candidato_id": associacao.get("candidato_id"),
+                "evidencias": associacao.get("evidencias", []),
+                "requer_revisao": True,
+            })
+    unicos = []
+    vistos = set()
+    for conflito in conflitos:
+        chave = (
+            conflito.get("candidato_id"), conflito.get("campo"),
+            tuple(conflito.get("valores", [])), conflito.get("valor_do_arquivo"),
+            conflito.get("valor_confirmado"),
+        )
+        if chave not in vistos:
+            vistos.add(chave)
+            unicos.append(conflito)
+    return unicos
+
+
 class AplicacaoPedido:
     def __init__(self, raiz: tk.Tk):
         self.raiz = raiz
@@ -169,8 +194,11 @@ class AplicacaoPedido:
 
         rodape = ttk.Frame(conteudo, padding=(0, 14, 0, 0))
         rodape.pack(fill="x")
+        self.botao_conflitos = ttk.Button(
+            rodape, text="Ver conflitos", style="Secondary.TButton", command=self.ver_conflitos,
+        )
         self.rotulo_alertas = ttk.Label(rodape, text="", style="Subtitulo.TLabel")
-        self.rotulo_alertas.pack(fill="x")
+        self.rotulo_alertas.pack(side="left", fill="x", expand=True)
 
     def procurar(self) -> None:
         caminho = filedialog.askopenfilename(title="Escolha o pedido", filetypes=[("CorelDRAW", "*.cdr"), ("Todos os arquivos", "*.*")])
@@ -334,6 +362,7 @@ class AplicacaoPedido:
         self.rotulo_status.configure(text="Analisando estrutura, textos, dimensões e imagens…", foreground=COR_AZUL)
         self.rotulo_total.configure(text="…")
         self.rotulo_alertas.configure(text="")
+        self.botao_conflitos.pack_forget()
         for linha in self.tabela.get_children():
             self.tabela.delete(linha)
         self.progresso.grid(row=1, column=1, sticky="e", padx=(20, 0), pady=(8, 0))
@@ -435,6 +464,7 @@ class AplicacaoPedido:
         self.rotulo_total.configure(text=f"{total} unidade{'s' if total != 1 else ''}")
         modo = resultado.get("modo_cor", {}).get("documento") or "não identificado"
         pendencias = resultado.get("pendencias", [])
+        conflitos = coletar_conflitos(resultado)
         nome_usado = any(
             item.get(campo, {}).get("fonte") == "nome_arquivo"
             for item in itens for campo in ("quantidade", "material", "acabamento")
@@ -449,8 +479,8 @@ class AplicacaoPedido:
             origem_ia = " • análise estrutural"
         self.rotulo_status.configure(
             text=f"{len(itens)} item(ns) • modo de cor {modo}{origem_nome}{origem_ia} • "
-            + ("revisão necessária" if pendencias else "análise concluída"),
-            foreground=COR_SUCESSO if not pendencias else "#9a6700",
+            + ("revisão necessária" if pendencias or conflitos else "análise concluída"),
+            foreground=COR_SUCESSO if not pendencias and not conflitos else "#9a6700",
         )
         alertas_lista = resultado.get("alertas", [])
         alertas = len(alertas_lista)
@@ -459,6 +489,11 @@ class AplicacaoPedido:
             detalhes.append(f"{alertas} alerta(s)")
         if pendencias:
             detalhes.append("Confirmar: " + ", ".join(pendencias))
+        if conflitos:
+            detalhes.append(f"{len(conflitos)} conflito(s) entre fontes")
+            self.botao_conflitos.pack(side="right", padx=(10, 0))
+        else:
+            self.botao_conflitos.pack_forget()
         reconstruida = any(a.get("codigo") == "ESTRUTURA_RECONSTRUIDA_PELA_VISAO" for a in alertas_lista)
         if reconstruida:
             detalhes.append("A IA reconstruiu os itens — confira antes de confirmar")
@@ -466,6 +501,35 @@ class AplicacaoPedido:
         self.botao_exportar.configure(state="normal")
         self.botao_confirmar.configure(state="normal")
         self.botao_corrigir.configure(state="normal")
+
+    def ver_conflitos(self) -> None:
+        if self.resultado is None:
+            return
+        conflitos = coletar_conflitos(self.resultado)
+        if not conflitos:
+            return
+        linhas = []
+        for conflito in conflitos:
+            candidato = conflito.get("candidato_id") or "item não identificado"
+            campo = conflito.get("campo") or "informação"
+            valores = conflito.get("valores") or []
+            if valores:
+                comparacao = " × ".join(str(valor) for valor in valores)
+            else:
+                comparacao = (
+                    f"arquivo: {conflito.get('valor_do_arquivo') or '?'} | "
+                    f"confirmado: {conflito.get('valor_confirmado') or '?'}"
+                )
+            linhas.append(f"{candidato} — {campo}: {comparacao}")
+            evidencias = conflito.get("evidencias") or []
+            textos = [item.get("texto") for item in evidencias if item.get("texto")]
+            if textos:
+                linhas.append("  Evidência: " + " / ".join(dict.fromkeys(textos)))
+        messagebox.showwarning(
+            "Conflitos que exigem revisão",
+            "O sistema encontrou informações incompatíveis e não escolheu silenciosamente entre elas.\n\n"
+            + "\n".join(linhas),
+        )
 
     def _salvar_feedback(self, correto: dict, situacao: str, observacao: str = "") -> None:
         if self.arquivo is None or self.resultado_original is None:

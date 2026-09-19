@@ -118,6 +118,30 @@ Há ainda uma anomalia no dado de revisão de `wadna banner e adesivo sem recort
 
 Conclusão: a associação regional de material/acabamento é promissora e mantém a rastreabilidade, mas ainda não está pronta para alimentar exportação sem revisão. O próximo portão é eliminar ou classificar as sete emissões sem gabarito e apresentar conflitos de fonte explicitamente ao operador.
 
+## Resultado 6: papel estrutural e conflitos explícitos
+
+As associações passaram a manter todas as hipóteses, mas classificar o papel de cada caixa antes de tratá-la como produto. A classificação usa contenção, coincidência regional, quantidade de filhos e provas fortes como dimensão explícita, quantidade regional ou medida no nome do arquivo.
+
+As sete emissões que não correspondiam diretamente a linhas revisadas foram explicadas sem consultar o gabarito durante a classificação:
+
+- três eram conteúdos individuais repetidos dentro da mesma caixa total de um produto;
+- uma era uma montagem externa contendo vários produtos propostos;
+- duas eram molduras sobrepostas e permaneceram como `estrutura_ambigua`;
+- uma era detalhe interno de um produto confirmado por dimensão.
+
+Nenhum dos 31 itens revisados foi classificado como estrutura auxiliar. Um primeiro ensaio havia rebaixado incorretamente um item legítimo repetido dentro de uma montagem; a precedência foi corrigida para que filhos de uma montagem com múltiplos produtos continuem sendo produtos plausíveis. Esse cenário ficou coberto por teste de regressão.
+
+O catálogo agora diferencia:
+
+- `produto_confirmado`: possui uma prova explícita suficiente;
+- `produto_plausivel`: associação regional coerente, ainda dependente de confirmação;
+- `conteudo_repetido_da_montagem`, `montagem_externa` e `detalhe_interno_do_produto`: estrutura auxiliar, nunca exportada automaticamente;
+- `estrutura_ambigua`: exige escolha do operador.
+
+Conflitos também deixaram de causar descarte silencioso. Materiais de famílias incompatíveis ou acabamentos diferentes são preservados com suas fontes e textos. Depois da revisão humana, o comparador registra separadamente `valor_do_arquivo` e `valor_confirmado`. No corpus, foi encontrado exatamente o conflito conhecido de `adesivoss.cdr`: `somente recorte` no arquivo contra `recorte especial` confirmado pelo operador.
+
+A interface foi preparada para esse estado sem ativar o novo analisador na v0.7.3. Quando um resultado futuro trouxer conflitos, o status muda para revisão necessária, surge o botão `Ver conflitos` e o operador pode consultar valores e evidências. Na ausência desses campos, o comportamento atual permanece inalterado.
+
 ## Arquitetura recomendada após o ensaio
 
 1. Extrair preview, nome, textos nativos, cores e todas as caixas do CDR.
@@ -148,7 +172,9 @@ Esses tempos são faixas de engenharia, não SLA; variam com a quantidade de reg
 - Primeira regra de formação de bloco regional: **aprovada no caso Real Farma, sem falsos positivos nos outros dez casos**.
 - Primeiras regras de associação regional: **aprovadas (7/7 corretas, zero falsas)**.
 - Ampliação controlada para materiais e acabamentos: **aprovada como experimento (25/25 materiais avaliados compatíveis; 11/12 acabamentos válidos compatíveis), ainda com uma abstenção de material, um conflito de fonte e sete emissões sem gabarito**.
-- Classificação das emissões extras e apresentação de conflitos ao operador: **próximo experimento**.
+- Classificação das emissões extras: **aprovada no corpus (7/7 explicadas; nenhum item revisado rebaixado)**.
+- Estado de conflito na interface: **implementado de forma compatível e ainda inativo no fluxo v0.7.3**.
+- Integração do catálogo regional ao resultado principal: **próximo experimento, inicialmente atrás de uma opção experimental**.
 - Modelo maior ou API como árbitro regional: testar somente depois da associação determinística, nos mesmos casos e com a mesma métrica.
 
 ## Reproduzir

@@ -5,6 +5,7 @@ from io import BytesIO
 import json
 from pathlib import Path
 import re
+import unicodedata
 
 from .container import abrir_cdr
 from .ocr import executar_ocr
@@ -456,6 +457,186 @@ def _dimensoes_instrucao_material(texto: str, especificacao: dict) -> dict | Non
     return None
 
 
+def _intersecao_caixas(a: dict, b: dict) -> float:
+    largura = max(0.0, min(a["direita"], b["direita"]) - max(a["esquerda"], b["esquerda"]))
+    altura = max(0.0, min(a["topo"], b["topo"]) - max(a["base"], b["base"]))
+    return largura * altura
+
+
+def _sobreposicao_da_menor_caixa(a: dict, b: dict) -> float:
+    return _intersecao_caixas(a, b) / max(1e-9, min(_area_caixa(a), _area_caixa(b)))
+
+
+def _medida_representa_caixa(candidato: dict) -> bool:
+    caixa = candidato["caixa_cm"]
+    largura_caixa = caixa["direita"] - caixa["esquerda"]
+    altura_caixa = caixa["topo"] - caixa["base"]
+    tolerancia = max(0.5, max(largura_caixa, altura_caixa) * 0.01)
+    return min(
+        abs(candidato["largura_cm"] - largura_caixa) + abs(candidato["altura_cm"] - altura_caixa),
+        abs(candidato["largura_cm"] - altura_caixa) + abs(candidato["altura_cm"] - largura_caixa),
+    ) <= tolerancia * 2
+
+
+def _classificar_papeis_materiais(catalogo: dict, resultados: list[dict]) -> None:
+    """Marca produto, conteúdo interno, montagem e ambiguidade sem apagar hipóteses."""
+    candidatos = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
+    por_id = {item["id"]: item for item in candidatos}
+    por_resultado = {item["candidato_id"]: item for item in resultados}
+    ids_confirmados = {
+        item["candidato_id"] for item in catalogo.get("ocr_regional", {}).get("associacoes", [])
+    }
+    ids_confirmados.update(item["id"] for item in catalogo.get("blocos_producao", []))
+
+    for resultado in resultados:
+        regras = {item.get("regra") for item in resultado.get("evidencias", [])}
+        forte = resultado["candidato_id"] in ids_confirmados or bool(regras & {
+            "material_com_dimensao", "material_com_quantidade", "nome_arquivo_com_dimensao",
+            "instrucao_do_bloco",
+        })
+        resultado.update({
+            "papel_candidato": "produto_confirmado" if forte else "produto_plausivel",
+            "motivo_classificacao": "evidencia_explicita" if forte else "associacao_regional_sem_prova_estrutural",
+            "exportavel_automaticamente": bool(forte and not resultado.get("conflitos")),
+        })
+
+    # Quando a caixa total é a mesma, a hipótese repetida de medida menor é
+    # conteúdo da montagem; a hipótese cuja medida ocupa a caixa é o produto.
+    ids = list(por_resultado)
+    for indice, id_a in enumerate(ids):
+        candidato_a = por_id.get(id_a)
+        if candidato_a is None:
+            continue
+        for id_b in ids[indice + 1:]:
+            candidato_b = por_id.get(id_b)
+            if candidato_b is None or _sobreposicao_da_menor_caixa(candidato_a["caixa_cm"], candidato_b["caixa_cm"]) < 0.9:
+                continue
+            a_ocupa = _medida_representa_caixa(candidato_a)
+            b_ocupa = _medida_representa_caixa(candidato_b)
+            if a_ocupa == b_ocupa:
+                continue
+            detalhe_id, produto_id = (id_b, id_a) if a_ocupa else (id_a, id_b)
+            detalhe = por_id[detalhe_id]
+            if detalhe.get("quantidade_geometrica", 1) <= 1:
+                continue
+            por_resultado[detalhe_id].update({
+                "papel_candidato": "conteudo_repetido_da_montagem",
+                "motivo_classificacao": f"mesma_regiao_de_{produto_id}_com_medida_individual_repetida",
+                "exportavel_automaticamente": False,
+            })
+
+    # Um contêiner com vários filhos propostos é uma montagem externa. Um
+    # produto confirmado por medida/nome torna os filhos não confirmados detalhes.
+    for id_externo, resultado_externo in por_resultado.items():
+        externo = por_id.get(id_externo)
+        if externo is None:
+            continue
+        filhos = [
+            id_interno for id_interno in por_resultado
+            if id_interno != id_externo
+            and _area_caixa(por_id[id_interno]["caixa_cm"]) < _area_caixa(externo["caixa_cm"]) * 0.95
+            and _contem_caixa(externo["caixa_cm"], por_id[id_interno]["caixa_cm"], 0.1)
+        ]
+        if len(filhos) >= 2 and resultado_externo["papel_candidato"] != "produto_confirmado":
+            resultado_externo.update({
+                "papel_candidato": "montagem_externa",
+                "motivo_classificacao": "contem_multiplos_produtos_propostos",
+                "exportavel_automaticamente": False,
+            })
+            for filho_id in filhos:
+                filho = por_resultado[filho_id]
+                if filho["papel_candidato"] == "conteudo_repetido_da_montagem":
+                    filho.update({
+                        "papel_candidato": "produto_plausivel",
+                        "motivo_classificacao": f"filho_produtivo_da_montagem_{id_externo}",
+                        "exportavel_automaticamente": False,
+                    })
+        elif resultado_externo["papel_candidato"] == "produto_confirmado":
+            for filho_id in filhos:
+                filho = por_resultado[filho_id]
+                if filho["papel_candidato"] != "produto_confirmado":
+                    filho.update({
+                        "papel_candidato": "detalhe_interno_do_produto",
+                        "motivo_classificacao": f"contido_no_produto_confirmado_{id_externo}",
+                        "exportavel_automaticamente": False,
+                    })
+
+    # Duas molduras sobrepostas contendo a mesma hipótese interna não permitem
+    # escolher deterministicamente qual nível representa o produto.
+    for id_interno in ids:
+        interno = por_id.get(id_interno)
+        if interno is None:
+            continue
+        contenedores = [
+            id_externo for id_externo in ids if id_externo != id_interno
+            and _area_caixa(por_id[id_externo]["caixa_cm"]) > _area_caixa(interno["caixa_cm"]) * 1.05
+            and _contem_caixa(por_id[id_externo]["caixa_cm"], interno["caixa_cm"], 0.1)
+        ]
+        if len(contenedores) < 2:
+            continue
+        for id_externo in contenedores:
+            externo = por_resultado[id_externo]
+            if externo["papel_candidato"] == "produto_plausivel":
+                externo.update({
+                    "papel_candidato": "estrutura_ambigua",
+                    "motivo_classificacao": f"molduras_sobrepostas_contendo_{id_interno}",
+                    "exportavel_automaticamente": False,
+                })
+
+
+def _texto_canonico(valor) -> str:
+    texto = "".join(
+        caractere for caractere in unicodedata.normalize("NFKD", str(valor or "").casefold())
+        if not unicodedata.combining(caractere)
+    )
+    return " ".join(texto.split())
+
+
+def comparar_materiais_com_revisao(catalogo: dict, esperado: dict, cobertura: dict) -> list[dict]:
+    """Expõe divergências entre a evidência do arquivo e a confirmação humana."""
+    previstos = {item["candidato_id"]: item for item in catalogo.get("materiais_regionais", [])}
+    conflitos = []
+    for indice, (detalhe, item_esperado) in enumerate(
+        zip(cobertura.get("detalhes", []), esperado.get("itens", [])), 1
+    ):
+        candidato_id = detalhe.get("candidato")
+        previsto = previstos.get(candidato_id)
+        if not previsto:
+            continue
+        campos = {
+            "material": (item_esperado.get("material") or {}).get("valor"),
+            "acabamento": (item_esperado.get("acabamento") or {}).get("valor"),
+        }
+        for campo, confirmado in campos.items():
+            valor_previsto = previsto.get(campo)
+            if not valor_previsto or not confirmado:
+                continue
+            previsto_canonico = _texto_canonico(valor_previsto)
+            confirmado_canonico = _texto_canonico(confirmado)
+            compativel = previsto_canonico == confirmado_canonico
+            if campo == "material":
+                if {previsto_canonico, confirmado_canonico} <= {"banner", "lona"}:
+                    compativel = True
+                if confirmado_canonico == "adesivo" and previsto_canonico.startswith("adesivo "):
+                    compativel = True
+            if campo == "acabamento":
+                termos = ("frente e verso", "ilho", "verniz")
+                previstos_compostos = {termo for termo in termos if termo in previsto_canonico}
+                confirmados_compostos = {termo for termo in termos if termo in confirmado_canonico}
+                if previstos_compostos and previstos_compostos == confirmados_compostos:
+                    compativel = True
+            if not compativel:
+                conflitos.append({
+                    "codigo": "DIVERGENCIA_ENTRE_ARQUIVO_E_REVISAO",
+                    "candidato_id": candidato_id, "item_revisado": indice,
+                    "campo": campo, "valor_do_arquivo": valor_previsto,
+                    "valor_confirmado": confirmado,
+                    "evidencias": previsto.get("evidencias", []),
+                    "requer_revisao": True,
+                })
+    return conflitos
+
+
 def associar_materiais_acabamentos(catalogo: dict) -> list[dict]:
     """Associa especificações explícitas sem espalhá-las por documentos mistos."""
     candidatos = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
@@ -577,6 +758,7 @@ def associar_materiais_acabamentos(catalogo: dict) -> list[dict]:
     if especificacao_nome:
         fonte_nome = {**especificacao_nome, "texto": nome["texto"], "fonte": "nome_arquivo"}
         alvos_nome = [por_id[item] for item in confirmados if item in por_id]
+        regra_nome = "nome_arquivo_em_alvo_confirmado"
         dimensoes_nome = nome.get("dimensoes") or {}
         if not alvos_nome and dimensoes_nome:
             largura = float(dimensoes_nome.get("largura_mm") or 0) / 10
@@ -588,10 +770,11 @@ def associar_materiais_acabamentos(catalogo: dict) -> list[dict]:
                     abs(item["largura_cm"] - altura) + abs(item["altura_cm"] - largura),
                 ) <= 0.5
             ]
+            regra_nome = "nome_arquivo_com_dimensao"
         if not alvos_nome and len(visiveis) == 1:
             alvos_nome = visiveis
         for candidato in alvos_nome:
-            propor(candidato["id"], fonte_nome, "nome_arquivo_em_alvo_confirmado", 0.75)
+            propor(candidato["id"], fonte_nome, regra_nome, 0.75)
 
     resultado = []
     for candidato_id, opcoes in propostas.items():
@@ -600,23 +783,36 @@ def associar_materiais_acabamentos(catalogo: dict) -> list[dict]:
             "adesivo" if material.startswith("adesivo") else "lona" if material in {"banner", "lona"} else material
             for material in materiais
         }
-        if len(familias) != 1:
-            continue
         locais = [item for item in opcoes if item["fonte"] != "nome_arquivo"]
         escolhida = max(
             opcoes,
             key=lambda item: (len(item.get("material") or ""), item["fonte"] != "nome_arquivo", item["confianca"]),
         )
+        conflitos = []
+        material_escolhido = escolhida["material"] if len(familias) == 1 else None
+        if len(familias) > 1:
+            conflitos.append({
+                "campo": "material", "valores": sorted(materiais),
+                "fontes": sorted({item["fonte"] for item in opcoes}),
+            })
         acabamentos = {
             item["acabamento"] for item in (locais or opcoes) if item.get("acabamento")
         }
         acabamento = next(iter(acabamentos)) if len(acabamentos) == 1 else None
+        if len(acabamentos) > 1:
+            conflitos.append({
+                "campo": "acabamento", "valores": sorted(acabamentos),
+                "fontes": sorted({item["fonte"] for item in (locais or opcoes) if item.get("acabamento")}),
+            })
         resultado.append({
-            "candidato_id": candidato_id, "material": escolhida["material"],
+            "candidato_id": candidato_id, "material": material_escolhido,
             "acabamento": acabamento, "fonte": escolhida["fonte"],
             "texto": escolhida["texto"], "regra": escolhida["regra"],
-            "confianca": escolhida["confianca"],
+            "confianca": escolhida["confianca"], "conflitos": conflitos,
+            "status_associacao": "revisao_conflito" if conflitos else "associado",
+            "evidencias": sorted(opcoes, key=lambda item: item["confianca"], reverse=True),
         })
+    _classificar_papeis_materiais(catalogo, resultado)
     return sorted(resultado, key=lambda item: item["candidato_id"])
 
 

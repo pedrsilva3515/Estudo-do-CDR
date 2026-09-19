@@ -8,6 +8,7 @@ from zcfreader.experimento_agente import (
     associar_instrucoes_regionais,
     associar_materiais_acabamentos,
     avaliar_cobertura_geometrica,
+    comparar_materiais_com_revisao,
     detectar_blocos_producao,
 )
 
@@ -279,6 +280,116 @@ class TestMateriaisRegionais(unittest.TestCase):
 
         self.assertEqual(resultado[0]["material"], "lona")
         self.assertEqual(resultado[0]["acabamento"], "frente e verso + ilhós + verniz")
+
+    def test_classifica_conteudo_repetido_na_mesma_regiao(self):
+        produto = candidato("A01", 27, 20, {"esquerda": 0, "direita": 27, "base": 0, "topo": 20})
+        repeticoes = candidato("A02", 9, 5, {"esquerda": 0, "direita": 27, "base": 0, "topo": 20}, 12)
+        for item in (produto, repeticoes):
+            item["visivel_inicialmente"] = True
+        catalogo = {
+            "arquivo": "impressoes.cdr", "candidatos": [produto, repeticoes], "blocos_producao": [],
+            "ocr_regional": {"associacoes": [], "leituras_ocr": []},
+            "evidencias_textuais": [{
+                "texto": "IMPRESSÕES PAPEL COUCHE", "quantidade": None, "dimensoes": None,
+                "material": {"material": "papel couche", "acabamento": None},
+                "caixa_mm": {"esquerda": 0, "direita": 270, "base": 220, "topo": 240},
+            }],
+        }
+
+        resultado = {item["candidato_id"]: item for item in associar_materiais_acabamentos(catalogo)}
+
+        self.assertEqual(resultado["A01"]["papel_candidato"], "produto_plausivel")
+        self.assertEqual(resultado["A02"]["papel_candidato"], "conteudo_repetido_da_montagem")
+        self.assertFalse(resultado["A02"]["exportavel_automaticamente"])
+
+    def test_classifica_conteiner_com_dois_filhos_como_montagem(self):
+        montagem = candidato("A01", 100, 50, {"esquerda": 0, "direita": 100, "base": 0, "topo": 50})
+        filho_a = candidato("A02", 45, 50, {"esquerda": 0, "direita": 45, "base": 0, "topo": 50})
+        filho_b = candidato("A03", 20, 50, {"esquerda": 55, "direita": 100, "base": 0, "topo": 50}, 2)
+        for item in (montagem, filho_a, filho_b):
+            item["visivel_inicialmente"] = True
+        catalogo = {
+            "arquivo": "adesivos.cdr", "candidatos": [montagem, filho_a, filho_b], "blocos_producao": [],
+            "ocr_regional": {"associacoes": [], "leituras_ocr": []},
+            "evidencias_textuais": [{
+                "texto": "ADESIVO LEITOSO", "quantidade": None, "dimensoes": None,
+                "material": {"material": "adesivo leitoso", "acabamento": None},
+                "caixa_mm": {"esquerda": 0, "direita": 1000, "base": 520, "topo": 550},
+            }],
+        }
+
+        resultado = {item["candidato_id"]: item for item in associar_materiais_acabamentos(catalogo)}
+
+        self.assertEqual(resultado["A01"]["papel_candidato"], "montagem_externa")
+        self.assertEqual(resultado["A02"]["papel_candidato"], "produto_plausivel")
+        self.assertEqual(resultado["A03"]["papel_candidato"], "produto_plausivel")
+
+    def test_medida_do_nome_confirma_produto_e_rebaixa_detalhe(self):
+        produto = candidato("A01", 100, 55, {"esquerda": 0, "direita": 100, "base": 0, "topo": 55})
+        detalhe = candidato("A02", 40, 40, {"esquerda": 5, "direita": 45, "base": 15, "topo": 55})
+        for item in (produto, detalhe):
+            item["visivel_inicialmente"] = True
+        catalogo = {
+            "arquivo": "adesivo transparente 100x55 cm.cdr",
+            "candidatos": [produto, detalhe], "blocos_producao": [],
+            "ocr_regional": {"associacoes": [], "leituras_ocr": []},
+            "evidencias_textuais": [{
+                "texto": "ADESIVO TRANSPARENTE", "quantidade": None, "dimensoes": None,
+                "material": {"material": "adesivo transparente", "acabamento": None},
+                "caixa_mm": {"esquerda": 0, "direita": 1000, "base": 570, "topo": 600},
+            }],
+        }
+
+        resultado = {item["candidato_id"]: item for item in associar_materiais_acabamentos(catalogo)}
+
+        self.assertEqual(resultado["A01"]["papel_candidato"], "produto_confirmado")
+        self.assertTrue(resultado["A01"]["exportavel_automaticamente"])
+        self.assertEqual(resultado["A02"]["papel_candidato"], "detalhe_interno_do_produto")
+
+    def test_conflito_de_fontes_permanece_explicito(self):
+        item = candidato("A01", 80, 80, {"esquerda": 0, "direita": 80, "base": 0, "topo": 80})
+        item["visivel_inicialmente"] = True
+        catalogo = {
+            "arquivo": "pedido.cdr", "candidatos": [item], "blocos_producao": [],
+            "ocr_regional": {"associacoes": [], "leituras_ocr": []},
+            "evidencias_textuais": [
+                {
+                    "texto": "BANNER", "quantidade": None, "dimensoes": None,
+                    "material": {"material": "banner", "acabamento": None},
+                    "caixa_mm": {"esquerda": 0, "direita": 800, "base": 850, "topo": 900},
+                },
+                {
+                    "texto": "ADESIVO", "quantidade": None, "dimensoes": None,
+                    "material": {"material": "adesivo", "acabamento": None},
+                    "caixa_mm": {"esquerda": 0, "direita": 800, "base": 820, "topo": 840},
+                },
+            ],
+        }
+
+        resultado = associar_materiais_acabamentos(catalogo)[0]
+
+        self.assertIsNone(resultado["material"])
+        self.assertEqual(resultado["status_associacao"], "revisao_conflito")
+        self.assertEqual(resultado["conflitos"][0]["valores"], ["adesivo", "banner"])
+        self.assertFalse(resultado["exportavel_automaticamente"])
+
+    def test_divergencia_com_correcao_humana_preserva_evidencias(self):
+        catalogo = {"materiais_regionais": [{
+            "candidato_id": "A01", "material": "adesivo leitoso",
+            "acabamento": "somente recorte", "evidencias": [{"texto": "SOMENTE RECORTE"}],
+        }]}
+        esperado = {"itens": [{
+            "material": {"valor": "adesivo"}, "acabamento": {"valor": "recorte especial"},
+        }]}
+        cobertura = {"detalhes": [{"candidato": "A01"}]}
+
+        conflitos = comparar_materiais_com_revisao(catalogo, esperado, cobertura)
+
+        self.assertEqual(len(conflitos), 1)
+        self.assertEqual(conflitos[0]["campo"], "acabamento")
+        self.assertEqual(conflitos[0]["valor_do_arquivo"], "somente recorte")
+        self.assertEqual(conflitos[0]["valor_confirmado"], "recorte especial")
+        self.assertEqual(conflitos[0]["evidencias"][0]["texto"], "SOMENTE RECORTE")
 
 
 if __name__ == "__main__":

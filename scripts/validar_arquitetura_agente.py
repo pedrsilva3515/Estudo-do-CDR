@@ -11,6 +11,7 @@ from zipfile import ZipFile
 from zcfreader.experimento_agente import (
     avaliar_cobertura_geometrica,
     associar_materiais_acabamentos,
+    comparar_materiais_com_revisao,
     extrair_associacoes_regionais,
     extrair_candidatos_agente,
     gerar_atlas_candidatos,
@@ -133,6 +134,20 @@ for indice, (zip_path, membro_cdr, diagnostico) in enumerate(casos_revisados(arg
             candidato_id for candidato_id, previsto in materiais_por_candidato.items()
             if previsto.get("acabamento")
         }
+        ids_itens_revisados = {
+            detalhe.get("candidato") for detalhe in cobertura["detalhes"] if detalhe.get("candidato")
+        }
+        papeis_materiais = Counter(
+            previsto.get("papel_candidato", "nao_classificado")
+            for previsto in materiais_por_candidato.values()
+        )
+        extras_por_papel = Counter(
+            previsto.get("papel_candidato", "nao_classificado")
+            for candidato_id, previsto in materiais_por_candidato.items()
+            if candidato_id not in ids_itens_revisados
+        )
+        conflitos_revisao = comparar_materiais_com_revisao(catalogo, esperado, cobertura)
+        catalogo["conflitos_revisao"] = conflitos_revisao
         pasta_caso = args.pasta_saida / f"{indice:02d}-{diagnostico['arquivo']['sha256'][:8]}"
         pasta_caso.mkdir(parents=True, exist_ok=True)
         gravar_manifesto(catalogo, esperado, cobertura, pasta_caso / "manifesto.json")
@@ -160,6 +175,10 @@ for indice, (zip_path, membro_cdr, diagnostico) in enumerate(casos_revisados(arg
             "acabamentos_incorretos": acabamentos_avaliados - acabamentos_corretos,
             "acabamentos_abstencoes": acabamentos_esperados - acabamentos_avaliados,
             "acabamentos_emissoes_sem_gabarito": len(ids_acabamentos_emitidos - ids_com_acabamento_esperado),
+            "papeis_materiais": dict(papeis_materiais),
+            "emissoes_extras_por_papel": dict(extras_por_papel),
+            "conflitos_entre_fontes": sum(bool(item.get("conflitos")) for item in materiais_por_candidato.values()),
+            "conflitos_com_revisao": len(conflitos_revisao),
             "cobertura_geometrica": cobertura,
             "imagens": [str(item) for item in imagens],
         })
@@ -190,6 +209,10 @@ resultado = {
     "acabamentos_incorretos": sum(item["acabamentos_incorretos"] for item in resumo),
     "acabamentos_abstencoes": sum(item["acabamentos_abstencoes"] for item in resumo),
     "acabamentos_emissoes_sem_gabarito": sum(item["acabamentos_emissoes_sem_gabarito"] for item in resumo),
+    "papeis_materiais": dict(sum((Counter(item["papeis_materiais"]) for item in resumo), Counter())),
+    "emissoes_extras_por_papel": dict(sum((Counter(item["emissoes_extras_por_papel"]) for item in resumo), Counter())),
+    "conflitos_entre_fontes": sum(item["conflitos_entre_fontes"] for item in resumo),
+    "conflitos_com_revisao": sum(item["conflitos_com_revisao"] for item in resumo),
 }
 (args.pasta_saida / "resumo.json").write_text(json.dumps(resultado, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print(json.dumps({k: v for k, v in resultado.items() if k != "casos"}, ensure_ascii=False, indent=2))
