@@ -149,6 +149,18 @@ vêm do modelo. Há limite de custo por pedido (US$ 0,08).
 Convenções da gráfica podem ser escritas em
 `%APPDATA%\LeitorPedidosCDR\regras_da_casa.md`, criado no primeiro uso.
 
+**Modelo local:** um modelo escrito como `local:<nome>` é enviado ao servidor
+informado em *Servidor local* (LM Studio ou Ollama, API compatível com a
+OpenAI), sem chave e sem custo. Nesse caminho o agente usa um contrato de
+resposta única, sem ferramentas, porque modelos pequenos costumam falhar ao
+usá-las; a ficha de fatos e o validador continuam os mesmos. Para medir sem
+gastar:
+
+```powershell
+python scripts/avaliar_agente.py "$env:USERPROFILE\Documents\LeitorPedidosCDR\Relatorios" `
+  --modelos local:qwen/qwen3-vl-8b-instruct --servidor-local http://localhost:1234/v1
+```
+
 Medição nos 11 pedidos revisados (22/09/2026):
 
 | Caminho | Pedidos corretos | Custo médio por pedido |
