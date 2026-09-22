@@ -24,8 +24,15 @@ from .experimento_agente import (
 from .visao_api import URL_OPENROUTER, extrair_imagem_analise
 
 ARQUIVO_REGRAS_DA_CASA = Path(__file__).with_name("regras_da_casa.md")
-MAX_RODADAS = 10
+MAX_RODADAS = 8
 MAX_CORRECOES = 2
+# Imagens menores reduzem o custo por pedido; os rótulos continuam legíveis.
+LADO_MAXIMO_IMAGEM = 1500
+QUALIDADE_JPEG = 80
+
+
+class OrcamentoExcedido(RuntimeError):
+    pass
 
 
 # ---------------------------------------------------------------- fatos
@@ -114,11 +121,11 @@ def _px(fatos: dict, tamanho: tuple[int, int], caixa: dict) -> tuple[float, floa
 
 def _data_url(imagem, formato: str = "PNG") -> str:
     buffer = BytesIO()
-    imagem.save(buffer, format=formato)
+    imagem.save(buffer, format=formato, **({"quality": QUALIDADE_JPEG} if formato == "JPEG" else {}))
     return f"data:image/{formato.lower()};base64,{base64.b64encode(buffer.getvalue()).decode('ascii')}"
 
 
-def _reduzir(imagem, lado_max: int = 1800):
+def _reduzir(imagem, lado_max: int = LADO_MAXIMO_IMAGEM):
     if max(imagem.size) > lado_max:
         escala = lado_max / max(imagem.size)
         imagem = imagem.resize((round(imagem.size[0] * escala), round(imagem.size[1] * escala)))
@@ -188,7 +195,7 @@ def recorte(fatos: dict, ids: list[str], mostrar_filhos: bool) -> str | None:
         anotada = _anotar(original, fatos, [i for i in dict.fromkeys(marcados) if i in fatos["candidatos"]])
         x0, y0, x1, y1 = _px(fatos, anotada.size, area)
         corte = anotada.crop((max(0, round(x0)), max(0, round(y0)), min(anotada.size[0], round(x1)), min(anotada.size[1], round(y1))))
-    return _data_url(_reduzir(corte, 1400), "JPEG")
+    return _data_url(_reduzir(corte, 1200), "JPEG")
 
 
 # ---------------------------------------------------------------- ficha textual
@@ -436,8 +443,16 @@ def _sem_imagens(mensagens: list[dict]) -> list[dict]:
     return limpas
 
 
-def interpretar_com_agente(caminho: Path, chave: str, modelo: str, fatos: dict | None = None) -> dict:
-    """Executa o agente e devolve resultado no formato do pedido, com rastro para auditoria."""
+def interpretar_com_agente(
+    caminho: Path, chave: str, modelo: str, fatos: dict | None = None, custo_maximo_usd: float | None = None,
+    preco_por_token: tuple[float, float] | None = None,
+) -> dict:
+    """Executa o agente e devolve resultado no formato do pedido, com rastro para auditoria.
+
+    ``custo_maximo_usd`` interrompe o pedido quando o gasto informado pelo
+    OpenRouter ultrapassa o limite (OrcamentoExcedido). Se a resposta não trouxer
+    o custo, ele é estimado por ``preco_por_token`` (entrada, saída).
+    """
     from openai import OpenAI
 
     inicio = perf_counter()
@@ -465,7 +480,17 @@ def interpretar_com_agente(caminho: Path, chave: str, modelo: str, fatos: dict |
         custo = getattr(uso, "cost", None) if uso else None
         if custo is None and uso is not None:
             custo = (getattr(uso, "model_extra", None) or {}).get("cost")
+        if custo is None and uso is not None and preco_por_token:
+            custo = (int(getattr(uso, "prompt_tokens", 0) or 0) * preco_por_token[0]
+                     + int(getattr(uso, "completion_tokens", 0) or 0) * preco_por_token[1])
         rastro["custo_usd"] += float(custo or 0)
+        rastro.setdefault("tokens", {"entrada": 0, "saida": 0})
+        rastro["tokens"]["entrada"] += int(getattr(uso, "prompt_tokens", 0) or 0)
+        rastro["tokens"]["saida"] += int(getattr(uso, "completion_tokens", 0) or 0)
+        if custo_maximo_usd is not None and rastro["custo_usd"] > custo_maximo_usd:
+            raise OrcamentoExcedido(
+                f"Pedido interrompido: US$ {rastro['custo_usd']:.4f} excede o limite de US$ {custo_maximo_usd:.4f}."
+            )
         if not resposta.choices:
             raise RuntimeError(f"O modelo {modelo} não devolveu resposta.")
         mensagem = resposta.choices[0].message
