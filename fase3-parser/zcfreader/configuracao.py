@@ -20,7 +20,11 @@ MODELOS_OPENROUTER = (
     "qwen/qwen3.8-max-0902",
 )
 PROVEDORES = ("openai", "openrouter")
-MODOS = ("estrutural", "local", "automatico", "api")
+MODOS = ("estrutural", "local", "automatico", "api", "camadas")
+# Fluxo em camadas (sempre pelo OpenRouter): regras → modelo rápido → modelo forte.
+MODELO_RAPIDO_PADRAO = "google/gemini-3.1-flash-lite"
+MODELO_FORTE_PADRAO = "google/gemini-3.8-flash"
+LIMITE_PEDIDO_PADRAO_USD = 0.08
 
 
 def caminho_configuracao() -> Path:
@@ -32,6 +36,8 @@ def carregar_configuracao() -> dict:
     padrao = {
         "modo": "estrutural", "provedor": "openai", "modelo": MODELOS_OPENAI[0],
         "modelo_openrouter": MODELOS_OPENROUTER[0],
+        "modelo_rapido": MODELO_RAPIDO_PADRAO, "modelo_forte": MODELO_FORTE_PADRAO,
+        "limite_pedido_usd": LIMITE_PEDIDO_PADRAO_USD,
         "arquitetura_regional_experimental": False,
     }
     caminho = caminho_configuracao()
@@ -51,9 +57,19 @@ def carregar_configuracao() -> dict:
     modelo_openrouter = dados.get("modelo_openrouter")
     if not isinstance(modelo_openrouter, str) or "/" not in modelo_openrouter.strip():
         modelo_openrouter = padrao["modelo_openrouter"]
+    def id_openrouter(chave: str) -> str:
+        valor = dados.get(chave)
+        return valor.strip() if isinstance(valor, str) and "/" in valor else padrao[chave]
+
+    try:
+        limite = float(dados.get("limite_pedido_usd", padrao["limite_pedido_usd"]))
+    except (TypeError, ValueError):
+        limite = padrao["limite_pedido_usd"]
     return {
         "modo": modo, "provedor": provedor, "modelo": modelo,
         "modelo_openrouter": modelo_openrouter.strip(),
+        "modelo_rapido": id_openrouter("modelo_rapido"), "modelo_forte": id_openrouter("modelo_forte"),
+        "limite_pedido_usd": limite if 0 < limite <= 1 else padrao["limite_pedido_usd"],
         "arquitetura_regional_experimental": dados.get("arquitetura_regional_experimental") is True,
     }
 
@@ -67,6 +83,9 @@ def salvar_configuracao(configuracao: dict) -> None:
         "provedor": configuracao.get("provedor") if configuracao.get("provedor") in PROVEDORES else "openai",
         "modelo": configuracao.get("modelo", MODELOS_OPENAI[0]),
         "modelo_openrouter": str(configuracao.get("modelo_openrouter") or MODELOS_OPENROUTER[0]).strip(),
+        "modelo_rapido": str(configuracao.get("modelo_rapido") or MODELO_RAPIDO_PADRAO).strip(),
+        "modelo_forte": str(configuracao.get("modelo_forte") or MODELO_FORTE_PADRAO).strip(),
+        "limite_pedido_usd": float(configuracao.get("limite_pedido_usd") or LIMITE_PEDIDO_PADRAO_USD),
         "arquitetura_regional_experimental": configuracao.get("arquitetura_regional_experimental") is True,
     }
     caminho.write_text(json.dumps(publico, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

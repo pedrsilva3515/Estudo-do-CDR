@@ -16,10 +16,7 @@ from pathlib import Path
 from time import perf_counter
 
 from .agente import extrair_fatos, interpretar_com_agente
-
-MODELO_RAPIDO_PADRAO = "google/gemini-3.1-flash-lite"
-MODELO_FORTE_PADRAO = "google/gemini-3.8-flash"
-LIMITE_PEDIDO_PADRAO_USD = 0.08
+from .configuracao import LIMITE_PEDIDO_PADRAO_USD, MODELO_FORTE_PADRAO, MODELO_RAPIDO_PADRAO
 
 
 def regras_resolvem(auditoria: dict) -> bool:

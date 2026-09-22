@@ -54,6 +54,21 @@ class TestConfiguracao(unittest.TestCase):
             self.assertEqual(carregada["provedor"], "openai")
             self.assertEqual(configuracao.modelo_do_provedor(carregada), "gpt-5.6-sol")
 
+    def test_modo_camadas_e_modelos_persistem(self):
+        with tempfile.TemporaryDirectory() as pasta, patch.object(
+            configuracao, "caminho_configuracao", return_value=Path(pasta) / "config.json"
+        ):
+            configuracao.salvar_configuracao({
+                "modo": "camadas", "provedor": "openrouter", "modelo_rapido": "qwen/qwen3.8-flash",
+                "modelo_forte": "anthropic/claude-sonnet-5", "limite_pedido_usd": 0.05,
+            })
+            carregada = configuracao.carregar_configuracao()
+
+            self.assertEqual(carregada["modo"], "camadas")
+            self.assertEqual(carregada["modelo_rapido"], "qwen/qwen3.8-flash")
+            self.assertEqual(carregada["modelo_forte"], "anthropic/claude-sonnet-5")
+            self.assertEqual(carregada["limite_pedido_usd"], 0.05)
+
 
 if __name__ == "__main__":
     unittest.main()

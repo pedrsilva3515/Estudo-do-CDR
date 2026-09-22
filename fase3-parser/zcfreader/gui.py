@@ -13,6 +13,9 @@ from tkinter import filedialog, messagebox, ttk
 import unicodedata
 
 from .configuracao import (
+    LIMITE_PEDIDO_PADRAO_USD,
+    MODELO_FORTE_PADRAO,
+    MODELO_RAPIDO_PADRAO,
     MODELOS_OPENAI,
     MODELOS_OPENROUTER,
     carregar_configuracao,
@@ -21,6 +24,7 @@ from .configuracao import (
     salvar_chave,
     salvar_configuracao,
 )
+from .camadas import interpretar_em_camadas
 from .experimento_agente import executar_arquitetura_regional
 from .pedido import interpretar_pedido
 from .relatorios import VERSAO_APLICACAO, gerar_pacote_diagnostico, normalizar_resultado_corrigido
@@ -34,6 +38,8 @@ from .modelos_locais import (
 from .visao_api import analisar_com_api, mesclar_analise_visual, precisa_adjudicacao
 
 NOMES_PROVEDORES = {"openai": "OpenAI", "openrouter": "OpenRouter"}
+MODELOS_RAPIDOS = ("google/gemini-3.1-flash-lite", "openai/gpt-5.6-luna", "qwen/qwen3-vl-235b-a22b-instruct")
+MODELOS_REFORCO = ("google/gemini-3.8-flash", "anthropic/claude-sonnet-5", "openai/gpt-5.6-sol")
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -374,6 +380,9 @@ class AplicacaoPedido:
         self.botao_conflitos = ttk.Button(
             rodape, text="Ver conflitos", style="Secondary.TButton", command=self.ver_conflitos,
         )
+        self.botao_perguntas = ttk.Button(
+            rodape, text="Ver perguntas", style="Secondary.TButton", command=self.ver_perguntas,
+        )
         self.rotulo_alertas = ttk.Label(rodape, text="", style="Subtitulo.TLabel")
         self.rotulo_alertas.pack(side="left", fill="x", expand=True)
 
@@ -385,7 +394,7 @@ class AplicacaoPedido:
     def configurar_ia(self) -> None:
         janela = tk.Toplevel(self.raiz)
         janela.title("Configurar processamento")
-        janela.geometry("540x760")
+        janela.geometry("560x880")
         janela.resizable(False, False)
         janela.configure(bg=COR_FUNDO)
         janela.transient(self.raiz)
@@ -479,12 +488,31 @@ class AplicacaoPedido:
             "Modelo visual local (CPU)": "local",
             "Automático (local e API como reserva)": "automatico",
             "Sempre usar API": "api",
+            "Agente em camadas (OpenRouter)": "camadas",
         }
         inverso = {valor: rotulo for rotulo, valor in modos.items()}
         ttk.Label(corpo, text="Modo", style="Subtitulo.TLabel").pack(anchor="w")
         var_modo = tk.StringVar(value=inverso.get(self.configuracao.get("modo"), next(iter(modos))))
         combo_modo = ttk.Combobox(corpo, textvariable=var_modo, values=list(modos), state="readonly")
-        combo_modo.pack(fill="x", pady=(4, 12))
+        combo_modo.pack(fill="x", pady=(4, 6))
+
+        quadro_camadas = ttk.Frame(corpo)
+        quadro_camadas.pack(fill="x", pady=(0, 12))
+        quadro_camadas.columnconfigure((0, 1), weight=1)
+        ttk.Label(quadro_camadas, text="Agente: modelo rápido", style="Subtitulo.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(quadro_camadas, text="Modelo de reforço", style="Subtitulo.TLabel").grid(row=0, column=1, sticky="w", padx=(10, 0))
+        var_modelo_rapido = tk.StringVar(value=self.configuracao.get("modelo_rapido", MODELO_RAPIDO_PADRAO))
+        var_modelo_forte = tk.StringVar(value=self.configuracao.get("modelo_forte", MODELO_FORTE_PADRAO))
+        ttk.Combobox(quadro_camadas, textvariable=var_modelo_rapido, values=MODELOS_RAPIDOS).grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        ttk.Combobox(quadro_camadas, textvariable=var_modelo_forte, values=MODELOS_REFORCO).grid(row=1, column=1, sticky="ew", padx=(10, 0), pady=(4, 0))
+        ttk.Label(
+            quadro_camadas,
+            text=(
+                "Regras resolvem o que é explícito sem custo; o modelo rápido cuida do resto e o de reforço "
+                f"só entra em casos duvidosos. Limite por pedido: US$ {self.configuracao.get('limite_pedido_usd', LIMITE_PEDIDO_PADRAO_USD):.2f}."
+            ),
+            style="Subtitulo.TLabel", wraplength=450, justify="left",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         ttk.Checkbutton(
             corpo, variable=var_arquitetura,
@@ -569,6 +597,13 @@ class AplicacaoPedido:
             if modo == "api" and not chaves_salvas[provedor] and not var_chave.get().strip():
                 messagebox.showwarning("Chave necessária", f"Informe uma chave do {NOMES_PROVEDORES[provedor]} para ativar este modo.", parent=janela)
                 return
+            if modo == "camadas":
+                if not chaves_salvas["openrouter"] and not chaves_digitadas["openrouter"].strip():
+                    messagebox.showwarning("Chave necessária", "O agente em camadas usa o OpenRouter: selecione o provedor OpenRouter e informe a chave.", parent=janela)
+                    return
+                if "/" not in var_modelo_rapido.get() or "/" not in var_modelo_forte.get():
+                    messagebox.showwarning("Modelo inválido", "Use IDs do OpenRouter no formato empresa/modelo para os dois modelos do agente.", parent=janela)
+                    return
             if provedor == "openrouter" and "/" not in modelos_escolhidos["openrouter"]:
                 messagebox.showwarning("Modelo inválido", "Use um ID do OpenRouter no formato empresa/modelo, por exemplo anthropic/claude-sonnet-5.", parent=janela)
                 return
@@ -576,6 +611,9 @@ class AplicacaoPedido:
                 "modo": modo, "provedor": provedor,
                 "modelo": modelos_escolhidos["openai"],
                 "modelo_openrouter": modelos_escolhidos["openrouter"],
+                "modelo_rapido": var_modelo_rapido.get().strip(),
+                "modelo_forte": var_modelo_forte.get().strip(),
+                "limite_pedido_usd": self.configuracao.get("limite_pedido_usd", LIMITE_PEDIDO_PADRAO_USD),
                 "arquitetura_regional_experimental": var_arquitetura.get(),
             }
             salvar_configuracao(self.configuracao)
@@ -612,6 +650,7 @@ class AplicacaoPedido:
         self.rotulo_total.configure(text="…")
         self.rotulo_alertas.configure(text="")
         self.botao_conflitos.pack_forget()
+        self.botao_perguntas.pack_forget()
         self.botao_auditoria_regional.pack_forget()
         for linha in self.tabela.get_children():
             self.tabela.delete(linha)
@@ -626,6 +665,21 @@ class AplicacaoPedido:
             modo = self.configuracao.get("modo", "estrutural")
             visual_inicial = adjudicacao = visual = None
             provedor = None
+
+            if modo == "camadas":
+                estrutural = interpretar_pedido(caminho)
+                resultado = interpretar_em_camadas(
+                    caminho, obter_chave("openrouter"), estrutural,
+                    modelo_rapido=self.configuracao["modelo_rapido"],
+                    modelo_forte=self.configuracao["modelo_forte"],
+                    custo_maximo_usd=self.configuracao["limite_pedido_usd"],
+                )
+                self.fila.put(("ok", {
+                    "resultado": resultado, "estrutural": estrutural,
+                    "visual": {"camadas": resultado.get("processamento")},
+                    "duracao": perf_counter() - inicio,
+                }))
+                return
 
             # A primeira leitura visual acontece sem candidatos estruturais.
             if modo == "local" or (modo == "automatico" and modelo_instalado()):
@@ -756,13 +810,25 @@ class AplicacaoPedido:
         )
         origem_nome = " • nome usado como evidência" if nome_usado else ""
         processamento = resultado.get("processamento", {})
-        if processamento.get("provedor") == "local":
+        if processamento.get("fluxo") == "camadas":
+            nomes_camadas = {
+                "regras": "regras (sem IA)", "modelo_rapido": "modelo rápido",
+                "modelo_forte": "modelo de reforço", "estrutural": "leitura estrutural",
+            }
+            origem_ia = (
+                f" • {nomes_camadas.get(processamento.get('camada_final'), '?')}"
+                f" • US$ {processamento.get('custo_usd', 0):.4f}"
+            )
+        elif processamento.get("provedor") == "local":
             origem_ia = " • OCR + IA local em CPU"
         elif processamento.get("provedor"):
             origem_ia = f" • OCR + IA: {processamento.get('modelo')}"
         else:
             origem_ia = " • análise estrutural"
-        origem_regional = " • arquitetura regional experimental" if auditoria_regional else ""
+        origem_regional = (
+            " • arquitetura regional experimental"
+            if auditoria_regional and processamento.get("fluxo") != "camadas" else ""
+        )
         self.rotulo_status.configure(
             text=f"{len(itens)} item(ns) • modo de cor {modo}{origem_nome}{origem_ia}{origem_regional} • "
             + ("revisão necessária" if pendencias or conflitos or divergencia_regional else "análise concluída"),
@@ -773,13 +839,20 @@ class AplicacaoPedido:
         detalhes = []
         if alertas:
             detalhes.append(f"{alertas} alerta(s)")
-        if pendencias:
-            detalhes.append("Confirmar: " + ", ".join(pendencias))
+        campos_pendentes = [campo for campo in pendencias if campo != "perguntas"]
+        if campos_pendentes:
+            detalhes.append("Confirmar: " + ", ".join(campos_pendentes))
         if conflitos:
             detalhes.append(f"{len(conflitos)} conflito(s) entre fontes")
             self.botao_conflitos.pack(side="right", padx=(10, 0))
         else:
             self.botao_conflitos.pack_forget()
+        perguntas = resultado.get("perguntas_operador") or []
+        if perguntas:
+            detalhes.append(f"{len(perguntas)} pergunta(s) para o operador")
+            self.botao_perguntas.pack(side="right", padx=(10, 0))
+        else:
+            self.botao_perguntas.pack_forget()
         if auditoria_regional:
             resumo_regional = auditoria_regional.get("resumo", {})
             detalhes.append(
@@ -831,6 +904,24 @@ class AplicacaoPedido:
             "Conflitos que exigem revisão",
             "O sistema encontrou informações incompatíveis e não escolheu silenciosamente entre elas.\n\n"
             + "\n".join(linhas),
+        )
+
+    def ver_perguntas(self) -> None:
+        if self.resultado is None:
+            return
+        perguntas = self.resultado.get("perguntas_operador") or []
+        if not perguntas:
+            return
+        linhas = []
+        for numero, pergunta in enumerate(perguntas, 1):
+            pecas = ", ".join(pergunta.get("ids") or [])
+            linhas.append(f"{numero}. {pergunta.get('pergunta', '')}" + (f"\n   Peças: {pecas}" if pecas else ""))
+        processamento = self.resultado.get("processamento") or {}
+        modelos = " → ".join(processamento.get("modelos") or [])
+        messagebox.showinfo(
+            "Perguntas para o operador",
+            "A interpretação não conseguiu decidir sozinha. Responda usando 'Corrigir resultado'.\n\n"
+            + "\n\n".join(linhas) + (f"\n\nModelos consultados: {modelos}" if modelos else ""),
         )
 
     def ver_analise_regional(self) -> None:
