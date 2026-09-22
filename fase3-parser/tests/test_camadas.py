@@ -113,6 +113,25 @@ class TestCamadas(unittest.TestCase):
         self.assertEqual(resultado["processamento"]["camada_final"], "modelo_rapido")
         self.assertIn("MODELO_FORTE_FALHOU", [a["codigo"] for a in resultado["alertas"]])
 
+    def test_modelo_local_roda_sem_chave_e_sem_ferramentas(self):
+        registros = []
+
+        def agente(caminho, chave, modelo, fatos=None, custo_maximo_usd=None, base_url=None, usar_ferramentas=True):
+            registros.append({"chave": chave, "modelo": modelo, "base_url": base_url, "ferramentas": usar_ferramentas})
+            return _resultado(9, 23.4, 18.4, custo=0.0)
+
+        resultado = interpretar_em_camadas(
+            Path("x.cdr"), None, ESTRUTURAL, modelo_rapido="local:qwen/qwen3-vl-8b-instruct", modelo_forte=None,
+            executar_agente=agente, fatos={"auditoria_regional": AMBIGUA},
+            url_servidor_local="http://mac:1234/v1",
+        )
+        self.assertEqual(registros, [{
+            "chave": None, "modelo": "qwen/qwen3-vl-8b-instruct",
+            "base_url": "http://mac:1234/v1", "ferramentas": False,
+        }])
+        self.assertEqual(resultado["processamento"]["camada_final"], "modelo_rapido")
+        self.assertEqual(resultado["processamento"]["custo_usd"], 0.0)
+
     def test_sem_chave_mantem_estrutural(self):
         resultado = _rodar(AMBIGUA, AgenteFalso({}), chave=None)
         self.assertEqual(resultado["processamento"]["camada_final"], "estrutural")

@@ -14,6 +14,7 @@ import unicodedata
 
 from .configuracao import (
     LIMITE_PEDIDO_PADRAO_USD,
+    URL_SERVIDOR_LOCAL_PADRAO,
     MODELO_FORTE_PADRAO,
     MODELO_RAPIDO_PADRAO,
     MODELOS_OPENAI,
@@ -38,7 +39,10 @@ from .modelos_locais import (
 from .visao_api import analisar_com_api, mesclar_analise_visual, precisa_adjudicacao
 
 NOMES_PROVEDORES = {"openai": "OpenAI", "openrouter": "OpenRouter"}
-MODELOS_RAPIDOS = ("google/gemini-3.1-flash-lite", "openai/gpt-5.6-luna", "qwen/qwen3-vl-235b-a22b-instruct")
+MODELOS_RAPIDOS = (
+    "google/gemini-3.1-flash-lite", "openai/gpt-5.6-luna", "qwen/qwen3-vl-235b-a22b-instruct",
+    "local:qwen/qwen3-vl-8b-instruct",
+)
 MODELOS_REFORCO = ("google/gemini-3.8-flash", "anthropic/claude-sonnet-5", "openai/gpt-5.6-sol")
 
 try:
@@ -394,7 +398,7 @@ class AplicacaoPedido:
     def configurar_ia(self) -> None:
         janela = tk.Toplevel(self.raiz)
         janela.title("Configurar processamento")
-        janela.geometry("560x880")
+        janela.geometry("560x950")
         janela.resizable(False, False)
         janela.configure(bg=COR_FUNDO)
         janela.transient(self.raiz)
@@ -509,10 +513,14 @@ class AplicacaoPedido:
             quadro_camadas,
             text=(
                 "Regras resolvem o que é explícito sem custo; o modelo rápido cuida do resto e o de reforço "
-                f"só entra em casos duvidosos. Limite por pedido: US$ {self.configuracao.get('limite_pedido_usd', LIMITE_PEDIDO_PADRAO_USD):.2f}."
+                f"só entra em casos duvidosos. Limite por pedido: US$ {self.configuracao.get('limite_pedido_usd', LIMITE_PEDIDO_PADRAO_USD):.2f}. "
+                "Um modelo escrito como local:nome roda no servidor local abaixo, sem custo."
             ),
             style="Subtitulo.TLabel", wraplength=450, justify="left",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        ttk.Label(quadro_camadas, text="Servidor local (LM Studio/Ollama)", style="Subtitulo.TLabel").grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        var_url_local = tk.StringVar(value=self.configuracao.get("url_servidor_local", URL_SERVIDOR_LOCAL_PADRAO))
+        ttk.Entry(quadro_camadas, textvariable=var_url_local).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
         ttk.Checkbutton(
             corpo, variable=var_arquitetura,
@@ -598,10 +606,13 @@ class AplicacaoPedido:
                 messagebox.showwarning("Chave necessária", f"Informe uma chave do {NOMES_PROVEDORES[provedor]} para ativar este modo.", parent=janela)
                 return
             if modo == "camadas":
-                if not chaves_salvas["openrouter"] and not chaves_digitadas["openrouter"].strip():
+                usa_openrouter = not var_modelo_rapido.get().startswith("local:") or not var_modelo_forte.get().startswith("local:")
+                if usa_openrouter and not chaves_salvas["openrouter"] and not chaves_digitadas["openrouter"].strip():
                     messagebox.showwarning("Chave necessária", "O agente em camadas usa o OpenRouter: selecione o provedor OpenRouter e informe a chave.", parent=janela)
                     return
-                if "/" not in var_modelo_rapido.get() or "/" not in var_modelo_forte.get():
+                if not all(
+                    "/" in m or m.startswith("local:") for m in (var_modelo_rapido.get(), var_modelo_forte.get())
+                ):
                     messagebox.showwarning("Modelo inválido", "Use IDs do OpenRouter no formato empresa/modelo para os dois modelos do agente.", parent=janela)
                     return
             if provedor == "openrouter" and "/" not in modelos_escolhidos["openrouter"]:
@@ -614,6 +625,7 @@ class AplicacaoPedido:
                 "modelo_rapido": var_modelo_rapido.get().strip(),
                 "modelo_forte": var_modelo_forte.get().strip(),
                 "limite_pedido_usd": self.configuracao.get("limite_pedido_usd", LIMITE_PEDIDO_PADRAO_USD),
+                "url_servidor_local": var_url_local.get().strip() or URL_SERVIDOR_LOCAL_PADRAO,
                 "arquitetura_regional_experimental": var_arquitetura.get(),
             }
             salvar_configuracao(self.configuracao)
@@ -673,6 +685,7 @@ class AplicacaoPedido:
                     modelo_rapido=self.configuracao["modelo_rapido"],
                     modelo_forte=self.configuracao["modelo_forte"],
                     custo_maximo_usd=self.configuracao["limite_pedido_usd"],
+                    url_servidor_local=self.configuracao["url_servidor_local"],
                 )
                 self.fila.put(("ok", {
                     "resultado": resultado, "estrutural": estrutural,

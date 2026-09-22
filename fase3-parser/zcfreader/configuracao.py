@@ -25,6 +25,10 @@ MODOS = ("estrutural", "local", "automatico", "api", "camadas")
 MODELO_RAPIDO_PADRAO = "google/gemini-3.1-flash-lite"
 MODELO_FORTE_PADRAO = "google/gemini-3.8-flash"
 LIMITE_PEDIDO_PADRAO_USD = 0.08
+# Servidor local compatível com a API da OpenAI (LM Studio, Ollama). Modelos
+# escritos como "local:<nome>" são enviados para ele, sem chave e sem cobrança.
+URL_SERVIDOR_LOCAL_PADRAO = "http://localhost:1234/v1"
+PREFIXO_LOCAL = "local:"
 
 
 def caminho_configuracao() -> Path:
@@ -38,6 +42,7 @@ def carregar_configuracao() -> dict:
         "modelo_openrouter": MODELOS_OPENROUTER[0],
         "modelo_rapido": MODELO_RAPIDO_PADRAO, "modelo_forte": MODELO_FORTE_PADRAO,
         "limite_pedido_usd": LIMITE_PEDIDO_PADRAO_USD,
+        "url_servidor_local": URL_SERVIDOR_LOCAL_PADRAO,
         "arquitetura_regional_experimental": False,
     }
     caminho = caminho_configuracao()
@@ -57,9 +62,10 @@ def carregar_configuracao() -> dict:
     modelo_openrouter = dados.get("modelo_openrouter")
     if not isinstance(modelo_openrouter, str) or "/" not in modelo_openrouter.strip():
         modelo_openrouter = padrao["modelo_openrouter"]
-    def id_openrouter(chave: str) -> str:
+    def id_modelo(chave: str) -> str:
         valor = dados.get(chave)
-        return valor.strip() if isinstance(valor, str) and "/" in valor else padrao[chave]
+        valido = isinstance(valor, str) and ("/" in valor or valor.startswith(PREFIXO_LOCAL))
+        return valor.strip() if valido else padrao[chave]
 
     try:
         limite = float(dados.get("limite_pedido_usd", padrao["limite_pedido_usd"]))
@@ -68,7 +74,8 @@ def carregar_configuracao() -> dict:
     return {
         "modo": modo, "provedor": provedor, "modelo": modelo,
         "modelo_openrouter": modelo_openrouter.strip(),
-        "modelo_rapido": id_openrouter("modelo_rapido"), "modelo_forte": id_openrouter("modelo_forte"),
+        "modelo_rapido": id_modelo("modelo_rapido"), "modelo_forte": id_modelo("modelo_forte"),
+        "url_servidor_local": str(dados.get("url_servidor_local") or padrao["url_servidor_local"]).strip(),
         "limite_pedido_usd": limite if 0 < limite <= 1 else padrao["limite_pedido_usd"],
         "arquitetura_regional_experimental": dados.get("arquitetura_regional_experimental") is True,
     }
@@ -86,6 +93,7 @@ def salvar_configuracao(configuracao: dict) -> None:
         "modelo_rapido": str(configuracao.get("modelo_rapido") or MODELO_RAPIDO_PADRAO).strip(),
         "modelo_forte": str(configuracao.get("modelo_forte") or MODELO_FORTE_PADRAO).strip(),
         "limite_pedido_usd": float(configuracao.get("limite_pedido_usd") or LIMITE_PEDIDO_PADRAO_USD),
+        "url_servidor_local": str(configuracao.get("url_servidor_local") or URL_SERVIDOR_LOCAL_PADRAO).strip(),
         "arquitetura_regional_experimental": configuracao.get("arquitetura_regional_experimental") is True,
     }
     caminho.write_text(json.dumps(publico, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

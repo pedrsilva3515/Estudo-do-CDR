@@ -22,7 +22,7 @@ from .experimento_agente import (
     extrair_candidatos_agente,
     resumir_catalogo_regional,
 )
-from .visao_api import URL_OPENROUTER, extrair_imagem_analise
+from .visao_api import URL_OPENROUTER, extrair_imagem_analise, extrair_json_resposta
 
 ARQUIVO_REGRAS_DA_CASA = Path(__file__).with_name("regras_da_casa.md")
 MAX_RODADAS = 8
@@ -504,22 +504,45 @@ def _sem_imagens(mensagens: list[dict]) -> list[dict]:
     return limpas
 
 
+def _contrato_sem_ferramentas() -> str:
+    """Pedido de resposta única, para modelos locais que não usam ferramentas."""
+    esquema = _ferramentas()[-1]["function"]["parameters"]
+    return (
+        "\n\nVocê NÃO tem ferramentas: responda de uma vez só, com um único objeto JSON válido, "
+        "sem texto em volta e sem cercas de código, seguindo este JSON Schema: "
+        + json.dumps(esquema, ensure_ascii=False)
+        + "\nUse apenas IDs existentes na ficha. Se precisar separar artes diferentes reunidas numa "
+        "candidata, use os IDs internos citados na ficha."
+    )
+
+
 def interpretar_com_agente(
     caminho: Path, chave: str, modelo: str, fatos: dict | None = None, custo_maximo_usd: float | None = None,
-    preco_por_token: tuple[float, float] | None = None,
+    preco_por_token: tuple[float, float] | None = None, base_url: str = URL_OPENROUTER,
+    usar_ferramentas: bool = True,
 ) -> dict:
     """Executa o agente e devolve resultado no formato do pedido, com rastro para auditoria.
 
     ``custo_maximo_usd`` interrompe o pedido quando o gasto informado pelo
     OpenRouter ultrapassa o limite (OrcamentoExcedido). Se a resposta não trouxer
     o custo, ele é estimado por ``preco_por_token`` (entrada, saída).
+
+    ``base_url`` permite um servidor local compatível com a API da OpenAI
+    (LM Studio, Ollama); com ``usar_ferramentas=False`` o modelo responde de uma
+    vez só, sem investigar, o que costuma ser necessário em modelos pequenos.
     """
     from openai import OpenAI
 
     inicio = perf_counter()
     fatos = fatos or extrair_fatos(caminho)
-    cliente = OpenAI(api_key=chave, base_url=URL_OPENROUTER, timeout=240, default_headers={"X-Title": "Leitor de Pedidos CDR"})
+    local = base_url != URL_OPENROUTER
+    cliente = OpenAI(
+        api_key=chave or "local", base_url=base_url, timeout=900 if local else 240,
+        default_headers=None if local else {"X-Title": "Leitor de Pedidos CDR"},
+    )
     sistema = PROMPT_SISTEMA
+    if not usar_ferramentas:
+        sistema += _contrato_sem_ferramentas()
     casa = regras_da_casa()
     if casa:
         sistema += "\n\nREGRAS DA CASA (convenções desta gráfica):\n" + casa
@@ -532,10 +555,12 @@ def interpretar_com_agente(
     resposta_final = None
 
     for _ in range(MAX_RODADAS):
-        resposta = cliente.chat.completions.create(
-            model=modelo, messages=mensagens, tools=_ferramentas(), tool_choice="auto", max_tokens=6000,
-            extra_body={"provider": {"data_collection": "deny"}, "usage": {"include": True}},
-        )
+        opcoes = {"max_tokens": 6000}
+        if usar_ferramentas:
+            opcoes.update(tools=_ferramentas(), tool_choice="auto")
+        if not local:
+            opcoes["extra_body"] = {"provider": {"data_collection": "deny"}, "usage": {"include": True}}
+        resposta = cliente.chat.completions.create(model=modelo, messages=mensagens, **opcoes)
         rastro["chamadas"] += 1
         uso = getattr(resposta, "usage", None)
         custo = getattr(uso, "cost", None) if uso else None
@@ -555,6 +580,27 @@ def interpretar_com_agente(
         if not resposta.choices:
             raise RuntimeError(f"O modelo {modelo} não devolveu resposta.")
         mensagem = resposta.choices[0].message
+        if not usar_ferramentas:
+            # Resposta única: o validador aprova ou devolve os erros para correção.
+            mensagens.append({"role": "assistant", "content": mensagem.content or ""})
+            try:
+                proposta = extrair_json_resposta(mensagem.content or "")
+            except RuntimeError as erro:
+                erros = [str(erro)]
+                proposta = {"itens": [], "perguntas": [], "observacoes": ""}
+            else:
+                erros = validar(fatos, proposta)
+            if erros and correcoes < MAX_CORRECOES:
+                correcoes += 1
+                rastro["correcoes"].append(erros)
+                mensagens.append({
+                    "role": "user",
+                    "content": "Corrija e responda de novo, só com o JSON:\n- " + "\n- ".join(erros),
+                })
+                continue
+            resposta_final = proposta
+            rastro["erros_restantes"] = erros
+            break
         chamadas = mensagem.tool_calls or []
         mensagens.append({
             "role": "assistant", "content": mensagem.content or "",

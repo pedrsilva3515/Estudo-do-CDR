@@ -22,7 +22,7 @@ from zcfreader.agente import extrair_fatos, interpretar_com_agente
 from zcfreader.camadas import interpretar_em_camadas
 from zcfreader.pedido import interpretar_pedido
 from zcfreader.avaliacao_caminhos import avaliar_caminhos, resultado_de_auditoria_regional
-from zcfreader.configuracao import obter_chave
+from zcfreader.configuracao import PREFIXO_LOCAL, URL_SERVIDOR_LOCAL_PADRAO, obter_chave
 from zcfreader.experimento_agente import executar_arquitetura_regional
 
 
@@ -50,18 +50,21 @@ def main() -> None:
     parser.add_argument("--orcamento-usd", type=float, default=0.30,
                         help="gasto total máximo desta execução; ao atingir, os pedidos seguintes não são enviados")
     parser.add_argument("--limite-pedido-usd", type=float, default=0.05, help="gasto máximo por pedido")
+    parser.add_argument("--servidor-local", default=URL_SERVIDOR_LOCAL_PADRAO,
+                        help="endereço do servidor compatível com a OpenAI para modelos 'local:<nome>'")
     args = parser.parse_args()
 
     chave = obter_chave("openrouter")
-    if not chave:
+    todos = args.modelos + list(args.camadas or [])
+    if not chave and any(not m.startswith(PREFIXO_LOCAL) for m in todos):
         parser.error("Chave do OpenRouter não encontrada (Configurar IA ou OPENROUTER_API_KEY).")
     if args.sem_corel:
         import zcfreader.visao_api as visao_api
         visao_api.renderizar_com_corel = lambda caminho, *a, **k: None
     if args.rastros:
         args.rastros.mkdir(parents=True, exist_ok=True)
-    todos_modelos = list(dict.fromkeys(args.modelos + list(args.camadas or [])))
-    if not todos_modelos:
+    todos_modelos = [m for m in dict.fromkeys(todos) if not m.startswith(PREFIXO_LOCAL)]
+    if not todos:
         parser.error("Informe --modelos e/ou --camadas.")
     precos = precos_openrouter(todos_modelos)
     desconhecidos = [m for m in todos_modelos if m not in precos]
@@ -76,16 +79,25 @@ def main() -> None:
             fatos_por_arquivo[cdr.name] = extrair_fatos(cdr)
         return fatos_por_arquivo[cdr.name]
 
+    def executar_modelo(cdr: Path, modelo: str, limite: float | None) -> dict:
+        """Roteia para o OpenRouter ou para o servidor local, conforme o prefixo do modelo."""
+        if modelo.startswith(PREFIXO_LOCAL):
+            return interpretar_com_agente(
+                cdr, None, modelo[len(PREFIXO_LOCAL):], fatos=fatos(cdr),
+                base_url=args.servidor_local, usar_ferramentas=False,
+            )
+        return interpretar_com_agente(
+            cdr, chave, modelo, fatos=fatos(cdr), custo_maximo_usd=limite, preco_por_token=precos[modelo],
+        )
+
     def caminho_agente(modelo: str):
         def executar(cdr: Path, _pacote) -> dict:
             gasto = sum(custos.values())
-            if gasto >= args.orcamento_usd:
+            if gasto >= args.orcamento_usd and not modelo.startswith(PREFIXO_LOCAL):
                 raise RuntimeError(f"orçamento de US$ {args.orcamento_usd:.2f} atingido (gasto US$ {gasto:.4f})")
             try:
-                resultado = interpretar_com_agente(
-                    cdr, chave, modelo, fatos=fatos(cdr),
-                    custo_maximo_usd=min(args.limite_pedido_usd, args.orcamento_usd - gasto),
-                    preco_por_token=precos[modelo],
+                resultado = executar_modelo(
+                    cdr, modelo, min(args.limite_pedido_usd, args.orcamento_usd - gasto),
                 )
             except Exception as erro:
                 print(f"  ! {modelo} em {cdr.name}: {type(erro).__name__}: {erro}", flush=True)
@@ -111,7 +123,11 @@ def main() -> None:
         if gasto >= args.orcamento_usd:
             raise RuntimeError(f"orçamento de US$ {args.orcamento_usd:.2f} atingido (gasto US$ {gasto:.4f})")
 
-        def agente(caminho, chave_agente, modelo, fatos=None, custo_maximo_usd=None):
+        def agente(caminho, chave_agente, modelo, fatos=None, custo_maximo_usd=None, base_url=None, usar_ferramentas=True):
+            if base_url:  # já veio roteado para o servidor local
+                return interpretar_com_agente(
+                    caminho, chave_agente, modelo, fatos=fatos, base_url=base_url, usar_ferramentas=usar_ferramentas,
+                )
             return interpretar_com_agente(
                 caminho, chave_agente, modelo, fatos=fatos, custo_maximo_usd=custo_maximo_usd,
                 preco_por_token=precos[modelo],
@@ -120,7 +136,7 @@ def main() -> None:
         resultado = interpretar_em_camadas(
             cdr, chave, interpretar_pedido(cdr), modelo_rapido=args.camadas[0], modelo_forte=args.camadas[1],
             custo_maximo_usd=min(args.limite_pedido_usd, args.orcamento_usd - gasto),
-            executar_agente=agente, fatos=fatos(cdr),
+            executar_agente=agente, fatos=fatos(cdr), url_servidor_local=args.servidor_local,
         )
         p = resultado["processamento"]
         custos["camadas"] = custos.get("camadas", 0.0) + p["custo_usd"]

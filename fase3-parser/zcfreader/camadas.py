@@ -16,7 +16,13 @@ from pathlib import Path
 from time import perf_counter
 
 from .agente import extrair_fatos, interpretar_com_agente
-from .configuracao import LIMITE_PEDIDO_PADRAO_USD, MODELO_FORTE_PADRAO, MODELO_RAPIDO_PADRAO
+from .configuracao import (
+    LIMITE_PEDIDO_PADRAO_USD,
+    MODELO_FORTE_PADRAO,
+    MODELO_RAPIDO_PADRAO,
+    PREFIXO_LOCAL,
+    URL_SERVIDOR_LOCAL_PADRAO,
+)
 
 
 def regras_resolvem(auditoria: dict) -> bool:
@@ -116,6 +122,7 @@ def interpretar_em_camadas(
     custo_maximo_usd: float = LIMITE_PEDIDO_PADRAO_USD,
     executar_agente=interpretar_com_agente,
     fatos: dict | None = None,
+    url_servidor_local: str = URL_SERVIDOR_LOCAL_PADRAO,
 ) -> dict:
     """Devolve o resultado estrutural com os itens da camada que resolveu o pedido."""
     inicio = perf_counter()
@@ -154,7 +161,7 @@ def interpretar_em_camadas(
         processamento["camadas"].append({"camada": "regras", "aceita": True})
         return finalizar(resultado_das_regras(auditoria), "regras", 0.95)
     processamento["camadas"].append({"camada": "regras", "aceita": False})
-    if not chave:
+    if not chave and not str(modelo_rapido).startswith(PREFIXO_LOCAL):
         resultado["alertas"].append({
             "codigo": "AGENTE_SEM_CHAVE", "severidade": "revisao",
             "mensagem": "As regras não resolveram o pedido e não há chave do OpenRouter; mantida a leitura estrutural.",
@@ -163,7 +170,14 @@ def interpretar_em_camadas(
 
     # 2. Modelo rápido
     def rodar(modelo: str, limite: float) -> dict:
-        saida = executar_agente(Path(caminho), chave, modelo, fatos=fatos, custo_maximo_usd=limite)
+        if modelo.startswith(PREFIXO_LOCAL):
+            # Modelo no servidor local: sem chave, sem custo e sem ferramentas.
+            saida = executar_agente(
+                Path(caminho), None, modelo[len(PREFIXO_LOCAL):], fatos=fatos, custo_maximo_usd=None,
+                base_url=url_servidor_local, usar_ferramentas=False,
+            )
+        else:
+            saida = executar_agente(Path(caminho), chave, modelo, fatos=fatos, custo_maximo_usd=limite)
         rastro = saida.get("rastro_agente") or {}
         processamento["custo_usd"] += float(rastro.get("custo_usd") or 0)
         processamento["modelos"].append(modelo)
