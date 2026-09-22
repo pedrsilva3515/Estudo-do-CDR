@@ -117,6 +117,11 @@ def renderizar_com_corel(
 
     prazo = TEMPO_LIMITE_PADRAO_S if tempo_limite_s is None else tempo_limite_s
     antes = _pids_corel()
+    if antes:
+        # O CorelDRAW é instância única: com o do operador aberto, a automação
+        # receberia a janela dele, a esconderia (Visible=False) e a fecharia (Quit).
+        # Nunca usar um CorelDRAW que não foi aberto por esta chamada.
+        return None
     resultado: list[bytes | None] = [None]
     tarefa = threading.Thread(
         target=lambda: resultado.__setitem__(0, _renderizar(caminho, largura_px)), daemon=True,

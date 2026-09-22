@@ -22,10 +22,16 @@ class TestRenderCorel(unittest.TestCase):
         self.cdr = Path(pasta.name) / "pedido.cdr"
         self.cdr.write_bytes(b"x")
 
+    def test_corel_do_operador_aberto_nunca_e_usado(self):
+        with mock.patch.object(render_corel, "_renderizar") as renderizar, \
+             mock.patch.object(render_corel, "_pids_corel", return_value={100}):
+            self.assertIsNone(render_corel.renderizar_com_corel(self.cdr))
+        renderizar.assert_not_called()
+
     def test_corel_travado_expira_e_encerra_somente_instancia_nova(self):
         liberar = threading.Event()
         self.addCleanup(liberar.set)
-        pids = iter([{100}, {100, 200}])
+        pids = iter([set(), {200}])
         with mock.patch.object(render_corel, "_renderizar", side_effect=lambda *a: liberar.wait(5)), \
              mock.patch.object(render_corel, "_pids_corel", side_effect=lambda: next(pids)), \
              mock.patch.object(render_corel, "_encerrar", side_effect=lambda p: liberar.set()) as encerrar:
