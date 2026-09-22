@@ -20,6 +20,7 @@ from .experimento_agente import (
     associar_materiais_acabamentos,
     extrair_associacoes_regionais,
     extrair_candidatos_agente,
+    resumir_catalogo_regional,
 )
 from .visao_api import URL_OPENROUTER, extrair_imagem_analise
 
@@ -60,6 +61,8 @@ def extrair_fatos(caminho: Path) -> dict:
     catalogo = extrair_candidatos_agente(caminho)
     catalogo["ocr_regional"] = extrair_associacoes_regionais(caminho, catalogo)
     materiais = associar_materiais_acabamentos(catalogo)
+    catalogo["materiais_regionais"] = materiais
+    auditoria_regional = resumir_catalogo_regional(catalogo)
     imagem = extrair_imagem_analise(caminho)
 
     textos = []
@@ -100,6 +103,7 @@ def extrair_fatos(caminho: Path) -> dict:
         "candidatos": candidatos,
         "textos": {t["id"]: t for t in textos},
         "pistas_regras": pistas,
+        "auditoria_regional": auditoria_regional,
         "imagem": imagem[0] if imagem else None,
         "imagem_origem": imagem[2] if imagem else None,
     }
@@ -344,16 +348,37 @@ def _ancestrais(fatos: dict, candidato_id: str) -> set[str]:
     return vistos
 
 
+# Abreviações e sinônimos usados nas montagens da gráfica.
+_SINONIMOS = {
+    "ads": "adesivo", "adesivos": "adesivo", "vinil": "adesivo", "vinilico": "adesivo",
+    "banner": "lona", "banners": "lona", "lonas": "lona",
+    "rec": "recorte", "recortado": "recorte", "recortados": "recorte", "recortada": "recorte", "recortadas": "recorte",
+    "ilhoses": "ilhos", "ilhois": "ilhos",
+}
+
+
+def _termos(texto) -> list[str]:
+    termos = []
+    for palavra in re.findall(r"[^\W\d_]+", _normalizar(texto)):
+        palavra = _SINONIMOS.get(palavra, palavra)
+        if len(palavra) >= 3 or palavra in {"sem", "com"}:
+            termos.append(palavra)
+    return termos
+
+
 def _cita(fatos: dict, texto_id, valor: str) -> bool:
+    """O texto citado contém todos os termos relevantes do valor (com abreviações expandidas)?"""
     if texto_id == "NOME_ARQUIVO":
         fonte = fatos["arquivo"]
     elif texto_id in fatos["textos"]:
         fonte = fatos["textos"][texto_id]["texto"]
     else:
         return False
-    fonte = _normalizar(fonte)
-    palavras = [p for p in re.findall(r"\w+", _normalizar(valor)) if len(p) >= 4]
-    return not palavras or any(p[:5] in fonte for p in palavras)
+    termos_fonte = _termos(fonte)
+    return all(
+        any(t == f or (len(t) >= 5 and len(f) >= 5 and t[:5] == f[:5]) for f in termos_fonte)
+        for t in _termos(valor)
+    )
 
 
 def validar(fatos: dict, resposta: dict) -> list[str]:

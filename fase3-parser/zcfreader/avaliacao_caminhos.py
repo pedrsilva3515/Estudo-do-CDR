@@ -133,7 +133,7 @@ def comparar_tolerante(obtido: dict, esperado: dict) -> dict:
         "linhas_corretas": linhas_corretas,
         "pedido_correto": linhas_corretas == len(itens_esperados) == len(itens_obtidos),
         "total_unidades_ok": total_obtido == total_esperado,
-        "perguntas": len(obtido.get("perguntas") or []),
+        "perguntas": len(obtido.get("perguntas") or obtido.get("perguntas_operador") or []),
     }
 
 

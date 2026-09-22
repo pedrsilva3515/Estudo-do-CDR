@@ -69,6 +69,28 @@ class TestValidadorAgente(unittest.TestCase):
         erros = validar(FATOS, {"itens": [_item(["A47"], 12, texto="T11", material="lona", texto_material="T11")]})
         self.assertTrue(any("material 'lona'" in e for e in erros))
 
+    def test_material_abreviado_e_sinonimos_sao_aceitos(self):
+        from zcfreader.agente import _cita
+        fatos = {"arquivo": "wadna banner e adesivo sem recorte.cdr", "textos": {
+            "T10": {"texto": "ADS SEM REC 45X45 4 UNID"},
+            "T17": {"texto": "banner 80x80"},
+            "T20": {"texto": "ADESIVOS BRANCO RECORTADOS"},
+            "T21": {"texto": "VINIL SUPER COLA"},
+        }}
+        self.assertTrue(_cita(fatos, "T10", "adesivo"))
+        self.assertTrue(_cita(fatos, "T10", "sem recorte"))
+        self.assertTrue(_cita(fatos, "T17", "lona"))
+        self.assertTrue(_cita(fatos, "T20", "adesivo branco"))
+        self.assertTrue(_cita(fatos, "T21", "adesivo super cola"))
+        self.assertTrue(_cita(fatos, "NOME_ARQUIVO", "adesivo"))
+
+    def test_citacao_exige_todos_os_termos(self):
+        from zcfreader.agente import _cita
+        fatos = {"arquivo": "x.cdr", "textos": {"T01": {"texto": "adesivo com recorte"}, "T02": {"texto": "4 UN (37X24,5 CM)"}}}
+        self.assertFalse(_cita(fatos, "T01", "sem recorte"))
+        self.assertFalse(_cita(fatos, "T01", "adesivo transparente"))
+        self.assertFalse(_cita(fatos, "T02", "nenhum"))
+
     def test_medidas_diferentes_sem_uniao(self):
         erros = validar(FATOS, {"itens": [_item(["A47", "A20"], 12, texto="T11")]})
         self.assertTrue(any("medidas diferentes" in e for e in erros))
