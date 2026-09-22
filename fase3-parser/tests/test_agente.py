@@ -65,6 +65,16 @@ class TestValidadorAgente(unittest.TestCase):
         self.assertTrue(any("inexistentes" in e for e in erros))
         self.assertTrue(any("já está no item" in e for e in erros))
 
+    def test_de_cada_multiplica_pelas_pecas_desenhadas(self):
+        fatos = {
+            "arquivo": "4_etapa.cdr",
+            "candidatos": {"A02": {"largura_cm": 21.0, "altura_cm": 21.0, "quantidade_geometrica": 3, "caixa_cm": _caixa(0, 63, 0, 21), "pai_id": None}},
+            "textos": {"T01": {"texto": "3 UNIDADES DE CADA IMPRIMIR NO ADESIVO BRANCO FOSCO BLACKOUT"}},
+        }
+        erros = validar(fatos, {"itens": [_item(["A02"], 3, texto="T01")]})
+        self.assertTrue(any("3 de cada" in e and "9" in e for e in erros), erros)
+        self.assertEqual(validar(fatos, {"itens": [_item(["A02"], 9, texto="T01")]}), [])
+
     def test_material_sem_prova(self):
         erros = validar(FATOS, {"itens": [_item(["A47"], 12, texto="T11", material="lona", texto_material="T11")]})
         self.assertTrue(any("material 'lona'" in e for e in erros))

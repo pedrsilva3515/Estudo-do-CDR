@@ -209,7 +209,11 @@ def _medida(c: dict) -> str:
 
 
 def ficha_fatos(fatos: dict) -> str:
-    linhas = [f"ARQUIVO: {fatos['arquivo']}", "", "PEÇAS CANDIDATAS DE PRIMEIRO NÍVEL (medidas exatas do CDR):"]
+    linhas = [
+        f"ARQUIVO: {fatos['arquivo']}", "",
+        "PEÇAS CANDIDATAS DE PRIMEIRO NÍVEL (medidas exatas do CDR;",
+        "'ocorrências desenhadas' pode reunir artes diferentes do mesmo tamanho):",
+    ]
     for candidato_id, c in fatos["candidatos"].items():
         if not c.get("visivel_inicialmente", True):
             continue
@@ -266,8 +270,8 @@ Você recebe:
 Como decidir:
 - Um produto é uma peça que será impressa/cortada. Molduras de montagem, colchetes, setas, cotas, legendas e cabeçalhos NÃO são produtos.
 - Uma candidata pode ser uma montagem com vários produtos dentro, ou um detalhe interno (logo, texto da arte) de um produto. Use ver_detalhe com mostrar_filhos=true para investigar e escolher o nível certo.
-- "ocorrências desenhadas" é quantas vezes a mesma medida aparece na mesma região. Isso NÃO é necessariamente a quantidade do pedido.
-- Quantidade: use o texto de instrução ("4 UN", "30 UNI DE CADA", "60 und"). "N DE CADA" vale N para cada arte distinta que a instrução abrange. Sem instrução, a quantidade é o número de ocorrências desenhadas.
+- "ocorrências desenhadas" é quantas vezes a MESMA MEDIDA aparece na mesma região. Podem ser artes diferentes do mesmo tamanho (use ver_detalhe para ver quais são). Isso NÃO é necessariamente a quantidade do pedido.
+- Quantidade: use o texto de instrução ("4 UN", "30 UNI DE CADA", "60 und"). "N DE CADA" vale N para CADA peça desenhada: uma candidata com K ocorrências e a instrução "N de cada" soma N x K unidades. Nesse caso, ou informe um item com quantidade N x K, ou separe em K itens de N unidades usando os IDs internos. Sem instrução, a quantidade é o número de ocorrências desenhadas.
 - Legendas de área (ex.: "0,5022 M²") ajudam a conferir: área ÷ (largura × altura) = unidades.
 - Material e acabamento vêm de textos próximos ou de cabeçalhos que abrangem a peça; o nome do arquivo também é evidência.
 - Quando não houver como decidir com segurança, NÃO chute: registre uma pergunta objetiva para o operador.
@@ -380,6 +384,16 @@ def _termos(texto) -> list[str]:
     return termos
 
 
+def _quantidade_de_cada(texto) -> int | None:
+    """Quantidade por peça em instruções como "3 UNIDADES DE CADA"."""
+    if not texto or not re.search(r"(?i)\bde\s+cada\b", str(texto)):
+        return None
+    from .pedido import parse_quantidade
+
+    instrucao = parse_quantidade(str(texto))
+    return instrucao[0] if instrucao else None
+
+
 def _cita(fatos: dict, texto_id, valor: str) -> bool:
     """O texto citado contém todos os termos relevantes do valor (com abreviações expandidas)?"""
     if texto_id == "NOME_ARQUIVO":
@@ -413,17 +427,25 @@ def validar(fatos: dict, resposta: dict) -> list[str]:
             if len(medidas) > 1:
                 erros.append(f"Item {n}: IDs com medidas diferentes {sorted(medidas)}; separe em itens ou use combinar='uniao'.")
         quantidade = item.get("quantidade")
+        desenhadas = sum(int(fatos["candidatos"][i].get("quantidade_geometrica") or 1) for i in ids)
         if item.get("origem_quantidade") == "texto":
             texto_id = item.get("texto_quantidade")
             texto = fatos["textos"].get(texto_id, {}).get("texto") if texto_id != "NOME_ARQUIVO" else fatos["arquivo"]
+            por_peca = _quantidade_de_cada(texto)
             if not texto:
                 erros.append(f"Item {n}: texto_quantidade {texto_id!r} não existe.")
+            elif por_peca and desenhadas > 1:
+                # "N de cada" com K peças desenhadas no item: o total é N × K.
+                if quantidade != por_peca * desenhadas:
+                    erros.append(
+                        f"Item {n}: \"{texto}\" pede {por_peca} de cada e este item reúne {desenhadas} peças "
+                        f"desenhadas; use quantidade {por_peca * desenhadas} ou separe em {desenhadas} itens "
+                        f"de {por_peca} unidades (investigue os IDs internos com ver_detalhe)."
+                    )
             elif not re.search(rf"(?<!\d){quantidade}(?!\d)", texto):
                 erros.append(f"Item {n}: o texto {texto_id} (\"{texto}\") não contém a quantidade {quantidade}.")
         elif item.get("origem_quantidade") == "ocorrencias_desenhadas":
-            esperado = 1 if item.get("combinar") == "uniao" else sum(
-                int(fatos["candidatos"][i].get("quantidade_geometrica") or 1) for i in ids
-            )
+            esperado = 1 if item.get("combinar") == "uniao" else desenhadas
             if quantidade != esperado:
                 erros.append(f"Item {n}: {quantidade} unidades, mas há {esperado} ocorrência(s) desenhada(s) nesses IDs.")
         for campo in ("material", "acabamento"):
