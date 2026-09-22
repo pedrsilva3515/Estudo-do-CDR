@@ -26,8 +26,15 @@ def _texto(valor) -> str:
     return " ".join(texto.replace("ilhoses", "ilhos").split())
 
 
+def _material(valor) -> str:
+    texto = _texto(valor)
+    # Na gráfica, "vinil" é o adesivo vinílico: "vinil transparente" = "adesivo transparente".
+    texto = " ".join("adesivo" if palavra == "vinil" else palavra for palavra in texto.split())
+    return texto.replace("adesivo adesivo", "adesivo")
+
+
 def materiais_compativeis(obtido, esperado) -> bool:
-    a, b = _texto(obtido), _texto(esperado)
+    a, b = _material(obtido), _material(esperado)
     if a == b:
         return True
     if {a, b} <= {"banner", "lona"}:
@@ -61,9 +68,28 @@ def _erro_medida(a: tuple[float, float], b: tuple[float, float]) -> float | None
     return melhor
 
 
+def consolidar_linhas(itens: list[dict]) -> list[dict]:
+    """Soma linhas de mesma medida e material: "5 x 1 un" e "1 x 5 un" são o mesmo pedido."""
+    consolidados: list[dict] = []
+    for item in itens:
+        destino = next((
+            c for c in consolidados
+            if _erro_medida(_medidas_cm(item), _medidas_cm(c)) is not None
+            and _material(_valor(item, "material")) == _material(_valor(c, "material"))
+            and _texto(_valor(item, "acabamento")) == _texto(_valor(c, "acabamento"))
+        ), None)
+        if destino is None:
+            copia = deepcopy(item)
+            copia["quantidade"] = {**(item.get("quantidade") or {}), "valor": _quantidade(item)}
+            consolidados.append(copia)
+        else:
+            destino["quantidade"]["valor"] += _quantidade(item)
+    return consolidados
+
+
 def comparar_tolerante(obtido: dict, esperado: dict) -> dict:
-    itens_obtidos = obtido.get("itens") or []
-    itens_esperados = esperado.get("itens") or []
+    itens_obtidos = consolidar_linhas(obtido.get("itens") or [])
+    itens_esperados = consolidar_linhas(esperado.get("itens") or [])
     pares = []
     for i, item_obtido in enumerate(itens_obtidos):
         for j, item_esperado in enumerate(itens_esperados):
@@ -107,6 +133,7 @@ def comparar_tolerante(obtido: dict, esperado: dict) -> dict:
         "linhas_corretas": linhas_corretas,
         "pedido_correto": linhas_corretas == len(itens_esperados) == len(itens_obtidos),
         "total_unidades_ok": total_obtido == total_esperado,
+        "perguntas": len(obtido.get("perguntas") or []),
     }
 
 
@@ -173,7 +200,7 @@ def avaliar_caminhos(pasta: Path, caminhos: dict, somente: list[str] | None = No
             "falhas": len(casos) - len(validos),
             "pedidos_corretos": sum(m["pedido_correto"] for m in validos),
             **{chave: sum(m[chave] for m in validos) for chave in (
-                "esperados", "obtidos", "pareados", "a_mais", "faltando", "quantidade_ok", "linhas_corretas",
+                "esperados", "obtidos", "pareados", "a_mais", "faltando", "quantidade_ok", "linhas_corretas", "perguntas",
                 "material_ok", "material_avaliado", "acabamento_ok", "acabamento_avaliado",
             )},
         }
