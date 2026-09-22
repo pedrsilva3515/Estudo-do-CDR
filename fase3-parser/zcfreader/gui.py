@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,7 @@ from .configuracao import (
     salvar_chave,
     salvar_configuracao,
 )
+from .agente import extrair_fatos, imagem_da_regiao
 from .camadas import interpretar_em_camadas
 from .experimento_agente import executar_arquitetura_regional
 from .pedido import interpretar_pedido
@@ -649,6 +651,7 @@ class AplicacaoPedido:
             messagebox.showerror("Arquivo não encontrado", f"Não foi possível abrir:\n{caminho}")
             return
         self.arquivo = caminho
+        self.fatos_analise = None
         self.resultado = None
         self.resultado_original = None
         self.resultado_estrutural = None
@@ -680,15 +683,16 @@ class AplicacaoPedido:
 
             if modo == "camadas":
                 estrutural = interpretar_pedido(caminho)
+                fatos = extrair_fatos(caminho)
                 resultado = interpretar_em_camadas(
-                    caminho, obter_chave("openrouter"), estrutural,
+                    caminho, obter_chave("openrouter"), estrutural, fatos=fatos,
                     modelo_rapido=self.configuracao["modelo_rapido"],
                     modelo_forte=self.configuracao["modelo_forte"],
                     custo_maximo_usd=self.configuracao["limite_pedido_usd"],
                     url_servidor_local=self.configuracao["url_servidor_local"],
                 )
                 self.fila.put(("ok", {
-                    "resultado": resultado, "estrutural": estrutural,
+                    "resultado": resultado, "estrutural": estrutural, "fatos": fatos,
                     "visual": {"camadas": resultado.get("processamento")},
                     "duracao": perf_counter() - inicio,
                 }))
@@ -779,6 +783,7 @@ class AplicacaoPedido:
             messagebox.showerror("Falha na análise", str(conteudo))
             return
         self.resultado_estrutural = conteudo["estrutural"]
+        self.fatos_analise = conteudo.get("fatos")
         self.analise_visual = conteudo["visual"]
         self.duracao_analise = conteudo["duracao"]
         self.resultado_original = deepcopy(conteudo["resultado"])
@@ -1056,14 +1061,82 @@ class AplicacaoPedido:
             style="Subtitulo.TLabel",
         ).pack(anchor="w", pady=(3, 12))
 
+        area = ttk.Frame(corpo)
+        area.pack(fill="both", expand=True)
         colunas = ("item", "quantidade", "largura", "altura", "material", "acabamento")
-        tabela = ttk.Treeview(corpo, columns=colunas, show="headings", height=9)
+        tabela = ttk.Treeview(area, columns=colunas, show="headings", height=9)
         titulos = ("Item", "Quantidade", "Largura (cm)", "Altura (cm)", "Material", "Acabamento")
         larguras = (50, 90, 105, 105, 230, 160)
         for coluna, titulo, largura in zip(colunas, titulos, larguras):
             tabela.heading(coluna, text=titulo)
             tabela.column(coluna, width=largura, anchor="center" if coluna != "material" else "w")
-        tabela.pack(fill="both", expand=True)
+        tabela.pack(side="left", fill="both", expand=True)
+
+        painel = ttk.Frame(area, padding=(14, 0, 0, 0))
+        painel.pack(side="right", fill="y")
+        ttk.Label(painel, text="O que o sistema interpretou", style="Subtitulo.TLabel").pack(anchor="w")
+        rotulo_previa = ttk.Label(painel, text="Selecione um item", style="Subtitulo.TLabel",
+                                  anchor="center", background="white", relief="solid", borderwidth=1)
+        rotulo_previa.pack(fill="x", pady=(4, 4), ipady=6)
+        rotulo_origem = ttk.Label(painel, text="", style="Subtitulo.TLabel", wraplength=320, justify="left")
+        rotulo_origem.pack(anchor="w", pady=(0, 8))
+        ttk.Label(painel, text="Por que este item está errado?", style="Subtitulo.TLabel").pack(anchor="w")
+        caixa_observacao = tk.Text(painel, height=5, width=38, wrap="word", relief="solid", borderwidth=1)
+        caixa_observacao.pack(fill="x", pady=(4, 4))
+        ttk.Label(
+            painel, text="A observação vai para o relatório e ajuda a corrigir a causa do erro.",
+            style="Subtitulo.TLabel", wraplength=320, justify="left",
+        ).pack(anchor="w")
+        estado_previa = {"indice": None, "imagem": None}
+
+        def guardar_observacao() -> None:
+            indice = estado_previa["indice"]
+            if indice is None or indice >= len(dados.get("itens", [])):
+                return
+            texto = caixa_observacao.get("1.0", "end").strip()
+            if texto:
+                dados["itens"][indice]["observacao_operador"] = texto
+            else:
+                dados["itens"][indice].pop("observacao_operador", None)
+
+        def mostrar_previa(_evento=None) -> None:
+            guardar_observacao()
+            selecionado = tabela.selection()
+            indice = int(selecionado[0]) if selecionado else None
+            estado_previa["indice"] = indice
+            caixa_observacao.delete("1.0", "end")
+            if indice is None or indice >= len(dados.get("itens", [])):
+                estado_previa["imagem"] = None
+                rotulo_previa.configure(image="", text="Selecione um item")
+                rotulo_origem.configure(text="")
+                return
+            item = dados["itens"][indice]
+            caixa_observacao.insert("1.0", item.get("observacao_operador") or "")
+            origem = []
+            if item.get("candidatos"):
+                origem.append("peças: " + ", ".join(item["candidatos"]))
+            for campo in ("quantidade", "material", "acabamento"):
+                texto_origem = (item.get(campo) or {}).get("texto_origem")
+                if texto_origem:
+                    origem.append(f"{campo}: \"{texto_origem}\"")
+            rotulo_origem.configure(text=" • ".join(origem) or "sem evidência registrada")
+            png = None
+            if self.fatos_analise and item.get("caixa_cm"):
+                try:
+                    png = imagem_da_regiao(self.fatos_analise, item["caixa_cm"], lado_maximo_px=320)
+                except Exception:  # a prévia nunca pode impedir a correção
+                    png = None
+            if png is None:
+                estado_previa["imagem"] = None
+                rotulo_previa.configure(image="", text="Sem prévia para este item")
+                return
+            from PIL import Image, ImageTk
+
+            with Image.open(BytesIO(png)) as imagem:
+                estado_previa["imagem"] = ImageTk.PhotoImage(imagem.copy())
+            rotulo_previa.configure(image=estado_previa["imagem"], text="")
+
+        tabela.bind("<<TreeviewSelect>>", mostrar_previa)
 
         def atualizar_tabela() -> None:
             for linha in tabela.get_children():
@@ -1331,6 +1404,7 @@ class AplicacaoPedido:
         ttk.Entry(corpo, textvariable=var_observacao).pack(fill="x")
 
         def finalizar() -> None:
+            guardar_observacao()
             auditoria = dados.get("analise_regional_experimental")
             if auditoria:
                 dados["comparacao_regional"] = comparar_resultado_com_regional(dados, auditoria)

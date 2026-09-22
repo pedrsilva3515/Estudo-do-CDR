@@ -104,12 +104,20 @@ def _resumo_itens(resultado: dict) -> list[str]:
     ]
 
 
-def _com_confianca(itens: list[dict], confianca: float) -> list[dict]:
+def _com_confianca(itens: list[dict], confianca: float, fatos: dict | None = None) -> list[dict]:
+    candidatos = (fatos or {}).get("candidatos") or {}
     for item in itens:
         for campo in ("quantidade", "material", "acabamento"):
             item.setdefault(campo, {}).setdefault("confianca", confianca)
         item.setdefault("dimensoes", {}).setdefault("confianca", 0.98)
         item.setdefault("componentes", [])
+        # Região escolhida, para a revisão mostrar o recorte do que foi interpretado.
+        caixas = [candidatos[i]["caixa_cm"] for i in item.get("candidatos") or [] if i in candidatos]
+        if caixas:
+            item["caixa_cm"] = {
+                "esquerda": min(c["esquerda"] for c in caixas), "direita": max(c["direita"] for c in caixas),
+                "base": min(c["base"] for c in caixas), "topo": max(c["topo"] for c in caixas),
+            }
     return itens
 
 
@@ -134,7 +142,7 @@ def interpretar_em_camadas(
     processamento = {"fluxo": "camadas", "camadas": [], "custo_usd": 0.0, "modelos": []}
 
     def finalizar(escolhido: dict, camada: str, confianca: float) -> dict:
-        resultado["itens"] = _com_confianca(deepcopy(escolhido.get("itens") or []), confianca)
+        resultado["itens"] = _com_confianca(deepcopy(escolhido.get("itens") or []), confianca, fatos)
         for indice, item in enumerate(resultado["itens"], 1):
             item["indice"] = indice
         resultado["total_unidades"] = sum((i.get("quantidade") or {}).get("valor") or 0 for i in resultado["itens"])

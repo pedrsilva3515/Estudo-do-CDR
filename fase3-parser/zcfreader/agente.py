@@ -177,6 +177,33 @@ def imagens_iniciais(fatos: dict) -> list[str]:
     return [_data_url(limpa, "JPEG"), _data_url(anotada, "JPEG")]
 
 
+def imagem_da_regiao(fatos: dict, caixa_cm: dict, lado_maximo_px: int = 560, margem: float = 0.08) -> bytes | None:
+    """PNG da região do pedido, para a revisão conferir o que foi interpretado."""
+    from PIL import Image
+
+    if not fatos.get("imagem") or not caixa_cm:
+        return None
+    largura = max(caixa_cm["direita"] - caixa_cm["esquerda"], 0.1)
+    altura = max(caixa_cm["topo"] - caixa_cm["base"], 0.1)
+    folga = margem * max(largura, altura)
+    area = {
+        "esquerda": caixa_cm["esquerda"] - folga, "direita": caixa_cm["direita"] + folga,
+        "base": caixa_cm["base"] - folga, "topo": caixa_cm["topo"] + folga,
+    }
+    with Image.open(BytesIO(fatos["imagem"])) as original:
+        original.load()
+        x0, y0, x1, y1 = _px(fatos, original.size, area)
+        corte = original.convert("RGB").crop((
+            max(0, round(x0)), max(0, round(y0)),
+            min(original.size[0], round(x1)), min(original.size[1], round(y1)),
+        ))
+    if not corte.size[0] or not corte.size[1]:
+        return None
+    buffer = BytesIO()
+    _reduzir(corte, lado_maximo_px).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def recorte(fatos: dict, ids: list[str], mostrar_filhos: bool) -> str | None:
     from PIL import Image
 

@@ -92,6 +92,8 @@ def _resumo_texto(original: dict, correto: dict, diagnostico: dict) -> str:
             f"material={item.get('material', {}).get('valor') or 'confirmar'}; "
             f"acabamento={item.get('acabamento', {}).get('valor') or 'confirmar'}"
         )
+        if item.get("observacao_operador"):
+            linhas.append(f"    Por que estava errado: {item['observacao_operador']}")
     linhas.extend([
         "",
         f"Total anterior: {original.get('total_unidades', 0)}",
