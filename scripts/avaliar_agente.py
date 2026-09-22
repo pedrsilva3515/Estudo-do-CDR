@@ -19,6 +19,8 @@ import re
 import urllib.request
 
 from zcfreader.agente import extrair_fatos, interpretar_com_agente
+from zcfreader.camadas import interpretar_em_camadas
+from zcfreader.pedido import interpretar_pedido
 from zcfreader.avaliacao_caminhos import avaliar_caminhos, resultado_de_auditoria_regional
 from zcfreader.configuracao import obter_chave
 from zcfreader.experimento_agente import executar_arquitetura_regional
@@ -39,7 +41,9 @@ def precos_openrouter(modelos: list[str]) -> dict[str, tuple[float, float]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pasta", type=Path)
-    parser.add_argument("--modelos", nargs="+", required=True, help="IDs do OpenRouter")
+    parser.add_argument("--modelos", nargs="*", default=[], help="IDs do OpenRouter (agente com um modelo só)")
+    parser.add_argument("--camadas", nargs=2, metavar=("RAPIDO", "FORTE"),
+                        help="também mede o fluxo em camadas com esses dois modelos")
     parser.add_argument("--casos", nargs="+", help="trechos do nome dos casos a incluir")
     parser.add_argument("--rastros", type=Path, help="pasta para gravar resultado e rastro de cada execução")
     parser.add_argument("--sem-corel", action="store_true", help="usa o preview embutido em vez do CorelDRAW")
@@ -56,8 +60,11 @@ def main() -> None:
         visao_api.renderizar_com_corel = lambda caminho, *a, **k: None
     if args.rastros:
         args.rastros.mkdir(parents=True, exist_ok=True)
-    precos = precos_openrouter(args.modelos)
-    desconhecidos = [m for m in args.modelos if m not in precos]
+    todos_modelos = list(dict.fromkeys(args.modelos + list(args.camadas or [])))
+    if not todos_modelos:
+        parser.error("Informe --modelos e/ou --camadas.")
+    precos = precos_openrouter(todos_modelos)
+    desconhecidos = [m for m in todos_modelos if m not in precos]
     if desconhecidos:
         parser.error(f"Modelos não encontrados no OpenRouter: {', '.join(desconhecidos)}")
 
@@ -99,8 +106,36 @@ def main() -> None:
             return resultado
         return executar
 
+    def caminho_camadas(cdr: Path, _pacote) -> dict:
+        gasto = sum(custos.values())
+        if gasto >= args.orcamento_usd:
+            raise RuntimeError(f"orçamento de US$ {args.orcamento_usd:.2f} atingido (gasto US$ {gasto:.4f})")
+
+        def agente(caminho, chave_agente, modelo, fatos=None, custo_maximo_usd=None):
+            return interpretar_com_agente(
+                caminho, chave_agente, modelo, fatos=fatos, custo_maximo_usd=custo_maximo_usd,
+                preco_por_token=precos[modelo],
+            )
+
+        resultado = interpretar_em_camadas(
+            cdr, chave, interpretar_pedido(cdr), modelo_rapido=args.camadas[0], modelo_forte=args.camadas[1],
+            custo_maximo_usd=min(args.limite_pedido_usd, args.orcamento_usd - gasto),
+            executar_agente=agente, fatos=fatos(cdr),
+        )
+        p = resultado["processamento"]
+        custos["camadas"] = custos.get("camadas", 0.0) + p["custo_usd"]
+        motivos = next((c.get("motivos_para_escalar") for c in p["camadas"] if c["camada"] == "modelo_rapido"), None)
+        print(f"  {'camadas':<32} {cdr.name[:45]:<45} camada {p['camada_final']}, {len(resultado['itens'])} itens, "
+              f"{p['duracao_s']} s, US$ {p['custo_usd']:.4f}" + (f", escalou: {motivos}" if motivos else ""), flush=True)
+        if args.rastros:
+            nome = re.sub(r"[^\w.-]+", "_", f"{Path(cdr.name).stem}__camadas")
+            (args.rastros / f"{nome}.json").write_text(json.dumps(resultado, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        return resultado
+
     caminhos = {"regional": lambda cdr, _p: resultado_de_auditoria_regional(executar_arquitetura_regional(cdr))}
     caminhos.update({modelo: caminho_agente(modelo) for modelo in args.modelos})
+    if args.camadas:
+        caminhos["camadas"] = caminho_camadas
     resultado = avaliar_caminhos(args.pasta, caminhos, somente=args.casos)
 
     print()

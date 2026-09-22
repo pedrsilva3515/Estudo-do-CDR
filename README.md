@@ -122,6 +122,47 @@ somente para selecionar produtos e resolver ambiguidades. Método, resultados de
 hardware e critérios de decisão estão em
 [docs/validacao-arquitetura-agente.md](docs/validacao-arquitetura-agente.md).
 
+### Fluxo 0.9: agente em camadas (experimental)
+
+No modo **Agente em camadas (OpenRouter)**, cada pedido passa por camadas cada
+vez mais caras, e só avança quando a anterior não resolve com segurança:
+
+1. **Regras regionais**, sem IA e sem custo: aceitas somente quando todas as
+   peças são produtos confirmados com quantidade escrita.
+2. **Modelo rápido** (padrão `google/gemini-3.1-flash-lite`).
+3. **Modelo de reforço** (padrão `google/gemini-3.8-flash`): somente quando
+   o modelo rápido faz perguntas, termina com erros de validação, não encontra
+   itens ou contradiz uma regra confirmada.
+4. **Operador**: perguntas restantes aparecem em **Ver perguntas**.
+
+O agente (`zcfreader/agente.py`) recebe fatos que não pode alterar: peças
+candidatas com ID e medida exata do CDR, textos numerados e a imagem com os
+IDs desenhados. Ele escolhe IDs e cita o texto que prova cada quantidade e
+material; um validador rejeita IDs inexistentes, peças contadas duas vezes,
+quantidades ausentes do texto citado e materiais sem prova. As medidas nunca
+vêm do modelo. Há limite de custo por pedido (US$ 0,08).
+
+Convenções da gráfica podem ser escritas em
+`%APPDATA%\LeitorPedidosCDR\regras_da_casa.md`, criado no primeiro uso.
+
+Medição nos 11 pedidos revisados (22/09/2026):
+
+| Caminho | Pedidos corretos | Custo médio por pedido |
+|---|---:|---:|
+| Regras regionais | 6/11 | — |
+| Gemini 3.1 Flash Lite | 8/11 | US$ 0,004 |
+| Gemini 3.8 Flash | 8/10 | US$ 0,018 |
+| Camadas (simulação com respostas salvas) | 10/11 | US$ 0,0075 |
+
+O corpus é pequeno e os mesmos casos orientaram o validador; os números
+precisam ser confirmados em pedidos novos. Para medir:
+
+```powershell
+$env:PYTHONPATH="fase3-parser"
+python scripts/avaliar_agente.py "$env:USERPROFILE\Documents\LeitorPedidosCDR\Relatorios" `
+  --camadas google/gemini-3.1-flash-lite google/gemini-3.8-flash --orcamento-usd 0.15
+```
+
 ### Revisão e diagnóstico
 
 Depois de cada análise, a interface permite confirmar o resultado ou corrigir,

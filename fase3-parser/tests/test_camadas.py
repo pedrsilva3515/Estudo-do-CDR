@@ -86,6 +86,16 @@ class TestCamadas(unittest.TestCase):
         motivos = motivos_para_escalar(_resultado(1, 23.4, 18.4), AMBIGUA)
         self.assertTrue(any("contradiz" in m for m in motivos))
 
+    def test_quantidade_incompativel_com_pecas_desenhadas_escala(self):
+        fatos = {"candidatos": {"A08": {"quantidade_geometrica": 12}, "A10": {"quantidade_geometrica": 4}, "A47": {"quantidade_geometrica": 1}}}
+        nove_de_doze = _resultado(9, 9, 5)
+        nove_de_doze["itens"][0]["candidatos"] = ["A08"]
+        self.assertTrue(any("12 peças" in m for m in motivos_para_escalar(nove_de_doze, {"itens": []}, fatos)))
+        for qtd, cid in ((4, "A10"), (12, "A47"), (8, "A10"), (9, "A47")):
+            ok = _resultado(qtd, 46.5, 9)
+            ok["itens"][0]["candidatos"] = [cid]
+            self.assertEqual(motivos_para_escalar(ok, {"itens": []}, fatos), [], (qtd, cid))
+
     def test_divergencia_entre_modelos_e_perguntas_vao_ao_operador(self):
         agente = AgenteFalso({"rapido": _resultado(9, 23.4, 18.4, erros=["x"]),
                               "forte": _resultado(9, 23.4, 18.4, perguntas=["São 5 itens ou 1?"])})

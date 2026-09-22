@@ -232,9 +232,23 @@ def ficha_fatos(fatos: dict) -> str:
     return "\n".join(linhas)
 
 
+def caminho_regras_da_casa() -> Path:
+    """Cópia editável ao lado da configuração; o arquivo do pacote é só o modelo inicial."""
+    from .configuracao import caminho_configuracao
+
+    editavel = caminho_configuracao().with_name("regras_da_casa.md")
+    if not editavel.exists():
+        try:
+            editavel.parent.mkdir(parents=True, exist_ok=True)
+            editavel.write_text(ARQUIVO_REGRAS_DA_CASA.read_text(encoding="utf-8"), encoding="utf-8")
+        except OSError:
+            return ARQUIVO_REGRAS_DA_CASA
+    return editavel
+
+
 def regras_da_casa() -> str:
     try:
-        texto = ARQUIVO_REGRAS_DA_CASA.read_text(encoding="utf-8")
+        texto = caminho_regras_da_casa().read_text(encoding="utf-8")
     except OSError:
         return ""
     return re.sub(r"<!--.*?-->", "", texto, flags=re.S).strip()

@@ -36,7 +36,7 @@ def _mesma_medida(item: dict, largura_cm: float, altura_cm: float, tolerancia_cm
     return min(abs(w - largura_cm) + abs(h - altura_cm), abs(w - altura_cm) + abs(h - largura_cm)) <= tolerancia_cm
 
 
-def motivos_para_escalar(resultado: dict, auditoria: dict) -> list[str]:
+def motivos_para_escalar(resultado: dict, auditoria: dict, fatos: dict | None = None) -> list[str]:
     motivos = []
     if not resultado.get("itens"):
         motivos.append("nenhum item encontrado")
@@ -45,6 +45,15 @@ def motivos_para_escalar(resultado: dict, auditoria: dict) -> list[str]:
     erros = (resultado.get("rastro_agente") or {}).get("erros_restantes") or []
     if erros:
         motivos.append(f"{len(erros)} erro(s) de validação não corrigido(s)")
+    candidatos = (fatos or {}).get("candidatos") or {}
+    for item in resultado.get("itens") or []:
+        # Pedir mais unidades que as peças desenhadas é comum (a arte se repete); pedir
+        # menos (ex.: "9 impressões" com 12 cartões na folha) sugere que o produto é
+        # outro nível da montagem, como a folha inteira.
+        desenhadas = sum(int(candidatos.get(i, {}).get("quantidade_geometrica") or 1) for i in item.get("candidatos") or [])
+        quantidade = (item.get("quantidade") or {}).get("valor") or 0
+        if quantidade and quantidade < desenhadas:
+            motivos.append(f"quantidade {quantidade} menor que as {desenhadas} peças desenhadas")
     for regra in auditoria.get("itens") or []:
         if regra.get("papel") != "produto_confirmado" or not regra.get("quantidade_pedido"):
             continue
@@ -167,7 +176,7 @@ def interpretar_em_camadas(
         rapido = None
         motivos = [f"falha do modelo rápido: {erro}"]
     else:
-        motivos = motivos_para_escalar(rapido, auditoria)
+        motivos = motivos_para_escalar(rapido, auditoria, fatos)
         processamento["camadas"].append({
             "camada": "modelo_rapido", "modelo": modelo_rapido, "motivos_para_escalar": motivos,
             "itens": _resumo_itens(rapido),
@@ -192,7 +201,7 @@ def interpretar_em_camadas(
             "mensagem": f"O modelo de reforço falhou ({erro}); resultado do modelo rápido mantido para revisão.",
         })
         return finalizar(rapido, "modelo_rapido", 0.7)
-    motivos_forte = motivos_para_escalar(forte, auditoria)
+    motivos_forte = motivos_para_escalar(forte, auditoria, fatos)
     processamento["camadas"].append({
         "camada": "modelo_forte", "modelo": modelo_forte, "motivos_restantes": motivos_forte,
         "itens": _resumo_itens(forte),

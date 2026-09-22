@@ -25,6 +25,7 @@ try {
         --collect-submodules win32com `
         --hidden-import pythoncom `
         --hidden-import pywintypes `
+        --add-data "$(Join-Path $raiz 'fase3-parser/zcfreader/regras_da_casa.md');zcfreader" `
         --distpath $saida `
         --workpath $temporarios `
         --specpath $temporarios `

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cdr-pedido"
-version = "0.8.0.dev1"
+version = "0.9.0.dev1"
 description = "Interpretação auditável de pedidos de gráfica em arquivos CorelDRAW CDR"
 readme = "README.md"
 requires-python = ">=3.10"
