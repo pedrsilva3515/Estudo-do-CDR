@@ -45,8 +45,18 @@ Qwen2.5-VL 3B quantizado (cerca de 2,77 GB, mais um runtime pequeno). O download
 é feito pela própria aplicação, pode ser retomado depois de uma interrupção e é
 validado antes de o modo local ser liberado. O modelo roda somente em CPU e foi
 escolhido para os computadores da gráfica com 32 GB de RAM e sem placa de vídeo.
-Também permanecem disponíveis o modo estrutural rápido e a análise opcional pela
-API da OpenAI.
+Também permanecem disponíveis o modo estrutural rápido e a análise opcional por
+API, pela OpenAI ou pelo [OpenRouter](https://openrouter.ai). Com o OpenRouter,
+uma única chave dá acesso a modelos de visão de vários fornecedores (Claude,
+GPT, Gemini, Qwen); o campo de modelo aceita qualquer ID de
+`openrouter.ai/models`. As requisições pedem somente provedores que não retêm
+dados (`data_collection: deny`). A chave também pode vir da variável
+`OPENROUTER_API_KEY`.
+
+A leitura visual nunca substitui a lista de itens da leitura estrutural. Ela
+preenche material e acabamento ausentes, acrescenta apenas instruções com
+quantidade e medida lidas pelo OCR e registra o restante em
+`sugestoes_visuais`, com alerta de revisão.
 
 A mesma janela contém a opção **Ativar arquitetura regional experimental**.
 Quando marcada, ela executa uma segunda leitura em paralelo, sem substituir os

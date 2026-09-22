@@ -14,9 +14,11 @@ import unicodedata
 
 from .configuracao import (
     MODELOS_OPENAI,
+    MODELOS_OPENROUTER,
     carregar_configuracao,
-    obter_chave_openai,
-    salvar_chave_openai,
+    modelo_do_provedor,
+    obter_chave,
+    salvar_chave,
     salvar_configuracao,
 )
 from .experimento_agente import executar_arquitetura_regional
@@ -29,7 +31,9 @@ from .modelos_locais import (
     instalar_modelo,
     modelo_instalado,
 )
-from .visao_api import analisar_com_openai, mesclar_analise_visual, precisa_adjudicacao
+from .visao_api import analisar_com_api, mesclar_analise_visual, precisa_adjudicacao
+
+NOMES_PROVEDORES = {"openai": "OpenAI", "openrouter": "OpenRouter"}
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -381,7 +385,7 @@ class AplicacaoPedido:
     def configurar_ia(self) -> None:
         janela = tk.Toplevel(self.raiz)
         janela.title("Configurar processamento")
-        janela.geometry("540x680")
+        janela.geometry("540x760")
         janela.resizable(False, False)
         janela.configure(bg=COR_FUNDO)
         janela.transient(self.raiz)
@@ -446,8 +450,7 @@ class AplicacaoPedido:
                         progresso_download.pack_forget()
                         var_modo.set("Modelo visual local (CPU)")
                         self.configuracao = {
-                            "modo": "local", "provedor": "openai",
-                            "modelo": var_modelo.get() or MODELOS_OPENAI[0],
+                            **self.configuracao, "modo": "local",
                             "arquitetura_regional_experimental": var_arquitetura.get(),
                         }
                         salvar_configuracao(self.configuracao)
@@ -496,36 +499,89 @@ class AplicacaoPedido:
             style="Subtitulo.TLabel", wraplength=450, justify="left",
         ).pack(anchor="w", pady=(0, 12))
 
-        ttk.Label(corpo, text="Modelo OpenAI", style="Subtitulo.TLabel").pack(anchor="w")
-        var_modelo = tk.StringVar(value=self.configuracao.get("modelo", MODELOS_OPENAI[0]))
-        ttk.Combobox(corpo, textvariable=var_modelo, values=MODELOS_OPENAI, state="readonly").pack(fill="x", pady=(4, 12))
+        linha_api = ttk.Frame(corpo)
+        linha_api.pack(fill="x")
+        linha_api.columnconfigure(1, weight=1)
+        ttk.Label(linha_api, text="Provedor da API", style="Subtitulo.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(linha_api, text="Modelo", style="Subtitulo.TLabel").grid(row=0, column=1, sticky="w", padx=(10, 0))
+        provedores = {nome: chave for chave, nome in NOMES_PROVEDORES.items()}
+        var_provedor = tk.StringVar(value=NOMES_PROVEDORES.get(self.configuracao.get("provedor"), "OpenAI"))
+        combo_provedor = ttk.Combobox(linha_api, textvariable=var_provedor, values=list(provedores), state="readonly", width=12)
+        combo_provedor.grid(row=1, column=0, sticky="w", pady=(4, 4))
+        modelos_escolhidos = {
+            "openai": self.configuracao.get("modelo", MODELOS_OPENAI[0]),
+            "openrouter": self.configuracao.get("modelo_openrouter", MODELOS_OPENROUTER[0]),
+        }
+        var_modelo = tk.StringVar()
+        combo_modelo = ttk.Combobox(linha_api, textvariable=var_modelo)
+        combo_modelo.grid(row=1, column=1, sticky="ew", padx=(10, 0), pady=(4, 4))
+        var_dica_modelo = tk.StringVar()
+        ttk.Label(corpo, textvariable=var_dica_modelo, style="Subtitulo.TLabel", wraplength=450, justify="left").pack(anchor="w", pady=(0, 10))
 
         ttk.Label(corpo, text="Chave da API", style="Subtitulo.TLabel").pack(anchor="w")
-        chave_existente = obter_chave_openai()
-        marcador = "••••••••••••" if chave_existente else ""
-        var_chave = tk.StringVar(value=marcador)
+        marcador = "••••••••••••"
+        chaves_salvas = {provedor: bool(obter_chave(provedor)) for provedor in NOMES_PROVEDORES}
+        chaves_digitadas = {provedor: marcador if salva else "" for provedor, salva in chaves_salvas.items()}
+        var_chave = tk.StringVar()
         ttk.Entry(corpo, textvariable=var_chave, show="•").pack(fill="x", pady=(4, 8))
-        ttk.Label(
-            corpo,
-            text="A chave é salva no Gerenciador de Credenciais do Windows. Ao usar API, o preview e o resultado estrutural são enviados à OpenAI e podem gerar cobrança.",
-            style="Subtitulo.TLabel", wraplength=450, justify="left",
-        ).pack(anchor="w", pady=(0, 14))
+        var_aviso = tk.StringVar()
+        ttk.Label(corpo, textvariable=var_aviso, style="Subtitulo.TLabel", wraplength=450, justify="left").pack(anchor="w", pady=(0, 14))
+        estado = {"provedor": provedores[var_provedor.get()]}
+
+        def trocar_provedor(_evento=None) -> None:
+            anterior = estado["provedor"]
+            modelos_escolhidos[anterior] = var_modelo.get().strip()
+            chaves_digitadas[anterior] = var_chave.get()
+            atual = provedores[var_provedor.get()]
+            estado["provedor"] = atual
+            var_modelo.set(modelos_escolhidos[atual])
+            var_chave.set(chaves_digitadas[atual])
+            if atual == "openrouter":
+                combo_modelo.configure(values=MODELOS_OPENROUTER, state="normal")
+                var_dica_modelo.set("Escolha uma sugestão ou digite qualquer ID com visão de openrouter.ai/models.")
+                var_aviso.set(
+                    "A chave é salva no Gerenciador de Credenciais do Windows. Ao usar API, o preview e o "
+                    "resultado estrutural são enviados ao OpenRouter, somente para provedores que não retêm "
+                    "dados, e podem gerar cobrança."
+                )
+            else:
+                combo_modelo.configure(values=MODELOS_OPENAI, state="readonly")
+                var_dica_modelo.set("")
+                var_aviso.set(
+                    "A chave é salva no Gerenciador de Credenciais do Windows. Ao usar API, o preview e o "
+                    "resultado estrutural são enviados à OpenAI e podem gerar cobrança."
+                )
+
+        combo_provedor.bind("<<ComboboxSelected>>", trocar_provedor)
+        # Preenche os campos antes: a troca salva o conteúdo atual no provedor anterior.
+        var_modelo.set(modelos_escolhidos[estado["provedor"]])
+        var_chave.set(chaves_digitadas[estado["provedor"]])
+        trocar_provedor()
 
         def salvar() -> None:
             modo = modos[var_modo.get()]
+            provedor = estado["provedor"]
+            modelos_escolhidos[provedor] = var_modelo.get().strip()
+            chaves_digitadas[provedor] = var_chave.get()
             if modo == "local" and not modelo_instalado():
                 messagebox.showwarning("Modelo necessário", "Baixe o modelo local antes de ativar este modo.", parent=janela)
                 return
-            if modo == "api" and not chave_existente and not var_chave.get().strip():
-                messagebox.showwarning("Chave necessária", "Informe uma chave da API para ativar este modo.", parent=janela)
+            if modo == "api" and not chaves_salvas[provedor] and not var_chave.get().strip():
+                messagebox.showwarning("Chave necessária", f"Informe uma chave do {NOMES_PROVEDORES[provedor]} para ativar este modo.", parent=janela)
+                return
+            if provedor == "openrouter" and "/" not in modelos_escolhidos["openrouter"]:
+                messagebox.showwarning("Modelo inválido", "Use um ID do OpenRouter no formato empresa/modelo, por exemplo anthropic/claude-sonnet-5.", parent=janela)
                 return
             self.configuracao = {
-                "modo": modo, "provedor": "openai", "modelo": var_modelo.get(),
+                "modo": modo, "provedor": provedor,
+                "modelo": modelos_escolhidos["openai"],
+                "modelo_openrouter": modelos_escolhidos["openrouter"],
                 "arquitetura_regional_experimental": var_arquitetura.get(),
             }
             salvar_configuracao(self.configuracao)
-            if var_chave.get() != marcador:
-                salvar_chave_openai(var_chave.get())
+            for nome, chave in chaves_digitadas.items():
+                if chave != marcador and (chave.strip() or chaves_salvas[nome]):
+                    salvar_chave(nome, chave)
             janela.destroy()
 
         ttk.Button(corpo, text="Salvar configuração", style="Primary.TButton", command=salvar).pack(anchor="e")
@@ -576,14 +632,14 @@ class AplicacaoPedido:
                 provedor = "local"
                 visual_inicial = analisar_com_modelo_local(caminho, None)
             elif modo == "api" or modo == "automatico":
-                chave = obter_chave_openai()
+                provedor = self.configuracao.get("provedor", "openai")
+                chave = obter_chave(provedor)
                 if not chave:
                     raise RuntimeError(
-                        "O modo automático não encontrou modelo local nem chave de API. "
-                        "Abra 'Configurar IA' para baixar o modelo ou informar uma chave."
+                        f"Não há chave de API do {NOMES_PROVEDORES[provedor]} nem modelo local instalado. "
+                        "Abra 'Configurar IA' para informar uma chave ou baixar o modelo."
                     )
-                provedor = "openai"
-                visual_inicial = analisar_com_openai(caminho, None, chave, self.configuracao["modelo"])
+                visual_inicial = analisar_com_api(provedor, caminho, None, chave, modelo_do_provedor(self.configuracao))
 
             estrutural = interpretar_pedido(caminho)
             auditoria_regional = None
@@ -600,14 +656,16 @@ class AplicacaoPedido:
                     if provedor == "local":
                         adjudicacao = analisar_com_modelo_local(caminho, estrutural, visual_inicial)
                     else:
-                        chave = obter_chave_openai()
-                        adjudicacao = analisar_com_openai(caminho, estrutural, chave, self.configuracao["modelo"], visual_inicial)
+                        adjudicacao = analisar_com_api(
+                            provedor, caminho, estrutural, obter_chave(provedor),
+                            modelo_do_provedor(self.configuracao), visual_inicial,
+                        )
                     visual = adjudicacao
                 fonte = "modelo_local" if provedor == "local" else "visao_api"
                 resultado = mesclar_analise_visual(resultado, visual, fonte=fonte)
                 resultado["processamento"] = {
                     "modo": modo, "provedor": provedor,
-                    "modelo": NOME_MODELO if provedor == "local" else self.configuracao["modelo"],
+                    "modelo": NOME_MODELO if provedor == "local" else modelo_do_provedor(self.configuracao),
                     "fluxo": "visual_primeiro", "adjudicacao": adjudicacao is not None,
                 }
             else:

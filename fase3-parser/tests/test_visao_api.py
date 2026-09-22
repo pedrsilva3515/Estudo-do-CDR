@@ -234,5 +234,59 @@ class TestMesclagemVisual(unittest.TestCase):
         self.assertEqual(inventario, [(1, 112.33), (2, 106.25)])
 
 
+class ErroRequisicaoFalso(Exception):
+    """Substitui openai.BadRequestError, cujo construtor depende da versão do SDK."""
+
+
+class TestOpenRouter(unittest.TestCase):
+    def _cliente_falso(self, conteudo, falhar_schema=False):
+        from unittest import mock
+
+        chamadas = []
+
+        def criar(**kwargs):
+            chamadas.append(kwargs)
+            if falhar_schema and "response_format" in kwargs:
+                raise ErroRequisicaoFalso("response_format não suportado")
+            mensagem = mock.Mock(content=conteudo)
+            return mock.Mock(choices=[mock.Mock(message=mensagem)])
+
+        cliente = mock.Mock()
+        cliente.chat.completions.create.side_effect = criar
+        return cliente, chamadas
+
+    def _analisar(self, cliente):
+        from unittest import mock
+        from zcfreader import visao_api
+        consulta = {"prompt": "p", "fase": "adjudicacao", "origem": "preview_embutido", "ocr_visual": [], "url_imagem": "data:image/png;base64,AA=="}
+        with mock.patch.object(visao_api, "_preparar_consulta", return_value=consulta), \
+             mock.patch("openai.OpenAI", return_value=cliente) as construtor,              mock.patch("openai.BadRequestError", ErroRequisicaoFalso):
+            resultado = visao_api.analisar_com_openrouter(Path("x.cdr"), {"itens": []}, "chave", "anthropic/claude-sonnet-5")
+        return resultado, construtor
+
+    def test_usa_endpoint_openrouter_schema_e_privacidade(self):
+        resposta = '{"estrutura_confere":"sim","documento_misto":false,"instrucoes_visuais":[],"itens":[],"observacoes":[]}'
+        cliente, chamadas = self._cliente_falso(resposta)
+        resultado, construtor = self._analisar(cliente)
+        self.assertEqual(construtor.call_args.kwargs["base_url"], "https://openrouter.ai/api/v1")
+        self.assertEqual(chamadas[0]["model"], "anthropic/claude-sonnet-5")
+        self.assertEqual(chamadas[0]["response_format"]["type"], "json_schema")
+        self.assertEqual(chamadas[0]["extra_body"]["provider"]["data_collection"], "deny")
+        self.assertEqual(resultado["_fase"], "adjudicacao")
+
+    def test_modelo_sem_schema_recebe_contrato_em_texto(self):
+        cliente, chamadas = self._cliente_falso('Aqui está:\n```json\n{"itens": [], "observacoes": []}\n```', falhar_schema=True)
+        resultado, _ = self._analisar(cliente)
+        self.assertEqual(len(chamadas), 2)
+        self.assertNotIn("response_format", chamadas[1])
+        self.assertEqual(chamadas[1]["extra_body"]["provider"]["data_collection"], "deny")
+        self.assertEqual(resultado["itens"], [])
+
+    def test_resposta_sem_contrato_gera_erro_legivel(self):
+        from zcfreader.visao_api import extrair_json_resposta
+        with self.assertRaises(RuntimeError):
+            extrair_json_resposta("Não consegui analisar a imagem.")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -105,12 +105,14 @@ def prompt_mapa_visual(nome_arquivo: str, ocr_visual: list[dict]) -> str:
     )
 
 
-def analisar_com_openai(caminho: Path, resultado_estrutural: dict | None, chave: str, modelo: str, mapa_inicial: dict | None = None) -> dict:
-    from openai import OpenAI
+URL_OPENROUTER = "https://openrouter.ai/api/v1"
+
+
+def _preparar_consulta(caminho: Path, resultado_estrutural: dict | None, mapa_inicial: dict | None) -> dict:
     preview = extrair_imagem_analise(caminho)
     if preview is None:
         raise RuntimeError("O CDR não contém um preview PNG utilizável pela análise visual.")
-    bytes_imagem, mime, _origem = preview
+    bytes_imagem, mime, origem = preview
     ocr_visual = executar_ocr(bytes_imagem)
     if resultado_estrutural is None:
         prompt = prompt_mapa_visual(caminho.name, ocr_visual)
@@ -122,21 +124,90 @@ def analisar_com_openai(caminho: Path, resultado_estrutural: dict | None, chave:
             evidencias["mapa_visual_inicial"] = mapa_inicial
         prompt = prompt_analise_visual(evidencias)
         fase = "adjudicacao"
-    url_imagem = f"data:{mime};base64,{base64.b64encode(bytes_imagem).decode('ascii')}"
+    return {
+        "prompt": prompt, "fase": fase, "origem": origem, "ocr_visual": ocr_visual,
+        "url_imagem": f"data:{mime};base64,{base64.b64encode(bytes_imagem).decode('ascii')}",
+    }
+
+
+def _finalizar_resposta(resultado: dict, consulta: dict) -> dict:
+    resultado["_imagem_origem"] = consulta["origem"]
+    resultado["_ocr_visual"] = consulta["ocr_visual"]
+    resultado["_fase"] = consulta["fase"]
+    return incorporar_instrucoes_ocr(normalizar_mapa_visual(resultado))
+
+
+def extrair_json_resposta(texto: str) -> dict:
+    """Lê o envelope do contrato mesmo com texto ou cercas markdown ao redor."""
+    decodificador = json.JSONDecoder()
+    for posicao, caractere in enumerate(texto or ""):
+        if caractere != "{":
+            continue
+        try:
+            valor, _ = decodificador.raw_decode(texto[posicao:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(valor, dict) and isinstance(valor.get("itens"), list):
+            valor.setdefault("observacoes", [])
+            return valor
+    raise RuntimeError("O modelo não devolveu um resultado JSON no formato esperado para um pedido.")
+
+
+def analisar_com_openai(caminho: Path, resultado_estrutural: dict | None, chave: str, modelo: str, mapa_inicial: dict | None = None) -> dict:
+    from openai import OpenAI
+    consulta = _preparar_consulta(caminho, resultado_estrutural, mapa_inicial)
     resposta = OpenAI(api_key=chave).responses.create(
         model=modelo, store=False,
         input=[{"role": "user", "content": [
-            {"type": "input_text", "text": prompt},
-            {"type": "input_image", "image_url": url_imagem, "detail": "high"},
+            {"type": "input_text", "text": consulta["prompt"]},
+            {"type": "input_image", "image_url": consulta["url_imagem"], "detail": "high"},
         ]}],
         text={"format": {"type": "json_schema", "name": "pedido_cdr_v07", "strict": True, "schema": _schema_resposta()}},
         max_output_tokens=2600,
     )
-    resultado = json.loads(resposta.output_text)
-    resultado["_imagem_origem"] = _origem
-    resultado["_ocr_visual"] = ocr_visual
-    resultado["_fase"] = fase
-    return incorporar_instrucoes_ocr(normalizar_mapa_visual(resultado))
+    return _finalizar_resposta(json.loads(resposta.output_text), consulta)
+
+
+def analisar_com_openrouter(caminho: Path, resultado_estrutural: dict | None, chave: str, modelo: str, mapa_inicial: dict | None = None) -> dict:
+    """Mesmo contrato da OpenAI, pela API compatível do OpenRouter (qualquer modelo com visão)."""
+    from openai import BadRequestError, OpenAI
+    consulta = _preparar_consulta(caminho, resultado_estrutural, mapa_inicial)
+    cliente = OpenAI(
+        api_key=chave, base_url=URL_OPENROUTER, timeout=180,
+        default_headers={"X-Title": "Leitor de Pedidos CDR"},
+    )
+    mensagens = [{"role": "user", "content": [
+        {"type": "text", "text": consulta["prompt"]},
+        {"type": "image_url", "image_url": {"url": consulta["url_imagem"]}},
+    ]}]
+    # Pedidos de clientes: só provedores que não retêm nem treinam com os dados.
+    privacidade = {"provider": {"data_collection": "deny"}}
+    formato = {"type": "json_schema", "json_schema": {
+        "name": "pedido_cdr_v07", "strict": True, "schema": _schema_resposta(),
+    }}
+    try:
+        resposta = cliente.chat.completions.create(
+            model=modelo, messages=mensagens, response_format=formato, max_tokens=8000,
+            extra_body={**privacidade, "provider": {**privacidade["provider"], "require_parameters": True}},
+        )
+    except BadRequestError:
+        # Modelo sem saída estruturada: pede o mesmo contrato em texto.
+        mensagens[0]["content"][0]["text"] += (
+            "\n\nResponda SOMENTE com um objeto JSON válido que siga este JSON Schema: "
+            + json.dumps(_schema_resposta(), ensure_ascii=False)
+        )
+        resposta = cliente.chat.completions.create(
+            model=modelo, messages=mensagens, max_tokens=8000, extra_body=privacidade,
+        )
+    if not resposta.choices:
+        raise RuntimeError(f"O OpenRouter não devolveu resposta para o modelo {modelo}.")
+    texto = resposta.choices[0].message.content or ""
+    return _finalizar_resposta(extrair_json_resposta(texto), consulta)
+
+
+def analisar_com_api(provedor: str, caminho: Path, resultado_estrutural: dict | None, chave: str, modelo: str, mapa_inicial: dict | None = None) -> dict:
+    funcao = analisar_com_openrouter if provedor == "openrouter" else analisar_com_openai
+    return funcao(caminho, resultado_estrutural, chave, modelo, mapa_inicial)
 
 
 def precisa_adjudicacao(resultado_estrutural: dict, mapa_visual: dict) -> bool:
