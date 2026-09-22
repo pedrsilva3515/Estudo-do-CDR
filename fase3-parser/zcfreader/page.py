@@ -44,7 +44,8 @@ import re
 import struct
 from dataclasses import dataclass
 
-_JSON_MARCADOR = re.compile(rb'\{(?="(?:fill|StackedBitmapEffects)")')
+# Em arquivos reais o bloco pode começar por "transparency" ou "outline", não só "fill".
+_JSON_MARCADOR = re.compile(rb'\{(?="(?:fill|transparency|outline|StackedBitmapEffects)")')
 _PROPORCAO_MINIMA_LETRAS = 0.6
 _TAMANHO_MINIMO_NOME = 3
 
@@ -284,10 +285,11 @@ def _encontrar_jsons(data: bytes) -> list[tuple[int, dict]]:
     """Varre `data` em busca de blocos JSON de estilo (fill/outline/
     transparency), usando o prefixo de 4 bytes como tamanho exato."""
     achados: list[tuple[int, dict]] = []
+    fim_ultimo = 0
     for m in _JSON_MARCADOR.finditer(data):
         inicio = m.start()
-        if inicio < 4:
-            continue
+        if inicio < 4 or inicio < fim_ultimo:
+            continue  # objeto aninhado dentro de um bloco já lido
         tamanho = struct.unpack_from("<I", data, inicio - 4)[0]
         bruto = data[inicio:inicio + tamanho]
         try:
@@ -295,6 +297,7 @@ def _encontrar_jsons(data: bytes) -> list[tuple[int, dict]]:
         except (json.JSONDecodeError, UnicodeDecodeError):
             continue
         achados.append((inicio, estilo))
+        fim_ultimo = inicio + tamanho
     return achados
 
 

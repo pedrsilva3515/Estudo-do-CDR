@@ -23,7 +23,19 @@ def extrair_preview(caminho: Path) -> tuple[bytes, str] | None:
 
 
 def extrair_imagem_analise(caminho: Path) -> tuple[bytes, str, str] | None:
-    """Prefere render nítido do Corel; mantém operação independente como fallback."""
+    """Renderiza a página sem o CorelDRAW; o Corel e o preview embutido são reservas.
+
+    A renderização própria não interfere no CorelDRAW do operador. O Corel só é
+    tentado se ela falhar, e nunca quando já houver um CorelDRAW aberto.
+    """
+    from .render_proprio import renderizar_pagina
+
+    try:
+        render = renderizar_pagina(caminho)
+    except Exception:  # documento com estrutura ainda não suportada
+        render = None
+    if render:
+        return render, "image/png", "render_proprio"
     render = renderizar_com_corel(caminho)
     if render:
         return render, "image/png", "coreldraw_alta_resolucao"

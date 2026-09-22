@@ -76,10 +76,14 @@ Antes do modelo visual, um OCR local em CPU produz textos e caixas espaciais;
 isso evita depender do modelo de linguagem para simplesmente transcrever uma
 legenda nítida.
 
-Quando o CorelDRAW está instalado, a aplicação abre uma instância invisível e
-temporária para renderizar os objetos em alta resolução. O documento não é
-salvo nem alterado. Sem CorelDRAW, o processamento continua usando o preview
-embutido no CDR, com a limitação de resolução registrada no diagnóstico.
+Desde a 0.9, a imagem usada pelo OCR e pela IA é desenhada pela própria
+aplicação a partir da geometria do CDR (`zcfreader/render_proprio.py`): curvas,
+retângulos, elipses, bitmaps e textos, com as cores do documento. Isso não
+depende do CorelDRAW e não interfere no CorelDRAW aberto pelo operador. Nos 11
+pedidos revisados, a leitura regional com essa imagem foi idêntica à obtida
+com o render do CorelDRAW. O CorelDRAW só é usado como reserva se a renderização
+própria falhar, e nunca quando já houver um CorelDRAW aberto; o último recurso
+é o preview embutido no CDR (256 px).
 
 Na 0.7.1, a ordem passou a ser visual primeiro: o modelo cria um mapa sem
 receber candidatos geométricos; em seguida o parser mede o CDR de forma
