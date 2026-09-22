@@ -22,3 +22,6 @@ cdr-pedido-gui = "zcfreader.gui:main"
 [tool.setuptools]
 package-dir = { "" = "fase3-parser" }
 packages = ["zcfreader"]
+
+[tool.setuptools.package-data]
+zcfreader = ["regras_da_casa.md"]
