@@ -241,6 +241,19 @@ def _proposta_completa(proposta: dict) -> bool:
     )
 
 
+def _item_equivalente(itens: list[dict], proposta: dict, tolerancia_cm: float = 1.5) -> bool:
+    """Existe item com a mesma quantidade e medida (em qualquer orientação)?"""
+    w, h = float(proposta["largura_cm"]), float(proposta["altura_cm"])
+    for item in itens:
+        if (item.get("quantidade") or {}).get("valor") != proposta["quantidade"]:
+            continue
+        dim = item.get("dimensoes") or {}
+        iw, ih = float(dim.get("largura_mm") or 0) / 10, float(dim.get("altura_mm") or 0) / 10
+        if min(abs(iw - w) + abs(ih - h), abs(iw - h) + abs(ih - w)) <= tolerancia_cm:
+            return True
+    return False
+
+
 def _propostas_inventario_geometrico(resultado: dict) -> list[dict]:
     from .pedido import selecionar_inventario_geometrico
 
@@ -302,37 +315,46 @@ def reconciliar_analise_visual(resultado: dict, visual: dict, fonte: str = "visa
             "indice": len(propostas) + 1, "quantidade": chave[0], "largura_cm": chave[1], "altura_cm": chave[2],
             "material": None, "acabamento": None, "evidencia": leitura["texto"],
             "confianca": min(0.95, float(leitura.get("confianca") or 0.8)),
+            "fonte": "ocr_orfao",
         })
         chaves.add(chave)
-    if visual.get("_fase") != "mapa_visual_inicial" and not any(_proposta_completa(p) for p in propostas):
-        propostas_inventario = _propostas_inventario_geometrico(resultado)
-        if propostas_inventario:
-            propostas = propostas_inventario
-            visual["_inventario_geometrico_aplicado"] = True
     estado = visual.get("estrutura_confere", "incerto")
     divergencia_objetiva = len(propostas) != len(resultado.get("itens") or [])
-    substituir = bool(
-        visual.get("_fase") != "mapa_visual_inicial"
-        and
-        (estado == "nao" or visual.get("_instrucoes_ocr_orfas") or divergencia_objetiva) and propostas
-        and all(_proposta_completa(p) and float(p.get("confianca") or 0) >= 0.65 for p in propostas)
+    # Na adjudicação a IA deve devolver itens completos; sem nenhuma medida, falhou.
+    modelo_sem_medidas = (
+        visual.get("_fase") == "adjudicacao" and bool(propostas)
+        and not any(_proposta_completa(p) for p in propostas)
     )
-    if substituir:
-        resultado["itens_estruturais_descartados"] = deepcopy(resultado.get("itens", []))
-        resultado["itens"] = [_item_visual(p, i, fonte) for i, p in enumerate(propostas, 1)]
-        resultado.setdefault("alertas", []).append({
-            "codigo": "ESTRUTURA_RECONSTRUIDA_PELA_VISAO", "severidade": "revisao",
-            "mensagem": "A leitura visual encontrou outra composição; confirme os itens reconstruídos.",
-        })
-        if visual.get("_instrucoes_ocr_orfas"):
+    divergente = bool(
+        visual.get("_fase") != "mapa_visual_inicial" and propostas
+        and (estado == "nao" or visual.get("_instrucoes_ocr_orfas") or divergencia_objetiva or modelo_sem_medidas)
+    )
+    if divergente:
+        # A IA nunca substitui a lista: modelos pequenos inventam itens com
+        # confiança alta. Só entra item com prova textual (quantidade e medida
+        # escritas, lidas pelo OCR) que ainda não exista na lista estrutural.
+        comprovadas = [p for p in propostas if p.get("fonte") == "ocr_orfao" and _proposta_completa(p)]
+        adicionadas = [p for p in comprovadas if not _item_equivalente(resultado.get("itens") or [], p)]
+        for proposta in adicionadas:
+            resultado.setdefault("itens", []).append(
+                _item_visual(proposta, len(resultado["itens"]) + 1, "ocr_orfao")
+            )
+        if adicionadas:
             resultado.setdefault("alertas", []).append({
                 "codigo": "ITEM_RECUPERADO_DE_OCR_ORFAO", "severidade": "revisao",
                 "mensagem": "Uma instrução completa lida pelo OCR não possuía item correspondente e foi recuperada.",
             })
-        if visual.get("_inventario_geometrico_aplicado"):
+        sugestoes = [p for p in propostas if p not in comprovadas]
+        if modelo_sem_medidas:
+            sugestoes += _propostas_inventario_geometrico(resultado)
+        if sugestoes:
+            resultado["sugestoes_visuais"] = sugestoes
             resultado.setdefault("alertas", []).append({
-                "codigo": "ESTRUTURA_RECONSTRUIDA_PELO_INVENTARIO", "severidade": "revisao",
-                "mensagem": "A IA não produziu itens completos; caixas profundas do CDR reconstruíram a lista para conferência.",
+                "codigo": "SUGESTAO_VISUAL_DIVERGENTE", "severidade": "revisao",
+                "mensagem": (
+                    f"A leitura visual propõe outra composição ({len(sugestoes)} sugestão(ões)); "
+                    "os itens não foram alterados. Confira antes de confirmar."
+                ),
             })
     else:
         por_indice = {p.get("indice"): p for p in propostas}

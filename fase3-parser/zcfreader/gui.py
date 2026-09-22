@@ -736,9 +736,11 @@ class AplicacaoPedido:
             self.botao_auditoria_regional.pack(side="right", padx=(10, 0))
         else:
             self.botao_auditoria_regional.pack_forget()
-        reconstruida = any(a.get("codigo") == "ESTRUTURA_RECONSTRUIDA_PELA_VISAO" for a in alertas_lista)
-        if reconstruida:
-            detalhes.append("A IA reconstruiu os itens — confira antes de confirmar")
+        sugestoes_visuais = resultado.get("sugestoes_visuais") or []
+        if sugestoes_visuais:
+            detalhes.append(
+                f"A IA sugere outra composição ({len(sugestoes_visuais)} item(ns)) — itens não alterados, confira"
+            )
         self.rotulo_alertas.configure(text=" • ".join(detalhes) or "Nenhuma pendência detectada")
         self.botao_exportar.configure(state="normal")
         self.botao_confirmar.configure(state="normal")

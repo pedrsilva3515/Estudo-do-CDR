@@ -52,7 +52,7 @@ class TestMesclagemVisual(unittest.TestCase):
         self.assertEqual(resultado["itens"][0]["material"]["valor"], "adesivo normal")
         self.assertEqual(len(resultado["alertas"]), 2)
 
-    def test_visao_pode_reconstruir_lista_completa(self):
+    def test_visao_divergente_vira_sugestao_sem_substituir_itens(self):
         resultado = {
             "itens": [{
                 "indice": 1, "quantidade": {"valor": 1},
@@ -68,10 +68,10 @@ class TestMesclagemVisual(unittest.TestCase):
             ],
         }
         mesclar_analise_visual(resultado, visual, fonte="modelo_local")
-        self.assertEqual(len(resultado["itens"]), 2)
-        self.assertEqual(resultado["total_unidades"], 16)
-        self.assertEqual(resultado["itens"][1]["dimensoes"]["largura_mm"], 465)
-        self.assertIn("itens_estruturais_descartados", resultado)
+        self.assertEqual(len(resultado["itens"]), 1)
+        self.assertEqual(resultado["total_unidades"], 1)
+        self.assertEqual(len(resultado["sugestoes_visuais"]), 2)
+        self.assertIn("SUGESTAO_VISUAL_DIVERGENTE", [a["codigo"] for a in resultado["alertas"]])
 
     def test_proposta_incompleta_nao_substitui_estrutura(self):
         resultado = {"itens": [{"indice": 1, "quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 10, "altura_mm": 20}, "material": {"valor": None}, "acabamento": {"valor": None}}], "alertas": []}
@@ -88,8 +88,10 @@ class TestMesclagemVisual(unittest.TestCase):
             "_ocr_visual": [{"texto": "4 UN (46,5X9)", "confianca": .99, "poligono_px": []}],
         }
         mesclar_analise_visual(resultado, visual, fonte="modelo_local")
-        self.assertEqual([(i["quantidade"]["valor"], i["dimensoes"]["largura_mm"]) for i in resultado["itens"]], [(12, 465), (4, 465)])
-        self.assertEqual(resultado["total_unidades"], 16)
+        # Só a linha com prova textual entra; o item proposto apenas pelo modelo vira sugestão.
+        self.assertEqual([(i["quantidade"]["valor"], i["dimensoes"]["largura_mm"]) for i in resultado["itens"]], [(4, 465)])
+        self.assertEqual(resultado["total_unidades"], 4)
+        self.assertEqual([s["quantidade"] for s in resultado["sugestoes_visuais"]], [12])
 
     def test_mapa_inicial_divergente_pede_adjudicacao_mas_nao_substitui(self):
         resultado = {"itens": [{"indice": 1, "quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 100, "altura_mm": 100}, "material": {"valor": None}, "acabamento": {"valor": None}}], "alertas": []}
@@ -160,7 +162,7 @@ class TestMesclagemVisual(unittest.TestCase):
         self.assertEqual(resultado["itens"][2]["dimensoes"]["altura_mm"], 90)
         self.assertIn("ITEM_RECUPERADO_DE_OCR_ORFAO", [a["codigo"] for a in resultado["alertas"]])
 
-    def test_adjudicacao_prioriza_contagem_completa_sobre_rotulo_contraditorio(self):
+    def test_item_proposto_so_pelo_modelo_nao_entra_na_lista(self):
         resultado = {
             "itens": [
                 {"indice": 1, "quantidade": {"valor": 4}, "dimensoes": {"largura_mm": 370, "altura_mm": 245}, "material": {"valor": None}, "acabamento": {"valor": None}},
@@ -180,8 +182,9 @@ class TestMesclagemVisual(unittest.TestCase):
 
         mesclar_analise_visual(resultado, visual, fonte="modelo_local")
 
-        self.assertEqual(len(resultado["itens"]), 3)
-        self.assertEqual(resultado["total_unidades"], 20)
+        self.assertEqual(len(resultado["itens"]), 2)
+        self.assertEqual(resultado["total_unidades"], 16)
+        self.assertEqual(len(resultado["sugestoes_visuais"]), 3)
 
     def test_instrucoes_auxiliares_nao_duplicam_lista_adjudicada(self):
         resultado = {
@@ -203,10 +206,12 @@ class TestMesclagemVisual(unittest.TestCase):
 
         mesclar_analise_visual(resultado, visual, fonte="modelo_local")
 
-        self.assertEqual(len(resultado["itens"]), 3)
-        self.assertEqual(resultado["total_unidades"], 20)
+        self.assertEqual(len(resultado["itens"]), 1)
+        self.assertEqual(resultado["total_unidades"], 4)
+        # A seção auxiliar não é promovida quando o modelo já produziu itens.
+        self.assertEqual(len(resultado["sugestoes_visuais"]), 3)
 
-    def test_inventario_profundo_substitui_resposta_visual_sem_medidas(self):
+    def test_inventario_profundo_vira_sugestao_quando_visual_nao_tem_medidas(self):
         resultado = {
             "itens": [{"indice": 1, "quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 10, "altura_mm": 10}, "material": {"valor": None}, "acabamento": {"valor": None}}],
             "evidencias_textuais": [], "alertas": [],
@@ -223,9 +228,10 @@ class TestMesclagemVisual(unittest.TestCase):
 
         mesclar_analise_visual(resultado, visual, fonte="modelo_local")
 
-        self.assertEqual([(i["quantidade"]["valor"], i["dimensoes"]["largura_mm"]) for i in resultado["itens"]], [(1, 1123.3), (2, 1062.5)])
-        self.assertEqual(resultado["total_unidades"], 3)
-        self.assertIn("ESTRUTURA_RECONSTRUIDA_PELO_INVENTARIO", [a["codigo"] for a in resultado["alertas"]])
+        self.assertEqual(len(resultado["itens"]), 1)
+        self.assertEqual(resultado["total_unidades"], 1)
+        inventario = [(s["quantidade"], s["largura_cm"]) for s in resultado["sugestoes_visuais"] if s.get("largura_cm")]
+        self.assertEqual(inventario, [(1, 112.33), (2, 106.25)])
 
 
 if __name__ == "__main__":
