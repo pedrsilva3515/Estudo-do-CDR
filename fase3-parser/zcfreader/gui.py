@@ -28,6 +28,7 @@ from .configuracao import (
 )
 from .agente import extrair_fatos, imagem_da_regiao
 from .camadas import interpretar_em_camadas
+from .selecao_peca import abrir_janela_selecao, aplicar_selecao_ao_item
 from .experimento_agente import executar_arquitetura_regional
 from .pedido import interpretar_pedido
 from .relatorios import VERSAO_APLICACAO, gerar_pacote_diagnostico, normalizar_resultado_corrigido
@@ -1208,6 +1209,44 @@ class AplicacaoPedido:
             else:
                 messagebox.showinfo("Selecione um item", "Selecione a linha que deseja editar.", parent=janela)
 
+        def escolher_peca_na_pagina() -> None:
+            guardar_observacao()
+            if self.fatos_analise is None and self.arquivo is not None:
+                janela.configure(cursor="watch")
+                janela.update_idletasks()
+                try:
+                    self.fatos_analise = extrair_fatos(self.arquivo)
+                except Exception as erro:  # a correção continua possível sem a escolha visual
+                    messagebox.showerror("Não foi possível abrir a página", str(erro), parent=janela)
+                finally:
+                    janela.configure(cursor="")
+            if not self.fatos_analise or not self.fatos_analise.get("imagem"):
+                messagebox.showinfo("Página indisponível", "Não foi possível desenhar a página deste arquivo.", parent=janela)
+                return
+            selecionado = tabela.selection()
+            indice = int(selecionado[0]) if selecionado else None
+
+            def ao_escolher(selecao: dict, substituir: bool) -> None:
+                if substituir and indice is not None:
+                    dados["itens"][indice] = aplicar_selecao_ao_item(dados["itens"][indice], selecao)
+                    alvo = indice
+                else:
+                    novo = aplicar_selecao_ao_item({
+                        "quantidade": {"valor": selecao["ocorrencias_desenhadas"], "unidade": "unidade",
+                                       "fonte": "correcao_operador", "confianca": 1.0},
+                        "material": {"valor": None, "fonte": "correcao_operador", "confianca": 1.0},
+                        "acabamento": {"valor": None, "fonte": "correcao_operador", "confianca": 1.0},
+                    }, selecao)
+                    dados.setdefault("itens", []).append(novo)
+                    alvo = len(dados["itens"]) - 1
+                atualizar_tabela()
+                tabela.selection_set(str(alvo))
+                tabela.see(str(alvo))
+                if not substituir:
+                    formulario_item(alvo)  # quantidade e material do item novo
+
+            abrir_janela_selecao(janela, self.fatos_analise, ao_escolher, pode_substituir=indice is not None)
+
         def excluir_selecionado() -> None:
             selecionado = tabela.selection()
             if not selecionado:
@@ -1394,6 +1433,7 @@ class AplicacaoPedido:
         ttk.Button(botoes, text="Editar item", command=editar_selecionado).pack(side="left")
         ttk.Button(botoes, text="Adicionar item", command=lambda: formulario_item()).pack(side="left", padx=6)
         ttk.Button(botoes, text="Excluir item", command=excluir_selecionado).pack(side="left")
+        ttk.Button(botoes, text="Escolher peça na página", command=escolher_peca_na_pagina).pack(side="left", padx=6)
         if self.resultado.get("analise_regional_experimental"):
             ttk.Button(
                 botoes, text="Comparar com análise regional", style="Secondary.TButton",

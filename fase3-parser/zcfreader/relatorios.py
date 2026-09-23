@@ -94,6 +94,15 @@ def _resumo_texto(original: dict, correto: dict, diagnostico: dict) -> str:
         )
         if item.get("observacao_operador"):
             linhas.append(f"    Por que estava errado: {item['observacao_operador']}")
+        peca = item.get("peca_correta")
+        if peca:
+            antes = peca.get("antes") or {}
+            linhas.append(
+                f"    Peça indicada pelo operador: {peca.get('id') or 'região desenhada'} "
+                f"({peca.get('largura_cm'):g} x {peca.get('altura_cm'):g} cm)"
+                + (f"; o sistema tinha escolhido {', '.join(antes.get('ids') or []) or 'outra peça'} "
+                   f"({antes.get('largura_cm', 0):g} x {antes.get('altura_cm', 0):g} cm)" if antes else "")
+            )
     linhas.extend([
         "",
         f"Total anterior: {original.get('total_unidades', 0)}",
