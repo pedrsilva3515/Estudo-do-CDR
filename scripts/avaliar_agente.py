@@ -169,6 +169,8 @@ def main() -> None:
             f"{nome:>32}: pedidos corretos {t['pedidos_corretos']}/{t['casos']}"
             f" | linhas {t['linhas_corretas']}/{t['esperados']} | a mais {t['a_mais']} | faltando {t['faltando']}"
             f" | material {t['material_ok']}/{t['material_avaliado']}"
+            + (f" | faltas no pedido percebidas {t['faltas_detectadas']}/{t['faltas_esperadas']} (chutes {t['chutes']})"
+               if t.get("faltas_esperadas") else "")
             + (f" | FALHAS {t['falhas']}" if t["falhas"] else "")
             + (f" | custo US$ {custos[nome]:.2f}" if nome in custos else "")
         )

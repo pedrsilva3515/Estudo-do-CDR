@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from .origem_campos import campos_com_origem
 from .visao_api import extrair_preview
 
 
@@ -92,6 +93,12 @@ def _resumo_texto(original: dict, correto: dict, diagnostico: dict) -> str:
             f"material={item.get('material', {}).get('valor') or 'confirmar'}; "
             f"acabamento={item.get('acabamento', {}).get('valor') or 'confirmar'}"
         )
+        faltou = campos_com_origem(item, "faltou_no_pedido")
+        if faltou:
+            linhas.append(f"    Faltou no pedido (perguntar ao cliente): {', '.join(faltou)}")
+        padrao = campos_com_origem(item, "padrao_grafica")
+        if padrao:
+            linhas.append(f"    Padrão da gráfica: {', '.join(padrao)}")
         if item.get("observacao_operador"):
             linhas.append(f"    Por que estava errado: {item['observacao_operador']}")
         peca = item.get("peca_correta")

@@ -14,6 +14,8 @@ import tempfile
 import unicodedata
 from zipfile import ZipFile
 
+from .origem_campos import origem
+
 TOLERANCIA_ABSOLUTA_CM = 1.5
 TOLERANCIA_RELATIVA = 0.03
 
@@ -110,16 +112,33 @@ def comparar_tolerante(obtido: dict, esperado: dict) -> dict:
         usados_e.add(j)
         casados.append((itens_obtidos[i], itens_esperados[j]))
 
-    qtd_ok = sum(_quantidade(o) == _quantidade(e) for o, e in casados)
-    com_material = [(o, e) for o, e in casados if _valor(e, "material")]
+    def faltou(item: dict, campo: str) -> bool:
+        return origem(item, campo) == "faltou_no_pedido"
+
+    # Campo que faltou no pedido não é cobrado: o certo é o sistema perceber a falta.
+    qtd_ok = sum(faltou(e, "quantidade") or _quantidade(o) == _quantidade(e) for o, e in casados)
+    com_material = [(o, e) for o, e in casados if _valor(e, "material") and not faltou(e, "material")]
     material_ok = sum(materiais_compativeis(_valor(o, "material"), _valor(e, "material")) for o, e in com_material)
-    com_acabamento = [(o, e) for o, e in casados if _valor(e, "acabamento")]
+    com_acabamento = [(o, e) for o, e in casados if _valor(e, "acabamento") and not faltou(e, "acabamento")]
     acabamento_ok = sum(_texto(_valor(o, "acabamento")) == _texto(_valor(e, "acabamento")) for o, e in com_acabamento)
     linhas_corretas = sum(
-        _quantidade(o) == _quantidade(e)
-        and (not _valor(e, "material") or materiais_compativeis(_valor(o, "material"), _valor(e, "material")))
+        (faltou(e, "quantidade") or _quantidade(o) == _quantidade(e))
+        and (not _valor(e, "material") or faltou(e, "material")
+             or materiais_compativeis(_valor(o, "material"), _valor(e, "material")))
         for o, e in casados
     )
+    perguntou = bool(obtido.get("perguntas") or obtido.get("perguntas_operador"))
+    faltas_esperadas = faltas_detectadas = chutes = 0
+    for o, e in casados:
+        for campo in ("quantidade", "material", "acabamento"):
+            if not faltou(e, campo):
+                continue
+            faltas_esperadas += 1
+            vazio = campo != "quantidade" and not _valor(o, campo)
+            if vazio or perguntou:
+                faltas_detectadas += 1
+            else:
+                chutes += 1
     total_obtido = sum(_quantidade(i) for i in itens_obtidos)
     total_esperado = sum(_quantidade(i) for i in itens_esperados)
     return {
@@ -134,6 +153,7 @@ def comparar_tolerante(obtido: dict, esperado: dict) -> dict:
         "pedido_correto": linhas_corretas == len(itens_esperados) == len(itens_obtidos),
         "total_unidades_ok": total_obtido == total_esperado,
         "perguntas": len(obtido.get("perguntas") or obtido.get("perguntas_operador") or []),
+        "faltas_esperadas": faltas_esperadas, "faltas_detectadas": faltas_detectadas, "chutes": chutes,
     }
 
 
@@ -201,6 +221,7 @@ def avaliar_caminhos(pasta: Path, caminhos: dict, somente: list[str] | None = No
             "pedidos_corretos": sum(m["pedido_correto"] for m in validos),
             **{chave: sum(m[chave] for m in validos) for chave in (
                 "esperados", "obtidos", "pareados", "a_mais", "faltando", "quantidade_ok", "linhas_corretas", "perguntas",
+                "faltas_esperadas", "faltas_detectadas", "chutes",
                 "material_ok", "material_avaliado", "acabamento_ok", "acabamento_avaliado",
             )},
         }

@@ -28,6 +28,7 @@ from .configuracao import (
 )
 from .agente import extrair_fatos, imagem_da_regiao
 from .camadas import interpretar_em_camadas
+from .origem_campos import ORIGENS, definir_origens, marca, origem
 from .selecao_peca import abrir_janela_selecao, aplicar_selecao_ao_item
 from .experimento_agente import executar_arquitetura_regional
 from .pedido import interpretar_pedido
@@ -1145,23 +1146,24 @@ class AplicacaoPedido:
             for indice, item in enumerate(dados.get("itens", [])):
                 dim = item.get("dimensoes", {})
                 tabela.insert("", "end", iid=str(indice), values=(
-                    indice + 1, item.get("quantidade", {}).get("valor") or "",
-                    _numero((dim.get("largura_mm") or 0) / 10),
+                    indice + 1, f"{item.get('quantidade', {}).get('valor') or ''}{marca(item, 'quantidade')}",
+                    f"{_numero((dim.get('largura_mm') or 0) / 10)}{marca(item, 'medida')}",
                     _numero((dim.get("altura_mm") or 0) / 10),
-                    item.get("material", {}).get("valor") or "",
-                    item.get("acabamento", {}).get("valor") or "",
+                    f"{item.get('material', {}).get('valor') or ''}{marca(item, 'material')}",
+                    f"{item.get('acabamento', {}).get('valor') or ''}{marca(item, 'acabamento')}",
                 ))
 
         def formulario_item(indice: int | None = None) -> None:
             atual = dados["itens"][indice] if indice is not None else {}
             editor = tk.Toplevel(janela)
             editor.title("Editar item" if indice is not None else "Adicionar item")
-            editor.geometry("430x360")
+            editor.geometry("660x430")
             editor.resizable(False, False)
             editor.transient(janela)
             editor.grab_set()
             frame = ttk.Frame(editor, padding=20)
             frame.pack(fill="both", expand=True)
+            frame.columnconfigure(1, weight=1)
             dim = atual.get("dimensoes", {})
             valores = {
                 "Quantidade": str(atual.get("quantidade", {}).get("valor") or 1),
@@ -1170,26 +1172,65 @@ class AplicacaoPedido:
                 "Material": atual.get("material", {}).get("valor") or "",
                 "Acabamento": atual.get("acabamento", {}).get("valor") or "",
             }
+            # Linha do formulário -> campo cuja origem é registrada (a altura segue a largura).
+            campo_da_linha = {"Quantidade": "quantidade", "Largura (cm)": "medida", "Material": "material", "Acabamento": "acabamento"}
+            tipo_do_rotulo = {texto: tipo for tipo, texto in ORIGENS.items()}
+            ttk.Label(frame, text="De onde veio a informação", style="Subtitulo.TLabel").grid(
+                row=0, column=2, sticky="w", padx=(12, 0),
+            )
             variaveis: dict[str, tk.StringVar] = {}
-            for rotulo, valor in valores.items():
-                ttk.Label(frame, text=rotulo, style="Subtitulo.TLabel").pack(anchor="w")
+            origens_var: dict[str, tk.StringVar] = {}
+            for linha, (rotulo, valor) in enumerate(valores.items(), 1):
+                ttk.Label(frame, text=rotulo, style="Subtitulo.TLabel").grid(row=linha, column=0, sticky="w", pady=6)
                 variaveis[rotulo] = tk.StringVar(value=valor)
-                ttk.Entry(frame, textvariable=variaveis[rotulo]).pack(fill="x", pady=(3, 10))
+                ttk.Entry(frame, textvariable=variaveis[rotulo]).grid(row=linha, column=1, sticky="ew", padx=(10, 0), pady=6)
+                campo = campo_da_linha.get(rotulo)
+                if campo:
+                    origens_var[campo] = tk.StringVar(value=ORIGENS[origem(atual, campo)])
+                    ttk.Combobox(
+                        frame, textvariable=origens_var[campo], values=list(ORIGENS.values()),
+                        state="readonly", width=36,
+                    ).grid(row=linha, column=2, sticky="ew", padx=(12, 0), pady=6)
+            ttk.Label(
+                frame,
+                text=(
+                    "Use 'Faltou no pedido' quando a informação não estava no arquivo e precisou (ou precisaria) "
+                    "ser perguntada ao cliente. Se souber o valor, preencha mesmo assim; se não souber, deixe em branco. "
+                    "Use 'Padrão da gráfica' quando a gráfica sempre faz assim sem o cliente dizer."
+                ),
+                style="Subtitulo.TLabel", wraplength=600, justify="left",
+            ).grid(row=len(valores) + 1, column=0, columnspan=3, sticky="w", pady=(10, 0))
 
             def salvar_item() -> None:
-                try:
-                    quantidade = int(variaveis["Quantidade"].get())
-                    largura = float(variaveis["Largura (cm)"].get().replace(",", "."))
-                    altura = float(variaveis["Altura (cm)"].get().replace(",", "."))
-                    if quantidade <= 0 or largura <= 0 or altura <= 0:
+                origens = {campo: tipo_do_rotulo[var.get()] for campo, var in origens_var.items()}
+
+                def numero(rotulo: str, tipo, campo: str):
+                    texto = variaveis[rotulo].get().strip().replace(",", ".")
+                    if not texto and origens.get(campo) == "faltou_no_pedido":
+                        return None  # valor desconhecido: fica pendente para o cliente
+                    valor = tipo(texto)
+                    if valor <= 0:
                         raise ValueError
+                    return valor
+
+                try:
+                    quantidade = numero("Quantidade", int, "quantidade")
+                    largura = numero("Largura (cm)", float, "medida")
+                    altura = numero("Altura (cm)", float, "medida")
                 except ValueError:
-                    messagebox.showwarning("Valores inválidos", "Use números maiores que zero para quantidade e tamanho.", parent=editor)
+                    messagebox.showwarning(
+                        "Valores inválidos",
+                        "Use números maiores que zero. Só é possível deixar em branco um campo marcado como 'Faltou no pedido'.",
+                        parent=editor,
+                    )
                     return
-                item = deepcopy(atual) if atual else {}
+                item = definir_origens(deepcopy(atual) if atual else {}, origens)
                 item.update({
                     "quantidade": {"valor": quantidade, "unidade": "unidade", "fonte": "correcao_operador", "confianca": 1.0},
-                    "dimensoes": {"largura_mm": largura * 10, "altura_mm": altura * 10, "tipo": "corrigido", "fonte": "correcao_operador", "confianca": 1.0},
+                    "dimensoes": {
+                        "largura_mm": largura * 10 if largura else None, "altura_mm": altura * 10 if altura else None,
+                        "tipo": "corrigido", "fonte": "correcao_operador", "confianca": 1.0,
+                    },
                     "material": {"valor": variaveis["Material"].get().strip() or None, "fonte": "correcao_operador", "confianca": 1.0},
                     "acabamento": {"valor": variaveis["Acabamento"].get().strip() or None, "fonte": "correcao_operador", "confianca": 1.0},
                 })
@@ -1200,7 +1241,9 @@ class AplicacaoPedido:
                 atualizar_tabela()
                 editor.destroy()
 
-            ttk.Button(frame, text="Salvar item", style="Primary.TButton", command=salvar_item).pack(anchor="e", pady=(4, 0))
+            ttk.Button(frame, text="Salvar item", style="Primary.TButton", command=salvar_item).grid(
+                row=len(valores) + 2, column=0, columnspan=3, sticky="e", pady=(14, 0),
+            )
 
         def editar_selecionado() -> None:
             selecionado = tabela.selection()
