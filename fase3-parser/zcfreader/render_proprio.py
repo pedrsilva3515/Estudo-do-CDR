@@ -157,7 +157,7 @@ def renderizar_pagina(caminho: Path, lado_maximo_px: int = LADO_MAXIMO_PADRAO) -
 
         textos = {chave(item.objeto): item.fluxo.texto for item in doc.textos_por_objeto() or ()}
         bitmaps = {chave(i.objeto): i.registro for i in doc.instancias_bitmaps() if i.objeto is not None}
-        recipientes = doc.recipientes_powerclip(estrutura)
+        cadeias = doc.cadeias_powerclip(estrutura)
         mascaras: dict[tuple, object] = {}
 
         def mascara_do_recipiente(recipiente):
@@ -248,10 +248,12 @@ def renderizar_pagina(caminho: Path, lado_maximo_px: int = LADO_MAXIMO_PADRAO) -
                     )
             else:
                 continue
-            recipiente = recipientes.get(chave(objeto))
-            if recipiente is not None:
-                # Conteúdo de PowerClip: só aparece o que está dentro da máscara.
-                alfa = ImageChops.multiply(camada.getchannel("A"), mascara_do_recipiente(recipiente))
+            cadeia = cadeias.get(chave(objeto))
+            if cadeia:
+                # Conteúdo de PowerClip: só aparece o que está dentro de todas as máscaras.
+                alfa = camada.getchannel("A")
+                for recipiente in cadeia:
+                    alfa = ImageChops.multiply(alfa, mascara_do_recipiente(recipiente))
                 camada.putalpha(alfa)
             pagina.alpha_composite(camada)
 

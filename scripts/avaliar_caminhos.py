@@ -64,9 +64,9 @@ def main() -> None:
             f" | linhas {t['linhas_corretas']}/{t['esperados']}"
             f" | a mais {t['a_mais']} | faltando {t['faltando']}"
             f" | material {t['material_ok']}/{t['material_avaliado']}"
+            f" | acabamento {t['acabamento_ok']}/{t['acabamento_avaliado']}"
             + (f" | faltas no pedido percebidas {t['faltas_detectadas']}/{t['faltas_esperadas']} (chutes {t['chutes']})"
                if t.get("faltas_esperadas") else "")
-            f" | acabamento {t['acabamento_ok']}/{t['acabamento_avaliado']}"
             + (f" | FALHAS {t['falhas']}" if t["falhas"] else "")
         )
 

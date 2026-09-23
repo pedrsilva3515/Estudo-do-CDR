@@ -128,6 +128,26 @@ class ZcfContainer:
                 mapa[(objeto.membro, objeto.offset_root)] = atual
         return mapa
 
+    def cadeias_powerclip(self, estrutura=None) -> dict:
+        """Mapa objeto -> todos os recipientes que o recortam, do mais próximo ao mais externo.
+
+        PowerClips podem ser aninhados: o recipiente de uma foto pode estar,
+        ele mesmo, dentro do conteúdo de outro PowerClip. Só aparece o que está
+        dentro de todas as máscaras da cadeia.
+        """
+        estrutura = list(self.estrutura() if estrutura is None else estrutura)
+        imediatos = self.recipientes_powerclip(estrutura)
+        cadeias = {}
+        for chave, recipiente in imediatos.items():
+            cadeia, vistos = [], set()
+            atual = recipiente
+            while atual is not None and (atual.membro, atual.offset_root) not in vistos:
+                vistos.add((atual.membro, atual.offset_root))
+                cadeia.append(atual)
+                atual = imediatos.get((atual.membro, atual.offset_root))
+            cadeias[chave] = cadeia
+        return cadeias
+
     def estrutura_visivel(self):
         """Estrutura com a caixa do conteúdo de PowerClip recortada pela máscara.
 
@@ -140,14 +160,17 @@ class ZcfContainer:
         from .structure import CaixaObjeto
 
         estrutura = list(self.estrutura())
-        recipientes = self.recipientes_powerclip(estrutura)
+        cadeias = self.cadeias_powerclip(estrutura)
         visivel = []
         for objeto in estrutura:
-            recipiente = recipientes.get((objeto.membro, objeto.offset_root))
-            if recipiente is not None and objeto.caixa is not None:
-                a, b = objeto.caixa, recipiente.caixa
-                esquerda, direita = max(a.esquerda, b.esquerda), min(a.direita, b.direita)
-                base, topo = max(a.base, b.base), min(a.topo, b.topo)
+            cadeia = cadeias.get((objeto.membro, objeto.offset_root))
+            if cadeia and objeto.caixa is not None:
+                esquerda, direita = objeto.caixa.esquerda, objeto.caixa.direita
+                base, topo = objeto.caixa.base, objeto.caixa.topo
+                for recipiente in cadeia:  # recorta por todas as máscaras aninhadas
+                    b = recipiente.caixa
+                    esquerda, direita = max(esquerda, b.esquerda), min(direita, b.direita)
+                    base, topo = max(base, b.base), min(topo, b.topo)
                 caixa = CaixaObjeto(esquerda=esquerda, topo=topo, direita=direita, base=base) \
                     if esquerda < direita and base < topo else None
                 objeto = replace(objeto, caixa=caixa)
@@ -303,10 +326,65 @@ class ZcfContainer:
         )
         if len(fluxos) != len(objetos):
             return None
+        atribuicao = self._associar_textos_por_conteudo(objetos, fluxos)
+        # O que não for achado pelo conteúdo segue a ordem, entre os que sobraram.
+        livres = iter(j for j in range(len(fluxos)) if j not in set(atribuicao.values()))
         return tuple(
-            TextoEstruturado(objeto=objeto, fluxo=fluxo)
-            for objeto, fluxo in zip(objetos, fluxos)
+            TextoEstruturado(objeto=objeto, fluxo=fluxos[atribuicao[i] if i in atribuicao else next(livres)])
+            for i, objeto in enumerate(objetos)
         )
+
+    def _associar_textos_por_conteudo(self, objetos, fluxos) -> dict[int, int]:
+        """Índice do objeto -> índice do fluxo, pelo texto gravado após o objeto.
+
+        textinfo.xml não referencia objetos, e sua ordem difere da estrutural
+        quando há texto dentro de PowerClip (a página vem antes do conteúdo em
+        dataN.dat). O conteúdo de cada texto fica gravado logo depois do bloco
+        do objeto, em cp1252 com prefixo de tamanho, antes do próximo objeto de
+        texto do mesmo membro.
+        """
+        dados_membro: dict[str, bytes] = {}
+        ordenados = sorted(
+            (i for i, o in enumerate(objetos) if o.membro and o.offset_dados is not None),
+            key=lambda i: (objetos[i].membro, objetos[i].offset_dados),
+        )
+        janelas: dict[int, bytes] = {}
+        for posicao, i in enumerate(ordenados):
+            objeto = objetos[i]
+            if objeto.membro not in dados_membro:
+                dados_membro[objeto.membro] = self.read(objeto.membro)
+            dados = dados_membro[objeto.membro]
+            proximo = next(
+                (objetos[k].offset_dados for k in ordenados[posicao + 1:] if objetos[k].membro == objeto.membro),
+                len(dados),
+            )
+            janelas[i] = dados[objeto.offset_dados:proximo]
+
+        def chaves(texto: str) -> list[bytes]:
+            linha = next((l.strip() for l in texto.splitlines() if l.strip()), "")[:24]
+            if not linha:
+                return []
+            resultado = []
+            for codificacao in ("cp1252", "utf-16-le", "utf-8"):
+                try:
+                    resultado.append(linha.encode(codificacao))
+                except UnicodeEncodeError:
+                    continue
+            return resultado
+
+        chaves_fluxo = [chaves(f.texto) for f in fluxos]
+        candidatos = {
+            i: [j for j, alternativas in enumerate(chaves_fluxo) if any(c in janela for c in alternativas)]
+            for i, janela in janelas.items()
+        }
+        atribuicao: dict[int, int] = {}
+        usados: set[int] = set()
+        for i in sorted(candidatos, key=lambda i: (len(candidatos[i]), i)):
+            j = next((j for j in candidatos[i] if j not in usados), None)
+            if j is not None:
+                atribuicao[i] = j
+                usados.add(j)
+        return atribuicao
 
     def pagina(self, indice: int = 1):
         """Extrai nomes e estilos (fill/outline/transparency) de
