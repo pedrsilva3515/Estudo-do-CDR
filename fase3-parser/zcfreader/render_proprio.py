@@ -131,13 +131,12 @@ def renderizar_pagina(caminho: Path, lado_maximo_px: int = LADO_MAXIMO_PADRAO) -
 
     with abrir_cdr(Path(caminho)) as doc:
         estrutura = list(doc.estrutura())
-        topo = [o.caixa for o in estrutura if o.caixa is not None and not o.ancestrais and o.tipo in {"obj", "grp"}]
-        if not topo:
+        # Mesma referência do catálogo e da escolha da peça: sem ela, prévia e
+        # seleção ficam deslocadas quando o conteúdo de PowerClip é maior que a máscara.
+        limites = doc.limites_conteudo()
+        if limites is None:
             return None
-        esquerda = min(c.esquerda for c in topo)
-        direita = max(c.direita for c in topo)
-        base = min(c.base for c in topo)
-        cima = max(c.topo for c in topo)
+        esquerda, direita, base, cima = limites.esquerda, limites.direita, limites.base, limites.topo
         largura_u, altura_u = max(direita - esquerda, 1), max(cima - base, 1)
         escala = lado_maximo_px / max(largura_u, altura_u)
         tamanho = (max(1, round(largura_u * escala)), max(1, round(altura_u * escala)))

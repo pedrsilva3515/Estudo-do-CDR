@@ -148,6 +148,27 @@ class ZcfContainer:
             cadeias[chave] = cadeia
         return cadeias
 
+    def limites_conteudo(self, estrutura_visivel=None):
+        """Caixa (unidades do CDR) que envolve o que aparece na montagem.
+
+        Referência única para converter centímetros em pixels: o desenho da
+        página, o OCR, a prévia e a escolha da peça precisam usar a mesma.
+        Usa as caixas visíveis (conteúdo de PowerClip recortado pela máscara).
+        """
+        from .structure import CaixaObjeto
+
+        estrutura = list(self.estrutura_visivel() if estrutura_visivel is None else estrutura_visivel)
+        caixas = [
+            objeto.caixa for objeto in estrutura
+            if objeto.caixa is not None and not objeto.ancestrais and objeto.tipo in {"obj", "grp"}
+        ]
+        if not caixas:
+            return None
+        return CaixaObjeto(
+            esquerda=min(c.esquerda for c in caixas), topo=max(c.topo for c in caixas),
+            direita=max(c.direita for c in caixas), base=min(c.base for c in caixas),
+        )
+
     def estrutura_visivel(self):
         """Estrutura com a caixa do conteúdo de PowerClip recortada pela máscara.
 

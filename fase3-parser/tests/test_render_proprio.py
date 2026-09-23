@@ -57,6 +57,28 @@ class TestRenderProprio(unittest.TestCase):
             self.assertGreaterEqual(caixa.base, recipiente.caixa.base)
             self.assertLessEqual(caixa.topo, recipiente.caixa.topo)
 
+    def test_pecas_do_catalogo_caem_sobre_o_desenho(self):
+        """Catálogo e desenho usam a mesma referência: a região de cada peça não fica em branco."""
+        from PIL import Image
+
+        from zcfreader.experimento_agente import extrair_candidatos_agente
+        from zcfreader.selecao_peca import px_do_cm
+
+        for nome in ("caso_15_powerclip.cdr", "caso_26_segundo_retangulo.cdr"):
+            caminho = CASOS / nome
+            if not caminho.exists():
+                continue
+            catalogo = extrair_candidatos_agente(caminho)
+            with Image.open(BytesIO(renderizar_pagina(caminho, lado_maximo_px=800))) as imagem:
+                cinza = imagem.convert("L")
+                fatos = {"limites_cm": catalogo["limites_conteudo_cm"]}
+                for candidato in catalogo["candidatos"]:
+                    x0, y0, x1, y1 = px_do_cm(fatos, cinza.size, candidato["caixa_cm"])
+                    corte = cinza.crop((max(0, int(x0)), max(0, int(y0)), min(cinza.size[0], int(x1) + 1), min(cinza.size[1], int(y1) + 1)))
+                    with self.subTest(caso=nome, peca=candidato["id"]):
+                        self.assertTrue(corte.size[0] and corte.size[1], "peça fora da imagem")
+                        self.assertLess(corte.getextrema()[0], 250, "região da peça em branco: desenho e catálogo desalinhados")
+
     def test_analise_usa_render_proprio_sem_abrir_o_corel(self):
         caminho = CASOS / "caso_00_base.cdr"
         with mock.patch.object(visao_api, "renderizar_com_corel") as corel:

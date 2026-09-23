@@ -821,6 +821,7 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
     """Cria um catálogo de caixas medíveis sem decidir quais são produtos."""
     with abrir_cdr(caminho) as doc:
         estrutura = list(_estrutura_visivel(doc))
+        caixa_limites = doc.limites_conteudo(estrutura) if hasattr(doc, "limites_conteudo") else None
         profundos = _inventario_geometrico(doc)
         rasos = _candidatos_arte(doc)
         evidencias = _evidencias_textuais(doc)
@@ -875,17 +876,11 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
     _anotar_hierarquia(candidatos)
     blocos_producao = detectar_blocos_producao(candidatos, evidencias)
 
-    caixas_topo = [
-        item.caixa for item in estrutura
-        if item.caixa is not None and not item.ancestrais and item.tipo in {"obj", "grp"}
-    ]
     limites = None
-    if caixas_topo:
+    if caixa_limites is not None:
         limites = {
-            "esquerda": min(c.esquerda for c in caixas_topo) / 100_000,
-            "direita": max(c.direita for c in caixas_topo) / 100_000,
-            "base": min(c.base for c in caixas_topo) / 100_000,
-            "topo": max(c.topo for c in caixas_topo) / 100_000,
+            "esquerda": caixa_limites.esquerda / 100_000, "direita": caixa_limites.direita / 100_000,
+            "base": caixa_limites.base / 100_000, "topo": caixa_limites.topo / 100_000,
         }
     return {
         "arquivo": Path(caminho).name,
