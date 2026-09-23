@@ -1058,8 +1058,13 @@ class AplicacaoPedido:
         dados = deepcopy(self.resultado)
         janela = tk.Toplevel(self.raiz)
         janela.title("Corrigir resultado")
-        janela.geometry("900x560")
-        janela.minsize(760, 500)
+        # Tabela + painel da prévia + botões precisam de ~1150 x 700; abre proporcional à tela.
+        largura_tela, altura_tela = janela.winfo_screenwidth(), janela.winfo_screenheight()
+        largura = min(1400, max(1150, largura_tela - 120))
+        altura = min(880, max(700, altura_tela - 120))
+        largura, altura = min(largura, largura_tela - 20), min(altura, altura_tela - 60)
+        janela.geometry(f"{largura}x{altura}+{max(0, (largura_tela - largura) // 2)}+{max(0, (altura_tela - altura) // 2 - 20)}")
+        janela.minsize(min(1100, largura_tela - 20), min(660, altura_tela - 60))
         janela.transient(self.raiz)
         janela.grab_set()
         corpo = ttk.Frame(janela, padding=20)
@@ -1081,8 +1086,8 @@ class AplicacaoPedido:
             tabela.column(coluna, width=largura, anchor="center" if coluna != "material" else "w")
         tabela.pack(side="left", fill="both", expand=True)
 
-        painel = ttk.Frame(area, padding=(14, 0, 0, 0))
-        painel.pack(side="right", fill="y")
+        painel = ttk.Frame(area, padding=(14, 0, 0, 0), width=340)
+        painel.pack(side="right", fill="y", before=tabela)
         ttk.Label(painel, text="O que o sistema interpretou", style="Subtitulo.TLabel").pack(anchor="w")
         rotulo_previa = ttk.Label(painel, text="Selecione um item", style="Subtitulo.TLabel",
                                   anchor="center", background="white", relief="solid", borderwidth=1)

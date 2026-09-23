@@ -75,6 +75,14 @@ class TestValidadorAgente(unittest.TestCase):
         self.assertTrue(any("3 de cada" in e and "9" in e for e in erros), erros)
         self.assertEqual(validar(fatos, {"itens": [_item(["A02"], 9, texto="T01")]}), [])
 
+    def test_acabamento_nao_pode_repetir_o_material(self):
+        fatos = {**FATOS, "textos": {**FATOS["textos"], "T30": {"texto": "VINIL BRILHOSO"}}}
+        item = _item(["A47"], 12, texto="T11", material="VINIL BRILHOSO", texto_material="T30")
+        item.update(acabamento="VINIL BRILHOSO", texto_acabamento="T30")
+        self.assertTrue(any("repete o material" in e for e in validar(fatos, {"itens": [item]})))
+        item.update(acabamento=None, texto_acabamento=None)
+        self.assertEqual(validar(fatos, {"itens": [item]}), [])
+
     def test_material_sem_prova(self):
         erros = validar(FATOS, {"itens": [_item(["A47"], 12, texto="T11", material="lona", texto_material="T11")]})
         self.assertTrue(any("material 'lona'" in e for e in erros))

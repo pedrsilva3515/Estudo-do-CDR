@@ -479,6 +479,12 @@ def validar(fatos: dict, resposta: dict) -> list[str]:
             valor, fonte = item.get(campo), item.get(f"texto_{campo}")
             if valor and not _cita(fatos, fonte, valor):
                 erros.append(f"Item {n}: {campo} '{valor}' sem texto que o comprove ({fonte!r}); cite o ID correto ou use null.")
+        acabamento, material = item.get("acabamento"), item.get("material")
+        if acabamento and material and _termos(acabamento) and set(_termos(acabamento)) <= set(_termos(material)):
+            erros.append(
+                f"Item {n}: acabamento '{acabamento}' repete o material; acabamento é o que se faz depois "
+                "da impressão (recorte, laminação, ilhós, bainha...). Se nenhum foi pedido, use null."
+            )
     ids_por_item = {n: set(item.get("ids") or []) for n, item in enumerate(resposta.get("itens") or [], 1)}
     for n, ids in ids_por_item.items():
         for m, outros in ids_por_item.items():
