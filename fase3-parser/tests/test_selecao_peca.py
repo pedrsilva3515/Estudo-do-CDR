@@ -12,9 +12,11 @@ from zcfreader.selecao_peca import (  # noqa: E402
     aplicar_selecao_ao_item,
     candidatos_no_ponto,
     cm_do_px,
+    pecas_na_regiao,
     px_do_cm,
     selecao_de_candidato,
     selecao_de_regiao,
+    selecao_de_uniao,
 )
 
 
@@ -49,6 +51,21 @@ class TestSelecaoPeca(unittest.TestCase):
         selecao = selecao_de_regiao(FATOS, (800, 400), 0, 0, 200, 100)
         self.assertEqual((selecao["largura_cm"], selecao["altura_cm"]), (10.0, 5.0))
         self.assertIsNone(selecao["id"])
+
+    def test_arrasto_usa_pecas_do_arquivo_dentro_da_regiao(self):
+        # Região folgada em volta do círculo: fica só a peça mais externa (A02, que
+        # envolve A03 por 0,1 cm); a arte grande (A01) está fora da região.
+        regiao = _caixa(29, 35, 5, 11)
+        self.assertEqual(pecas_na_regiao(FATOS, regiao), ["A02"])
+        self.assertEqual(pecas_na_regiao(FATOS, _caixa(38, 40, 0, 2)), [])
+
+    def test_uniao_de_varias_pecas_tem_medida_exata(self):
+        uniao = selecao_de_uniao(FATOS, ["A01", "A03"])
+        self.assertEqual((uniao["largura_cm"], uniao["altura_cm"]), (34.0, 11.0))
+        self.assertEqual(uniao["ids"], ["A01", "A03"])
+        item = aplicar_selecao_ao_item({"quantidade": {"valor": 2}}, uniao)
+        self.assertEqual(item["candidatos"], ["A01", "A03"])
+        self.assertEqual(item["peca_correta"]["origem"], "uniao_de_pecas")
 
     def test_aplicar_troca_peca_e_preserva_quantidade_e_material(self):
         item = {
