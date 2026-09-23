@@ -107,6 +107,53 @@ class ZcfContainer:
 
         return parse_estrutura(self.read("content/root.dat"), self._streams_estrutura())
 
+    def recipientes_powerclip(self, estrutura=None) -> dict:
+        """Mapa (membro, offset_root) do objeto contido -> objeto recipiente do PowerClip.
+
+        O conteúdo de um PowerClip fica num grupo de topo de ``dataN.dat`` cujo
+        ``id_estrutural`` é apontado por ``grupo_powerclip`` do recipiente. Os
+        objetos seguintes com ancestrais pertencem a esse grupo.
+        """
+        estrutura = list(self.estrutura() if estrutura is None else estrutura)
+        recipientes = {
+            objeto.grupo_powerclip: objeto for objeto in estrutura
+            if objeto.grupo_powerclip is not None and objeto.caixa is not None
+        }
+        mapa = {}
+        atual = None
+        for objeto in estrutura:
+            if not objeto.ancestrais:
+                atual = recipientes.get(objeto.id_estrutural) if objeto.tipo == "grp" else None
+            if atual is not None and objeto is not atual:
+                mapa[(objeto.membro, objeto.offset_root)] = atual
+        return mapa
+
+    def estrutura_visivel(self):
+        """Estrutura com a caixa do conteúdo de PowerClip recortada pela máscara.
+
+        Só a parte dentro do recipiente é impressa; a caixa integral do conteúdo
+        (por exemplo, uma foto maior que o círculo que a recorta) não é a medida
+        do produto.
+        """
+        from dataclasses import replace
+
+        from .structure import CaixaObjeto
+
+        estrutura = list(self.estrutura())
+        recipientes = self.recipientes_powerclip(estrutura)
+        visivel = []
+        for objeto in estrutura:
+            recipiente = recipientes.get((objeto.membro, objeto.offset_root))
+            if recipiente is not None and objeto.caixa is not None:
+                a, b = objeto.caixa, recipiente.caixa
+                esquerda, direita = max(a.esquerda, b.esquerda), min(a.direita, b.direita)
+                base, topo = max(a.base, b.base), min(a.topo, b.topo)
+                caixa = CaixaObjeto(esquerda=esquerda, topo=topo, direita=direita, base=base) \
+                    if esquerda < direita and base < topo else None
+                objeto = replace(objeto, caixa=caixa)
+            visivel.append(objeto)
+        return visivel
+
     def _streams_estrutura(self):
         # Os IDs usados por root.dat sao os indices zero-based de
         # dataFileList.dat. Bitmaps.dat ocupa um indice quando aparece na

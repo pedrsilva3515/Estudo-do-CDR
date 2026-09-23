@@ -37,6 +37,26 @@ class TestRenderProprio(unittest.TestCase):
                     # Algo além do fundo branco foi desenhado.
                     self.assertLess(min(imagem.convert("L").getextrema()), 250)
 
+    def test_conteudo_de_powerclip_e_medido_pela_mascara(self):
+        from zcfreader.container import abrir_cdr
+
+        caminho = CASOS / "caso_15_powerclip.cdr"
+        if not caminho.exists():
+            self.skipTest("caso_15 ausente")
+        with abrir_cdr(caminho) as doc:
+            estrutura = list(doc.estrutura())
+            recipientes = doc.recipientes_powerclip(estrutura)
+            self.assertTrue(recipientes, "o caso 15 tem um PowerClip")
+            visivel = {(o.membro, o.offset_root): o for o in doc.estrutura_visivel()}
+        for (membro, offset), recipiente in recipientes.items():
+            caixa = visivel[(membro, offset)].caixa
+            if caixa is None:
+                continue
+            self.assertGreaterEqual(caixa.esquerda, recipiente.caixa.esquerda)
+            self.assertLessEqual(caixa.direita, recipiente.caixa.direita)
+            self.assertGreaterEqual(caixa.base, recipiente.caixa.base)
+            self.assertLessEqual(caixa.topo, recipiente.caixa.topo)
+
     def test_analise_usa_render_proprio_sem_abrir_o_corel(self):
         caminho = CASOS / "caso_00_base.cdr"
         with mock.patch.object(visao_api, "renderizar_com_corel") as corel:

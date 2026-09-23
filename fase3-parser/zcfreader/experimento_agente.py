@@ -11,6 +11,7 @@ from .container import abrir_cdr
 from .ocr import executar_ocr
 from .pedido import (
     _candidatos_arte,
+    _estrutura_visivel,
     _evidencias_textuais,
     _inventario_geometrico,
     parse_dimensoes,
@@ -819,7 +820,7 @@ def associar_materiais_acabamentos(catalogo: dict) -> list[dict]:
 def extrair_candidatos_agente(caminho: Path) -> dict:
     """Cria um catálogo de caixas medíveis sem decidir quais são produtos."""
     with abrir_cdr(caminho) as doc:
-        estrutura = list(doc.estrutura())
+        estrutura = list(_estrutura_visivel(doc))
         profundos = _inventario_geometrico(doc)
         rasos = _candidatos_arte(doc)
         evidencias = _evidencias_textuais(doc)

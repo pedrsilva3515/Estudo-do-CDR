@@ -3,8 +3,9 @@
 Não busca fidelidade de impressão: o objetivo é uma imagem nítida o bastante
 para o OCR ler instruções convertidas em curvas e para a IA ver a montagem.
 Desenha curvas (retas e Bézier, com furos por par-ímpar), retângulos, elipses,
-bitmaps e textos nativos, com preenchimento uniforme e contorno. Degradês usam
-a cor inicial; padrões, rotação de bitmaps e recorte de PowerClip são ignorados.
+bitmaps e textos nativos, com preenchimento uniforme e contorno, e recorta o
+conteúdo de PowerClip pela forma do recipiente. Degradês usam a cor inicial;
+padrões e rotação de bitmaps são ignorados.
 
 A área desenhada é a união das caixas dos objetos de primeiro nível, a mesma
 usada por ``experimento_agente.extrair_candidatos_agente`` para mapear pixels
@@ -156,6 +157,28 @@ def renderizar_pagina(caminho: Path, lado_maximo_px: int = LADO_MAXIMO_PADRAO) -
 
         textos = {chave(item.objeto): item.fluxo.texto for item in doc.textos_por_objeto() or ()}
         bitmaps = {chave(i.objeto): i.registro for i in doc.instancias_bitmaps() if i.objeto is not None}
+        recipientes = doc.recipientes_powerclip(estrutura)
+        mascaras: dict[tuple, object] = {}
+
+        def mascara_do_recipiente(recipiente):
+            """Forma do PowerClip em tons de cinza (255 = visível)."""
+            if chave(recipiente) not in mascaras:
+                mascara = Image.new("L", tamanho, 0)
+                forma = ImageDraw.Draw(mascara)
+                caminhos = _subcaminhos_px(recipiente, para_px) if recipiente.tipo_objeto == "curva" else []
+                if caminhos:
+                    binaria = Image.new("1", tamanho, 0)
+                    for caminho_px in caminhos:
+                        sub = Image.new("1", tamanho, 0)
+                        ImageDraw.Draw(sub).polygon(caminho_px, fill=1)
+                        binaria = ImageChops.logical_xor(binaria, sub)
+                    mascara = binaria.convert("L")
+                elif recipiente.tipo_objeto == "elipse":
+                    forma.ellipse(caixa_px(recipiente.caixa), fill=255)
+                else:
+                    forma.rectangle(caixa_px(recipiente.caixa), fill=255)
+                mascaras[chave(recipiente)] = mascara
+            return mascaras[chave(recipiente)]
 
         pagina = Image.new("RGBA", tamanho, (255, 255, 255, 255))
         # root.dat lista primeiro o objeto da frente; desenha-se de trás para a frente.
@@ -225,6 +248,11 @@ def renderizar_pagina(caminho: Path, lado_maximo_px: int = LADO_MAXIMO_PADRAO) -
                     )
             else:
                 continue
+            recipiente = recipientes.get(chave(objeto))
+            if recipiente is not None:
+                # Conteúdo de PowerClip: só aparece o que está dentro da máscara.
+                alfa = ImageChops.multiply(camada.getchannel("A"), mascara_do_recipiente(recipiente))
+                camada.putalpha(alfa)
             pagina.alpha_composite(camada)
 
     saida = BytesIO()

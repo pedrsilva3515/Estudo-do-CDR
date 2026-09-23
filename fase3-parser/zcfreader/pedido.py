@@ -213,9 +213,15 @@ def _evidencias_textuais(doc) -> list[dict]:
     return evidencias
 
 
+def _estrutura_visivel(doc):
+    """Estrutura com a caixa do conteúdo de PowerClip recortada pela máscara."""
+    visivel = getattr(doc, "estrutura_visivel", None)
+    return visivel() if visivel is not None else doc.estrutura()
+
+
 def _candidatos_arte(doc) -> list[dict]:
     """Seleciona caixas externas prováveis, evitando objetos internos duplicados."""
-    estrutura = doc.estrutura()
+    estrutura = _estrutura_visivel(doc)
     tipos_limite = {"bitmap", "retangulo", "curva", "desconhecido"}
     limites = [
         objeto for objeto in estrutura
@@ -275,7 +281,7 @@ def _inventario_geometrico(doc) -> list[dict]:
     topo. Caixas coincidentes (arte + contorno), repetições do mesmo tamanho,
     bitmaps e blocos numéricos são sinais úteis para a adjudicação visual.
     """
-    estrutura = list(doc.estrutura())
+    estrutura = list(_estrutura_visivel(doc))
     inventario: list[dict] = []
     vistos = set()
 

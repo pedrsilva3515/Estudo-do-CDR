@@ -165,7 +165,12 @@ def parse_instancias_bitmap(
             continue
         if data[offset + 28:offset + 32] != b"\xff" * 4:
             continue
-        if data[offset + 32:offset + 40] != b"\x00" * 8:
+        # Em +32 os casos controlados trazem 8 bytes zerados, mas um pedido real
+        # ("adesivo recortado - mateus ms 2309", bitmap dentro de PowerClip
+        # elíptico) traz dois uint32 = 2. Tipo, identificador, dimensões, bpp e as
+        # sentinelas acima já identificam o descritor; aceitam-se valores pequenos.
+        campo_32 = struct.unpack_from("<II", data, offset + 32)
+        if any(valor > 0xFFFF for valor in campo_32):
             continue
 
         numero_nos = struct.unpack_from("<I", data, offset + 40)[0]
