@@ -69,6 +69,14 @@ class TestConfiguracao(unittest.TestCase):
             self.assertEqual(carregada["modelo_forte"], "anthropic/claude-sonnet-5")
             self.assertEqual(carregada["limite_pedido_usd"], 0.05)
 
+    def test_incluir_cdr_vem_marcado_e_escolha_e_lembrada(self):
+        with tempfile.TemporaryDirectory() as pasta, patch.object(
+            configuracao, "caminho_configuracao", return_value=Path(pasta) / "config.json"
+        ):
+            self.assertTrue(configuracao.carregar_configuracao()["incluir_cdr_diagnostico"])
+            configuracao.salvar_configuracao({"modo": "estrutural", "incluir_cdr_diagnostico": False})
+            self.assertFalse(configuracao.carregar_configuracao()["incluir_cdr_diagnostico"])
+
 
 if __name__ == "__main__":
     unittest.main()

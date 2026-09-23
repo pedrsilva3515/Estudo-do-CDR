@@ -342,9 +342,15 @@ class AplicacaoPedido:
 
         revisao = ttk.Frame(conteudo, padding=(0, 0, 0, 10))
         revisao.pack(fill="x")
-        self.var_incluir_cdr = tk.BooleanVar(value=False)
+        self.var_incluir_cdr = tk.BooleanVar(value=self.configuracao.get("incluir_cdr_diagnostico", True))
+
+        def lembrar_incluir_cdr() -> None:
+            self.configuracao = {**self.configuracao, "incluir_cdr_diagnostico": self.var_incluir_cdr.get()}
+            salvar_configuracao(self.configuracao)
+
         ttk.Checkbutton(
-            revisao, text="Incluir CDR no diagnóstico", variable=self.var_incluir_cdr,
+            revisao, text="Incluir CDR no diagnóstico (necessário para treinar um modelo no futuro)",
+            variable=self.var_incluir_cdr, command=lembrar_incluir_cdr,
         ).pack(side="left")
         self.botao_exportar = ttk.Button(
             revisao, text="Exportar JSON", style="Secondary.TButton",
@@ -630,6 +636,7 @@ class AplicacaoPedido:
                 "modelo_forte": var_modelo_forte.get().strip(),
                 "limite_pedido_usd": self.configuracao.get("limite_pedido_usd", LIMITE_PEDIDO_PADRAO_USD),
                 "url_servidor_local": var_url_local.get().strip() or URL_SERVIDOR_LOCAL_PADRAO,
+                "incluir_cdr_diagnostico": self.configuracao.get("incluir_cdr_diagnostico", True),
                 "arquitetura_regional_experimental": var_arquitetura.get(),
             }
             salvar_configuracao(self.configuracao)

@@ -43,6 +43,9 @@ def carregar_configuracao() -> dict:
         "modelo_rapido": MODELO_RAPIDO_PADRAO, "modelo_forte": MODELO_FORTE_PADRAO,
         "limite_pedido_usd": LIMITE_PEDIDO_PADRAO_USD,
         "url_servidor_local": URL_SERVIDOR_LOCAL_PADRAO,
+        # O CDR no pacote de revisão permite reprocessar os casos com versões
+        # futuras do leitor e, com volume suficiente, treinar um modelo próprio.
+        "incluir_cdr_diagnostico": True,
         "arquitetura_regional_experimental": False,
     }
     caminho = caminho_configuracao()
@@ -76,6 +79,7 @@ def carregar_configuracao() -> dict:
         "modelo_openrouter": modelo_openrouter.strip(),
         "modelo_rapido": id_modelo("modelo_rapido"), "modelo_forte": id_modelo("modelo_forte"),
         "url_servidor_local": str(dados.get("url_servidor_local") or padrao["url_servidor_local"]).strip(),
+        "incluir_cdr_diagnostico": dados.get("incluir_cdr_diagnostico", True) is not False,
         "limite_pedido_usd": limite if 0 < limite <= 1 else padrao["limite_pedido_usd"],
         "arquitetura_regional_experimental": dados.get("arquitetura_regional_experimental") is True,
     }
@@ -94,6 +98,7 @@ def salvar_configuracao(configuracao: dict) -> None:
         "modelo_forte": str(configuracao.get("modelo_forte") or MODELO_FORTE_PADRAO).strip(),
         "limite_pedido_usd": float(configuracao.get("limite_pedido_usd") or LIMITE_PEDIDO_PADRAO_USD),
         "url_servidor_local": str(configuracao.get("url_servidor_local") or URL_SERVIDOR_LOCAL_PADRAO).strip(),
+        "incluir_cdr_diagnostico": configuracao.get("incluir_cdr_diagnostico", True) is not False,
         "arquitetura_regional_experimental": configuracao.get("arquitetura_regional_experimental") is True,
     }
     caminho.write_text(json.dumps(publico, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
