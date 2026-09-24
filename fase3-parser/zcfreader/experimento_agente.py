@@ -414,8 +414,53 @@ def extrair_associacoes_regionais(caminho: Path, catalogo: dict) -> dict:
     hipoteses = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
     return {
         "leituras_ocr": leituras_cm,
-        "associacoes": associar_instrucoes_regionais(leituras, hipoteses, limites, tamanho),
+        "associacoes": associar_instrucoes_regionais(
+            leituras_para_regras(leituras_cm, catalogo.get("evidencias_textuais") or [], limites, tamanho),
+            hipoteses, limites, tamanho,
+        ),
     }
+
+
+def leituras_para_regras(leituras_cm: list[dict], evidencias_textuais: list[dict], limites: dict,
+                         tamanho: tuple[int, int]) -> list[dict]:
+    """Textos que as regras interpretam: nativos do CDR primeiro, OCR só para o resto.
+
+    O texto nativo tem conteúdo e posição exatos. O OCR da mesma legenda pode
+    sair quebrado conforme a escala do desenho ("1 UNI DE CADA" virou "1UNI" +
+    "DE CADA"), e aí a regra "de cada" se perde. O OCR continua valendo para o
+    que só existe na imagem, como texto convertido em curvas.
+    """
+    largura_cm = (limites["direita"] - limites["esquerda"]) or 1
+    altura_cm = (limites["topo"] - limites["base"]) or 1
+
+    def poligono(caixa: dict) -> list[list[float]]:
+        x0 = (caixa["esquerda"] - limites["esquerda"]) / largura_cm * tamanho[0]
+        x1 = (caixa["direita"] - limites["esquerda"]) / largura_cm * tamanho[0]
+        y0 = (limites["topo"] - caixa["topo"]) / altura_cm * tamanho[1]
+        y1 = (limites["topo"] - caixa["base"]) / altura_cm * tamanho[1]
+        return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+
+    nativas = []
+    for evidencia in evidencias_textuais:
+        caixa_mm, texto = evidencia.get("caixa_mm"), (evidencia.get("texto") or "").strip()
+        if not caixa_mm or not texto:
+            continue
+        caixa = {chave: caixa_mm[chave] / 10 for chave in ("esquerda", "direita", "base", "topo")}
+        nativas.append({"texto": texto, "confianca": 1.0, "fonte": "texto_nativo",
+                        "poligono_px": poligono(caixa), "caixa_cm": caixa})
+
+    def dentro_de_nativo(leitura: dict) -> bool:
+        a = leitura["caixa_cm"]
+        area = max((a["direita"] - a["esquerda"]) * (a["topo"] - a["base"]), 1e-9)
+        for nativa in nativas:
+            b = nativa["caixa_cm"]
+            largura = min(a["direita"], b["direita"]) - max(a["esquerda"], b["esquerda"])
+            altura = min(a["topo"], b["topo"]) - max(a["base"], b["base"])
+            if largura > 0 and altura > 0 and largura * altura / area >= 0.5:
+                return True
+        return False
+
+    return nativas + [leitura for leitura in leituras_cm if not dentro_de_nativo(leitura)]
 
 
 def _especificacao_material(texto: str) -> dict | None:
