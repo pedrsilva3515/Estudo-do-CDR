@@ -38,6 +38,15 @@ def precos_openrouter(modelos: list[str]) -> dict[str, tuple[float, float]]:
     return precos
 
 
+def saldo_da_chave(chave: str) -> float | None:
+    """Crédito restante da chave no OpenRouter (None se a chave não tiver limite)."""
+    requisicao = urllib.request.Request("https://openrouter.ai/api/v1/key", headers={"Authorization": f"Bearer {chave}"})
+    with urllib.request.urlopen(requisicao, timeout=30) as resposta:
+        dados = json.load(resposta)["data"]
+    restante = dados.get("limit_remaining")
+    return float(restante) if restante is not None else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pasta", type=Path)
@@ -66,6 +75,13 @@ def main() -> None:
     todos_modelos = [m for m in dict.fromkeys(todos) if not m.startswith(PREFIXO_LOCAL)]
     if not todos:
         parser.error("Informe --modelos e/ou --camadas.")
+    if todos_modelos:
+        saldo = saldo_da_chave(chave)
+        if saldo is not None:
+            print(f"Saldo da chave no OpenRouter: US$ {saldo:.4f}")
+            if saldo < args.orcamento_usd:
+                args.orcamento_usd = max(0.0, saldo * 0.9)
+                print(f"Orçamento reduzido para US$ {args.orcamento_usd:.4f} para não esgotar a chave.")
     precos = precos_openrouter(todos_modelos)
     desconhecidos = [m for m in todos_modelos if m not in precos]
     if desconhecidos:
@@ -100,6 +116,7 @@ def main() -> None:
                     cdr, modelo, min(args.limite_pedido_usd, args.orcamento_usd - gasto),
                 )
             except Exception as erro:
+                custos[modelo] = custos.get(modelo, 0.0) + float(getattr(erro, "custo_usd", 0) or 0)
                 print(f"  ! {modelo} em {cdr.name}: {type(erro).__name__}: {erro}", flush=True)
                 raise
             rastro = resultado.get("rastro_agente", {})
@@ -133,11 +150,16 @@ def main() -> None:
                 preco_por_token=precos[modelo],
             )
 
-        resultado = interpretar_em_camadas(
-            cdr, chave, interpretar_pedido(cdr), modelo_rapido=args.camadas[0], modelo_forte=args.camadas[1],
-            custo_maximo_usd=min(args.limite_pedido_usd, args.orcamento_usd - gasto),
-            executar_agente=agente, fatos=fatos(cdr), url_servidor_local=args.servidor_local,
-        )
+        try:
+            resultado = interpretar_em_camadas(
+                cdr, chave, interpretar_pedido(cdr), modelo_rapido=args.camadas[0], modelo_forte=args.camadas[1],
+                custo_maximo_usd=min(args.limite_pedido_usd, args.orcamento_usd - gasto),
+                executar_agente=agente, fatos=fatos(cdr), url_servidor_local=args.servidor_local,
+            )
+        except Exception as erro:
+            custos["camadas"] = custos.get("camadas", 0.0) + float(getattr(erro, "custo_usd", 0) or 0)
+            print(f"  ! camadas em {cdr.name}: {type(erro).__name__}: {erro}", flush=True)
+            raise
         p = resultado["processamento"]
         custos["camadas"] = custos.get("camadas", 0.0) + p["custo_usd"]
         motivos = next((c.get("motivos_para_escalar") for c in p["camadas"] if c["camada"] == "modelo_rapido"), None)

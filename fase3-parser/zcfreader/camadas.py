@@ -194,6 +194,7 @@ def interpretar_em_camadas(
     try:
         rapido = rodar(modelo_rapido, custo_maximo_usd)
     except Exception as erro:
+        processamento["custo_usd"] += float(getattr(erro, "custo_usd", 0) or 0)
         processamento["camadas"].append({"camada": "modelo_rapido", "modelo": modelo_rapido, "erro": str(erro)})
         rapido = None
         motivos = [f"falha do modelo rápido: {erro}"]
@@ -207,7 +208,9 @@ def interpretar_em_camadas(
         return finalizar(rapido, "modelo_rapido", 0.85)
     if not modelo_forte:
         if rapido is None:
-            raise RuntimeError(processamento["camadas"][-1]["erro"])
+            falha = RuntimeError(processamento["camadas"][-1]["erro"])
+            falha.custo_usd = processamento["custo_usd"]
+            raise falha
         return finalizar(rapido, "modelo_rapido", 0.7)
 
     # 3. Modelo forte
@@ -215,8 +218,10 @@ def interpretar_em_camadas(
     try:
         forte = rodar(modelo_forte, restante)
     except Exception as erro:
+        processamento["custo_usd"] += float(getattr(erro, "custo_usd", 0) or 0)
         processamento["camadas"].append({"camada": "modelo_forte", "modelo": modelo_forte, "erro": str(erro)})
         if rapido is None:
+            erro.custo_usd = processamento["custo_usd"]
             raise
         resultado["alertas"].append({
             "codigo": "MODELO_FORTE_FALHOU", "severidade": "revisao",

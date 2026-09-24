@@ -587,106 +587,121 @@ def interpretar_com_agente(
     correcoes = 0
     resposta_final = None
 
-    for _ in range(MAX_RODADAS):
-        opcoes = {"max_tokens": 6000}
-        if usar_ferramentas:
-            opcoes.update(tools=_ferramentas(), tool_choice="auto")
-        if not local:
-            opcoes["extra_body"] = {"provider": {"data_collection": "deny"}, "usage": {"include": True}}
-        resposta = cliente.chat.completions.create(model=modelo, messages=mensagens, **opcoes)
-        rastro["chamadas"] += 1
-        uso = getattr(resposta, "usage", None)
-        custo = getattr(uso, "cost", None) if uso else None
-        if custo is None and uso is not None:
-            custo = (getattr(uso, "model_extra", None) or {}).get("cost")
-        if custo is None and uso is not None and preco_por_token:
-            custo = (int(getattr(uso, "prompt_tokens", 0) or 0) * preco_por_token[0]
-                     + int(getattr(uso, "completion_tokens", 0) or 0) * preco_por_token[1])
-        rastro["custo_usd"] += float(custo or 0)
-        rastro.setdefault("tokens", {"entrada": 0, "saida": 0})
-        rastro["tokens"]["entrada"] += int(getattr(uso, "prompt_tokens", 0) or 0)
-        rastro["tokens"]["saida"] += int(getattr(uso, "completion_tokens", 0) or 0)
-        if custo_maximo_usd is not None and rastro["custo_usd"] > custo_maximo_usd:
-            raise OrcamentoExcedido(
-                f"Pedido interrompido: US$ {rastro['custo_usd']:.4f} excede o limite de US$ {custo_maximo_usd:.4f}."
-            )
-        if not resposta.choices:
-            raise RuntimeError(f"O modelo {modelo} não devolveu resposta.")
-        mensagem = resposta.choices[0].message
-        if not usar_ferramentas:
-            # Resposta única: o validador aprova ou devolve os erros para correção.
-            mensagens.append({"role": "assistant", "content": mensagem.content or ""})
-            try:
-                proposta = extrair_json_resposta(mensagem.content or "")
-            except RuntimeError as erro:
-                erros = [str(erro)]
-                proposta = {"itens": [], "perguntas": [], "observacoes": ""}
-            else:
-                erros = validar(fatos, proposta)
-            if erros and correcoes < MAX_CORRECOES:
-                correcoes += 1
-                rastro["correcoes"].append(erros)
-                mensagens.append({
-                    "role": "user",
-                    "content": "Corrija e responda de novo, só com o JSON:\n- " + "\n- ".join(erros),
-                })
-                continue
-            resposta_final = proposta
-            rastro["erros_restantes"] = erros
-            break
-        chamadas = mensagem.tool_calls or []
-        mensagens.append({
-            "role": "assistant", "content": mensagem.content or "",
-            **({"tool_calls": [c.model_dump() for c in chamadas]} if chamadas else {}),
-        })
-        if not chamadas:
-            mensagens.append({"role": "user", "content": "Use as ferramentas; entregue o resultado chamando `finalizar`."})
-            continue
-        imagens_pendentes = []
-        for chamada in chamadas:
-            try:
-                argumentos = json.loads(chamada.function.arguments or "{}")
-            except json.JSONDecodeError:
-                argumentos = {}
-            nome = chamada.function.name
-            ids_validos = [i for i in argumentos.get("ids") or [] if i in fatos["candidatos"]]
-            if nome == "ver_detalhe":
-                if not ids_validos:
-                    saida = "Nenhum ID válido."
+    ultimo_custo = 0.0
+    try:
+        for _ in range(MAX_RODADAS):
+            # Trava preventiva: não faz uma chamada que provavelmente estouraria o limite.
+            if (custo_maximo_usd is not None and rastro["chamadas"]
+                    and rastro["custo_usd"] + ultimo_custo > custo_maximo_usd):
+                raise OrcamentoExcedido(
+                    f"Pedido interrompido antes da próxima chamada: US$ {rastro['custo_usd']:.4f} gastos, "
+                    f"a próxima custaria cerca de US$ {ultimo_custo:.4f} e o limite é US$ {custo_maximo_usd:.4f}."
+                )
+            opcoes = {"max_tokens": 6000}
+            if usar_ferramentas:
+                opcoes.update(tools=_ferramentas(), tool_choice="auto")
+            if not local:
+                opcoes["extra_body"] = {"provider": {"data_collection": "deny"}, "usage": {"include": True}}
+            resposta = cliente.chat.completions.create(model=modelo, messages=mensagens, **opcoes)
+            rastro["chamadas"] += 1
+            uso = getattr(resposta, "usage", None)
+            custo = getattr(uso, "cost", None) if uso else None
+            if custo is None and uso is not None:
+                custo = (getattr(uso, "model_extra", None) or {}).get("cost")
+            if custo is None and uso is not None and preco_por_token:
+                custo = (int(getattr(uso, "prompt_tokens", 0) or 0) * preco_por_token[0]
+                         + int(getattr(uso, "completion_tokens", 0) or 0) * preco_por_token[1])
+            ultimo_custo = float(custo or 0)
+            rastro["custo_usd"] += ultimo_custo
+            rastro.setdefault("tokens", {"entrada": 0, "saida": 0})
+            rastro["tokens"]["entrada"] += int(getattr(uso, "prompt_tokens", 0) or 0)
+            rastro["tokens"]["saida"] += int(getattr(uso, "completion_tokens", 0) or 0)
+            if custo_maximo_usd is not None and rastro["custo_usd"] > custo_maximo_usd:
+                raise OrcamentoExcedido(
+                    f"Pedido interrompido: US$ {rastro['custo_usd']:.4f} excede o limite de US$ {custo_maximo_usd:.4f}."
+                )
+            if not resposta.choices:
+                raise RuntimeError(f"O modelo {modelo} não devolveu resposta.")
+            mensagem = resposta.choices[0].message
+            if not usar_ferramentas:
+                # Resposta única: o validador aprova ou devolve os erros para correção.
+                mensagens.append({"role": "assistant", "content": mensagem.content or ""})
+                try:
+                    proposta = extrair_json_resposta(mensagem.content or "")
+                except RuntimeError as erro:
+                    erros = [str(erro)]
+                    proposta = {"itens": [], "perguntas": [], "observacoes": ""}
                 else:
-                    url = recorte(fatos, ids_validos, bool(argumentos.get("mostrar_filhos")))
-                    saida = _descrever_filhos(fatos, ids_validos) + ("\n(imagem ampliada a seguir)" if url else "\n(sem imagem)")
-                    if url:
-                        imagens_pendentes.append((f"Detalhe de {', '.join(ids_validos)}:", url))
-            elif nome == "medir_uniao":
-                if not ids_validos:
-                    saida = "Nenhum ID válido."
-                else:
-                    caixa = _caixa_uniao(fatos, ids_validos)
-                    saida = f"União de {', '.join(ids_validos)}: {caixa['direita'] - caixa['esquerda']:.2f} x {caixa['topo'] - caixa['base']:.2f} cm"
-            elif nome == "finalizar":
-                erros = validar(fatos, argumentos)
+                    erros = validar(fatos, proposta)
                 if erros and correcoes < MAX_CORRECOES:
                     correcoes += 1
                     rastro["correcoes"].append(erros)
-                    saida = "Rejeitado pelo validador. Corrija e chame finalizar novamente:\n- " + "\n- ".join(erros)
+                    mensagens.append({
+                        "role": "user",
+                        "content": "Corrija e responda de novo, só com o JSON:\n- " + "\n- ".join(erros),
+                    })
+                    continue
+                resposta_final = proposta
+                rastro["erros_restantes"] = erros
+                break
+            chamadas = mensagem.tool_calls or []
+            mensagens.append({
+                "role": "assistant", "content": mensagem.content or "",
+                **({"tool_calls": [c.model_dump() for c in chamadas]} if chamadas else {}),
+            })
+            if not chamadas:
+                mensagens.append({"role": "user", "content": "Use as ferramentas; entregue o resultado chamando `finalizar`."})
+                continue
+            imagens_pendentes = []
+            for chamada in chamadas:
+                try:
+                    argumentos = json.loads(chamada.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    argumentos = {}
+                nome = chamada.function.name
+                ids_validos = [i for i in argumentos.get("ids") or [] if i in fatos["candidatos"]]
+                if nome == "ver_detalhe":
+                    if not ids_validos:
+                        saida = "Nenhum ID válido."
+                    else:
+                        url = recorte(fatos, ids_validos, bool(argumentos.get("mostrar_filhos")))
+                        saida = _descrever_filhos(fatos, ids_validos) + ("\n(imagem ampliada a seguir)" if url else "\n(sem imagem)")
+                        if url:
+                            imagens_pendentes.append((f"Detalhe de {', '.join(ids_validos)}:", url))
+                elif nome == "medir_uniao":
+                    if not ids_validos:
+                        saida = "Nenhum ID válido."
+                    else:
+                        caixa = _caixa_uniao(fatos, ids_validos)
+                        saida = f"União de {', '.join(ids_validos)}: {caixa['direita'] - caixa['esquerda']:.2f} x {caixa['topo'] - caixa['base']:.2f} cm"
+                elif nome == "finalizar":
+                    erros = validar(fatos, argumentos)
+                    if erros and correcoes < MAX_CORRECOES:
+                        correcoes += 1
+                        rastro["correcoes"].append(erros)
+                        saida = "Rejeitado pelo validador. Corrija e chame finalizar novamente:\n- " + "\n- ".join(erros)
+                    else:
+                        resposta_final = argumentos
+                        rastro["erros_restantes"] = erros
+                        saida = "Recebido."
                 else:
-                    resposta_final = argumentos
-                    rastro["erros_restantes"] = erros
-                    saida = "Recebido."
-            else:
-                saida = f"Ferramenta desconhecida: {nome}"
-            mensagens.append({"role": "tool", "tool_call_id": chamada.id, "content": saida})
-        if resposta_final is not None:
-            break
-        if imagens_pendentes:
-            partes = []
-            for rotulo, url in imagens_pendentes:
-                partes += [{"type": "text", "text": rotulo}, {"type": "image_url", "image_url": {"url": url}}]
-            mensagens.append({"role": "user", "content": partes})
+                    saida = f"Ferramenta desconhecida: {nome}"
+                mensagens.append({"role": "tool", "tool_call_id": chamada.id, "content": saida})
+            if resposta_final is not None:
+                break
+            if imagens_pendentes:
+                partes = []
+                for rotulo, url in imagens_pendentes:
+                    partes += [{"type": "text", "text": rotulo}, {"type": "image_url", "image_url": {"url": url}}]
+                mensagens.append({"role": "user", "content": partes})
 
-    if resposta_final is None:
-        raise RuntimeError(f"O agente não finalizou em {MAX_RODADAS} rodadas.")
+        if resposta_final is None:
+            raise RuntimeError(f"O agente não finalizou em {MAX_RODADAS} rodadas.")
+    except Exception as erro:
+        # O custo já gasto não pode se perder quando o pedido é interrompido:
+        # sem isto, a trava de orçamento de quem chama subestima o gasto real.
+        erro.custo_usd = rastro["custo_usd"]
+        raise
     resultado = resultado_do_agente(fatos, resposta_final)
     rastro["duracao_s"] = round(perf_counter() - inicio, 1)
     rastro["resposta"] = resposta_final
