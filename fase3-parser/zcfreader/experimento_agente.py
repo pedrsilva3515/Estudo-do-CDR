@@ -90,8 +90,17 @@ def _contem_caixa(externa: dict, interna: dict, tolerancia_cm: float = 0.05) -> 
     )
 
 
-def _anotar_hierarquia(candidatos: list[dict]) -> None:
-    """Separa composições externas de detalhes internos sem apagar hipóteses."""
+def _coincide_caixa(a: dict, b: dict, tolerancia_cm: float = 0.15) -> bool:
+    return all(abs(a[chave] - b[chave]) <= tolerancia_cm for chave in ("esquerda", "direita", "base", "topo"))
+
+
+def _anotar_hierarquia(candidatos: list[dict], recipientes_powerclip: list[dict] | None = None) -> None:
+    """Separa composições externas de detalhes internos sem apagar hipóteses.
+
+    ``recipientes_powerclip`` são as caixas (cm) das máscaras de PowerClip. Um
+    PowerClip é uma peça única: o que está dentro da máscara é parte dela, e não
+    produto separado, ao contrário de uma montagem com vários produtos.
+    """
     for candidato in candidatos:
         caixa = candidato["caixa_cm"]
         area = _area_caixa(caixa)
@@ -133,6 +142,27 @@ def _anotar_hierarquia(candidatos: list[dict]) -> None:
             and not mesma_medida_repetida
             and proporcao_item >= 0.12
         )
+
+    for recipiente in recipientes_powerclip or []:
+        donos = [c for c in candidatos if _coincide_caixa(c["caixa_cm"], recipiente)]
+        dono = min(donos, key=lambda c: (c.get("origem") != "caixa_externa_rasa", c["id"]), default=None)
+        for candidato in donos:
+            if candidato is not dono:  # mesma caixa da máscara: duplicata da própria peça
+                candidato["visivel_inicialmente"] = False
+                candidato["pai_id"] = dono["id"]
+        for candidato in candidatos:
+            if candidato in donos or not _contem_caixa(recipiente, candidato["caixa_cm"], 0.15):
+                continue
+            candidato["interno_powerclip"] = True
+            candidato["visivel_inicialmente"] = False
+            if dono is not None and (candidato["pai_id"] is None or por_id[candidato["pai_id"]].get("visivel_inicialmente")):
+                candidato["pai_id"] = dono["id"]
+    if recipientes_powerclip:
+        # Peças internas continuam no catálogo (ver_detalhe mostra os filhos),
+        # mas não disputam com o produto na lista principal.
+        for candidato in candidatos:
+            if candidato.get("interno_powerclip"):
+                candidato["camada"] = max(candidato["camada"], 1)
 
     for candidato in candidatos:
         candidato["filhos_ids"] = [
@@ -867,6 +897,13 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
     with abrir_cdr(caminho) as doc:
         estrutura = list(_estrutura_visivel(doc))
         caixa_limites = doc.limites_conteudo(estrutura) if hasattr(doc, "limites_conteudo") else None
+        recipientes_powerclip = [
+            {
+                "esquerda": objeto.caixa.esquerda / 100_000, "direita": objeto.caixa.direita / 100_000,
+                "base": objeto.caixa.base / 100_000, "topo": objeto.caixa.topo / 100_000,
+            }
+            for objeto in estrutura if objeto.grupo_powerclip is not None and objeto.caixa is not None
+        ]
         profundos = _inventario_geometrico(doc)
         rasos = _candidatos_arte(doc)
         evidencias = _evidencias_textuais(doc)
@@ -918,7 +955,7 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
     ))
     for indice, item in enumerate(candidatos, 1):
         item["id"] = f"A{indice:02d}"
-    _anotar_hierarquia(candidatos)
+    _anotar_hierarquia(candidatos, recipientes_powerclip)
     blocos_producao = detectar_blocos_producao(candidatos, evidencias)
 
     limites = None
