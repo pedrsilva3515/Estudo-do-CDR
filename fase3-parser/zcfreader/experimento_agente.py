@@ -1,6 +1,7 @@
 """Protótipo somente leitura para validar seleção visual de objetos do Corel."""
 from __future__ import annotations
 
+from copy import deepcopy
 from io import BytesIO
 import json
 from pathlib import Path
@@ -92,6 +93,76 @@ def _contem_caixa(externa: dict, interna: dict, tolerancia_cm: float = 0.05) -> 
 
 def _coincide_caixa(a: dict, b: dict, tolerancia_cm: float = 0.15) -> bool:
     return all(abs(a[chave] - b[chave]) <= tolerancia_cm for chave in ("esquerda", "direita", "base", "topo"))
+
+
+def _caixa_cm(caixa) -> dict:
+    return {
+        "esquerda": caixa.esquerda / 100_000, "direita": caixa.direita / 100_000,
+        "base": caixa.base / 100_000, "topo": caixa.topo / 100_000,
+    }
+
+
+def _grupos_montagem(doc, estrutura: list) -> list[dict]:
+    """Grupos de topo que embrulham o pedido inteiro: várias artes + textos de quantidade.
+
+    Alguns clientes agrupam tudo (as artes e as instruções "6x", "3x") num único
+    grupo. Nesse caso o grupo não é um produto: cada filho direto que não é texto
+    é uma peça. Sem texto de quantidade dentro do grupo, ele pode ser uma arte
+    composta de várias partes, e nada muda.
+    """
+    textos = {(item.objeto.membro, item.objeto.offset_root): item.fluxo.texto for item in doc.textos_por_objeto() or ()}
+    montagens = []
+    for inicio, grupo in enumerate(estrutura):
+        if grupo.tipo != "grp" or grupo.ancestrais or grupo.caixa is None:
+            continue
+        fim = next((i for i in range(inicio + 1, len(estrutura)) if not estrutura[i].ancestrais), len(estrutura))
+        conteudo = estrutura[inicio + 1:fim]
+        filhos, com_quantidade = [], 0
+        for posicao, item in enumerate(conteudo):
+            if len(item.ancestrais) != 1 or item.caixa is None:
+                continue
+            if item.tipo == "obj" and item.tipo_objeto == "texto":
+                com_quantidade += parse_quantidade(textos.get((item.membro, item.offset_root), "")) is not None
+                continue
+            if item.tipo == "grp":
+                fim_filho = next((i for i in range(posicao + 1, len(conteudo)) if len(conteudo[i].ancestrais) <= 1),
+                                 len(conteudo))
+                partes = [o.caixa for o in conteudo[posicao + 1:fim_filho]
+                          if o.tipo == "obj" and o.tipo_objeto != "texto" and o.caixa is not None]
+                if not partes:
+                    continue
+                caixa = {
+                    "esquerda": min(c.esquerda for c in partes) / 100_000, "direita": max(c.direita for c in partes) / 100_000,
+                    "base": min(c.base for c in partes) / 100_000, "topo": max(c.topo for c in partes) / 100_000,
+                }
+                tipos = ["grupo"]
+            elif item.tipo == "obj":
+                caixa, tipos = _caixa_cm(item.caixa), [item.tipo_objeto or "desconhecido"]
+            else:
+                continue
+            if caixa["direita"] - caixa["esquerda"] >= 1 and caixa["topo"] - caixa["base"] >= 1:
+                filhos.append({"caixa_cm": caixa, "tipos": tipos})
+        if len(filhos) >= 2 and com_quantidade >= 1:
+            montagens.append({"caixa_cm": _caixa_cm(grupo.caixa), "filhos": filhos})
+    return montagens
+
+
+def _aplicar_montagens(candidatos: list[dict], montagens: list[dict]) -> None:
+    """Esconde o grupo que embrulha o pedido e mostra as peças de dentro dele."""
+    for montagem in montagens:
+        caixas_filhos = [f["caixa_cm"] for f in montagem["filhos"]]
+        uniao = {
+            "esquerda": min(c["esquerda"] for c in caixas_filhos), "direita": max(c["direita"] for c in caixas_filhos),
+            "base": min(c["base"] for c in caixas_filhos), "topo": max(c["topo"] for c in caixas_filhos),
+        }
+        for candidato in candidatos:
+            caixa = candidato["caixa_cm"]
+            if _coincide_caixa(caixa, montagem["caixa_cm"]) or _coincide_caixa(caixa, uniao):
+                candidato["visivel_inicialmente"] = False
+                candidato["grupo_montagem"] = True
+            elif any(_coincide_caixa(caixa, filho) for filho in caixas_filhos):
+                candidato["visivel_inicialmente"] = True
+                candidato["peca_de_montagem"] = True
 
 
 def _anotar_hierarquia(candidatos: list[dict], recipientes_powerclip: list[dict] | None = None) -> None:
@@ -907,6 +978,7 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
         profundos = _inventario_geometrico(doc)
         rasos = _candidatos_arte(doc)
         evidencias = _evidencias_textuais(doc)
+        montagens = _grupos_montagem(doc, estrutura)
 
     candidatos = []
     for item_bruto in profundos:
@@ -949,13 +1021,56 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
         if not duplicado:
             candidatos.append(proposta)
 
-    candidatos.sort(key=lambda item: (
-        item["caixa_cm"]["esquerda"], -item["caixa_cm"]["topo"],
-        -(item["largura_cm"] * item["altura_cm"]),
-    ))
-    for indice, item in enumerate(candidatos, 1):
-        item["id"] = f"A{indice:02d}"
+    def ordenar_e_numerar(lista: list[dict]) -> None:
+        lista.sort(key=lambda item: (
+            item["caixa_cm"]["esquerda"], -item["caixa_cm"]["topo"],
+            -(item["largura_cm"] * item["altura_cm"]),
+        ))
+        for indice, item in enumerate(lista, 1):
+            item["id"] = f"A{indice:02d}"
+
+    if montagens:
+        # Só vale como montagem o grupo cujas peças estavam escondidas. Se alguma
+        # já aparece como peça, o grupo já é lido direito (e os demais filhos
+        # podem ser blocos de texto em curvas, não produtos).
+        ensaio = deepcopy(candidatos)
+        ordenar_e_numerar(ensaio)
+        _anotar_hierarquia(ensaio, recipientes_powerclip)
+        def ja_aparece(candidato: dict, caixa: dict) -> bool:
+            # Peças repetidas têm uma caixa que cobre todas as cópias: compara medida e centros.
+            if not candidato.get("visivel_inicialmente", True):
+                return False
+            if _coincide_caixa(candidato["caixa_cm"], caixa):
+                return True
+            largura, altura = caixa["direita"] - caixa["esquerda"], caixa["topo"] - caixa["base"]
+            centro_x, centro_y = (caixa["esquerda"] + caixa["direita"]) / 2, (caixa["base"] + caixa["topo"]) / 2
+            return (
+                abs(candidato["largura_cm"] - largura) <= 0.15 and abs(candidato["altura_cm"] - altura) <= 0.15
+                and any(abs(p["x"] - centro_x) <= 0.15 and abs(p["y"] - centro_y) <= 0.15
+                        for p in candidato.get("posicoes_centro_cm") or [])
+            )
+
+        montagens = [
+            montagem for montagem in montagens
+            if not any(ja_aparece(c, filho["caixa_cm"]) for c in ensaio for filho in montagem["filhos"])
+        ]
+    for montagem in montagens:
+        for filho in montagem["filhos"]:
+            if any(_coincide_caixa(c["caixa_cm"], filho["caixa_cm"], 0.03) for c in candidatos):
+                continue
+            caixa = filho["caixa_cm"]
+            candidatos.append({
+                "origem": "peca_de_montagem", "quantidade_geometrica": 1,
+                "largura_cm": round(caixa["direita"] - caixa["esquerda"], 3),
+                "altura_cm": round(caixa["topo"] - caixa["base"], 3),
+                "posicoes_centro_cm": [{"x": (caixa["esquerda"] + caixa["direita"]) / 2,
+                                        "y": (caixa["base"] + caixa["topo"]) / 2}],
+                "tipos": filho["tipos"], "caixa_cm": caixa,
+            })
+
+    ordenar_e_numerar(candidatos)
     _anotar_hierarquia(candidatos, recipientes_powerclip)
+    _aplicar_montagens(candidatos, montagens)
     blocos_producao = detectar_blocos_producao(candidatos, evidencias)
 
     limites = None
