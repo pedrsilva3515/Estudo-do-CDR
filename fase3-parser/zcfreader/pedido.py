@@ -38,6 +38,12 @@ def parse_quantidade(texto: str) -> tuple[int, str] | None:
     return int(match.group("valor")), "unidade"
 
 
+_MODIFICADORES_ADESIVO = (
+    "branco", "fosco", "brilho", "brilhoso", "transparente", "trasnparente", "leitoso", "blackout",
+    "perfurado", "jateado", "refletivo", "super", "cola", "normal",
+)
+
+
 def parse_material(texto: str) -> dict | None:
     """Extrai material e acabamento de instruções usuais da gráfica."""
     normalizado = " ".join(texto.casefold().split())
@@ -61,6 +67,12 @@ def parse_material(texto: str) -> dict | None:
         material = "adesivo normal"
     else:
         material = "adesivo"
+    if not banner:
+        # "ADESIVO BRANCO FOSCO BLACKOUT" é outro material que "adesivo fosco":
+        # quando o texto descreve o adesivo com palavras conhecidas, vale a descrição inteira.
+        descricao = re.search(r"\b(?:adesivo|vinil)((?:\s+(?:" + "|".join(_MODIFICADORES_ADESIVO) + r"))+)\b", normalizado)
+        if descricao:
+            material = "adesivo " + " ".join(descricao.group(1).split()).replace("trasnparente", "transparente")
     if "somente recorte" in normalizado:
         acabamento = "somente recorte"
     elif "recorte especial" in normalizado or "com recorte" in normalizado:

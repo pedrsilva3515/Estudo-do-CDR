@@ -93,6 +93,17 @@ class TestInventarioGeometrico(unittest.TestCase):
 
 
 class TestMaterial(unittest.TestCase):
+    def test_descricao_completa_do_adesivo(self):
+        # "blackout" muda o material: não pode virar só "adesivo fosco" (pedido 4_etapa).
+        for texto, esperado in (
+            ("3 UNIDADES DE CADA IMPRIMIR NO ADESIVO BRANCO FOSCO BLACKOUT", "adesivo branco fosco blackout"),
+            ("VINIL FOSCO - CAIXA MONET", "adesivo fosco"),
+            ("VINIL SUPER COLA - TSCAR", "adesivo super cola"),
+            ("ADESIVO TRASNPARENTE", "adesivo transparente"),
+        ):
+            with self.subTest(texto=texto):
+                self.assertEqual(parse_material(texto)["material"], esperado)
+
     def test_material_e_acabamento(self):
         self.assertEqual(
             parse_material("adesivo transparente recortado\n15 unid"),

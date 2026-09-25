@@ -989,7 +989,14 @@ def resumir_catalogo_regional(catalogo: dict) -> dict:
         candidato_id = candidato["id"]
         material = materiais.get(candidato_id) or {}
         associacoes = quantidades.get(candidato_id, [])
-        valores_quantidade = {int(item["quantidade"]) for item in associacoes}
+        # "N de cada": o candidato pode reunir K artes diferentes do mesmo tamanho,
+        # então o total é N x K (a mesma regra que o validador do agente cobra).
+        valores_quantidade = {
+            int(item["quantidade"]) * (
+                int(item.get("quantidade_ocorrencias_desenhadas") or 1) if item.get("regra") == "quantidade_de_cada" else 1
+            )
+            for item in associacoes
+        }
         quantidade_pedido = next(iter(valores_quantidade)) if len(valores_quantidade) == 1 else None
         papel = material.get("papel_candidato", "sem_classificacao")
         conflitos_item = material.get("conflitos", [])
