@@ -34,12 +34,17 @@ class TestQuantidade(unittest.TestCase):
             ("Quantidade = 12", 12),
             ("30 UNI DE CADA", 30),
             ("60 UNI", 60),
+            ("50 ADESIVOS 8CM", 50),
+            ("1 ADESIVO 30 CM", 1),
+            ("2 LONAS 3X1", 2),
         ):
             with self.subTest(texto=texto):
                 self.assertEqual(parse_quantidade(texto), (esperado, "unidade"))
 
     def test_numero_sem_contexto_nao_e_quantidade(self):
         self.assertIsNone(parse_quantidade("Banner 90x120 cm"))
+        self.assertIsNone(parse_quantidade("ADESIVO 1,5 PLACAS"))
+        self.assertIsNone(parse_quantidade("LONA 440G"))
 
 
 class TestInventarioGeometrico(unittest.TestCase):

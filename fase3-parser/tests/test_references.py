@@ -115,3 +115,26 @@ class TestGeometriaLocalBitmap(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDescritorComCampo32Variavel(unittest.TestCase):
+    """Pedido real ("Adesivos Jerdson") traz 8 bytes tipo ponteiro em +32."""
+
+    def test_descritor_com_ponteiro_em_32_e_reconhecido(self):
+        import struct
+
+        from zcfreader.bitmaps import ArquivoBitmaps, ImagemBruta, RegistroBitmap
+        from zcfreader.references import parse_instancias_bitmap
+
+        imagem = ImagemBruta(3169, 3169, 24, 9508, 1000.0, 1000.0, b"")
+        bitmaps = ArquivoBitmaps([RegistroBitmap(1, 22, 0, imagem)])
+        descritor = (
+            struct.pack("<HHIIII", 2, 24, 3169, 3169, 1, 22)
+            + b"\x00" * 8 + b"\xff" * 4
+            + bytes.fromhex("20e7d45d46020000")
+            + struct.pack("<I", 5)
+        )
+        dados = b"\x00" * 7 + descritor + b"\x00" * 300
+        instancias = parse_instancias_bitmap(dados, "content/data/page1.dat", bitmaps)
+        self.assertEqual([i.offset for i in instancias], [7])
+        self.assertEqual(instancias[0].identificador_bitmap, 22)

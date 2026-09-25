@@ -21,9 +21,15 @@ _QUANTIDADE = re.compile(
 )
 
 
+# "50 ADESIVOS 8CM", "2 LONAS 3X1": o número antes do nome do produto é a quantidade.
+_QUANTIDADE_PRODUTO = re.compile(
+    r"(?i)(?<![\d,.])(?P<valor>\d+)\s*(?:adesivos?|lonas?|banners?|placas?|pe[çc]as?)\b"
+)
+
+
 def parse_quantidade(texto: str) -> tuple[int, str] | None:
-    """Reconhece formas usuais como ``1und``, ``2 un`` e ``qtd: 5``."""
-    match = _QUANTIDADE.search(texto.strip())
+    """Reconhece formas usuais como ``1und``, ``2 un``, ``qtd: 5`` e ``50 adesivos``."""
+    match = _QUANTIDADE.search(texto.strip()) or _QUANTIDADE_PRODUTO.search(texto)
     if match is None:
         match_qtd = re.search(r"(?i)\bq(?:td|uantidade)?\s*[:=-]?\s*(\d+)\b", texto)
         if match_qtd is None:
