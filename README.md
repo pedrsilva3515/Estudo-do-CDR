@@ -199,6 +199,21 @@ relatório.
 
 Para atualizar uma cópia existente, execute `git pull` na mesma branch.
 
+### Provas de regressão
+
+Todo pedido revisado e salvo como pacote (com o CDR incluído) vira uma prova.
+Antes de aceitar qualquer mudança na análise, refaça todas:
+
+```powershell
+$env:PYTHONPATH="fase3-parser"
+python scripts/provas.py            # compara com a referência; código 1 se algum pedido piorou
+python scripts/provas.py --gravar   # aceita o resultado atual como nova referência
+```
+
+Só usa os caminhos sem IA (gratuito e sempre igual). A referência fica em
+`Documents\LeitorPedidosCDR\provas\referencia.json`, fora do Git. O pior erro
+medido é `regras_decidem_errado`: as regras respondem sozinhas (sem IA) e erram.
+
 > Para continuar o trabalho em outro computador, comece por
 > [docs/RETOMADA.md](docs/RETOMADA.md). O documento registra branch, comandos,
 > estado dos testes, descobertas fechadas e o próximo estudo recomendado.
