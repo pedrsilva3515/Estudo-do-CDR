@@ -60,7 +60,9 @@ def medir_caso(cdr: Path, esperado: dict) -> dict:
     regras = comparar_tolerante(resultado_de_auditoria_regional(auditoria), deepcopy(esperado))
     decidem = regras_resolvem(auditoria)
     decidem_errado = decidem and not comparar_tolerante(resultado_das_regras(auditoria), deepcopy(esperado))["pedido_correto"]
-    candidatos = extrair_candidatos_agente(cdr)["candidatos"]
+    catalogo = extrair_candidatos_agente(cdr)
+    # A IA recebe também os blocos de produção (ex.: letras recortadas agrupadas).
+    candidatos = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
     return {
         "itens_esperados": len(esperado.get("itens") or []),
         "regras_pedido_correto": int(regras["pedido_correto"]),
