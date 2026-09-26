@@ -17,7 +17,8 @@ from .container import abrir_cdr
 
 _QUANTIDADE = re.compile(
     r"(?ix)(?:\bq(?:td|uantidade)?\s*[:=-]?\s*)?"
-    r"(?P<valor>\d+)\s*(?P<unidade>uni|un(?:d|id(?:ade)?s?)?|u(?:n)?|x)\b"
+    # "x" só é unidade quando não separa duas medidas: "6x" sim, "2,15 x 1,95" não.
+    r"(?<![\d,.])(?P<valor>\d+)\s*(?P<unidade>uni|un(?:d|id(?:ade)?s?)?|u(?:n)?|x(?!\s*\d))\b"
 )
 
 

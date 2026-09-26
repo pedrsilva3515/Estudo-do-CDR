@@ -45,6 +45,11 @@ class TestQuantidade(unittest.TestCase):
         self.assertIsNone(parse_quantidade("Banner 90x120 cm"))
         self.assertIsNone(parse_quantidade("ADESIVO 1,5 PLACAS"))
         self.assertIsNone(parse_quantidade("LONA 440G"))
+        # "x" entre duas medidas não é quantidade (pedido "lona fosca" lia 15 em "2,15 x 1,95").
+        self.assertIsNone(parse_quantidade("5,40 x 1,40"))
+        self.assertIsNone(parse_quantidade("10x20"))
+        self.assertEqual(parse_quantidade("Lona fosca com ilhoes _2,15 x 1,95_1 un"), (1, "unidade"))
+        self.assertEqual(parse_quantidade("6x"), (6, "unidade"))
 
 
 class TestInventarioGeometrico(unittest.TestCase):
