@@ -411,8 +411,31 @@ def associar_instrucoes_regionais(
             if elegiveis:
                 _, _, melhor = min(elegiveis, key=lambda item: (item[0], item[1]))
                 alvos = [(melhor, "quantidade_proxima", 0.9)]
+            else:
+                # Sem peça abaixo do texto: vale a peça logo acima ("20und" escrito embaixo da arte).
+                for candidato in principais:
+                    caixa = candidato["caixa_cm"]
+                    distancia_vertical = caixa["base"] - caixa_texto["topo"]
+                    if distancia_vertical < -0.2 or distancia_vertical > max(3.0, 0.25 * candidato["altura_cm"]):
+                        continue
+                    sobreposicao = _sobreposicao_horizontal(caixa_texto, caixa)
+                    centro_x = (caixa["esquerda"] + caixa["direita"]) / 2
+                    if sobreposicao >= 0.25 or caixa_texto["esquerda"] <= centro_x <= caixa_texto["direita"]:
+                        elegiveis.append((distancia_vertical, -sobreposicao, candidato))
+                if elegiveis:
+                    _, _, melhor = min(elegiveis, key=lambda item: (item[0], item[1]))
+                    alvos = [(melhor, "quantidade_abaixo", 0.88)]
 
         for candidato, regra, confianca in alvos:
+            # Em peças repetidas, qual cópia fica mais perto do texto.
+            centro_texto = ((caixa_texto["esquerda"] + caixa_texto["direita"]) / 2,
+                            (caixa_texto["base"] + caixa_texto["topo"]) / 2)
+            posicoes = candidato.get("posicoes_centro_cm") or []
+            ocorrencia = min(
+                range(len(posicoes)),
+                key=lambda i: (posicoes[i]["x"] - centro_texto[0]) ** 2 + (posicoes[i]["y"] - centro_texto[1]) ** 2,
+                default=None,
+            )
             associacoes.append({
                 "texto": texto, "confianca_ocr": leitura.get("confianca"),
                 "quantidade": valor, "candidato_id": candidato["id"],
@@ -420,12 +443,16 @@ def associar_instrucoes_regionais(
                 "largura_cm": round(candidato["largura_cm"], 3),
                 "altura_cm": round(candidato["altura_cm"], 3),
                 "regra": regra, "confianca_associacao": confianca,
+                "ocorrencia": ocorrencia,
                 "caixa_texto_cm": {chave: round(valor_caixa, 3) for chave, valor_caixa in caixa_texto.items()},
             })
     vistos = set()
     unicas = []
     for associacao in associacoes:
-        chave = (associacao["texto"].casefold(), associacao["candidato_id"], associacao["quantidade"])
+        # O mesmo texto repetido embaixo de cada cópia ("25und" / "25und") são instruções distintas.
+        caixa_texto = associacao["caixa_texto_cm"]
+        chave = (associacao["texto"].casefold(), associacao["candidato_id"], associacao["quantidade"],
+                 round(caixa_texto["esquerda"]), round(caixa_texto["base"]))
         if chave not in vistos:
             vistos.add(chave)
             unicas.append(associacao)
@@ -1113,6 +1140,13 @@ def resumir_catalogo_regional(catalogo: dict) -> dict:
             for item in associacoes
         }
         quantidade_pedido = next(iter(valores_quantidade)) if len(valores_quantidade) == 1 else None
+        # Peça repetida com um texto embaixo/em cima de cada cópia ("9 unid" e "1 unid"):
+        # cada texto vale para a sua cópia, então o pedido é a soma.
+        por_copia = [item for item in associacoes if item.get("regra") in {"quantidade_proxima", "quantidade_abaixo"}]
+        copias = int(candidato.get("quantidade_geometrica") or 1)
+        if (copias > 1 and len(por_copia) == len(associacoes) == copias
+                and len({item.get("ocorrencia") for item in por_copia}) == copias):
+            quantidade_pedido = sum(int(item["quantidade"]) for item in por_copia)
         papel = material.get("papel_candidato", "sem_classificacao")
         conflitos_item = material.get("conflitos", [])
         requer_confirmacao_quantidade = any(

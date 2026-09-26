@@ -23,7 +23,7 @@ _QUANTIDADE = re.compile(
 
 # "50 ADESIVOS 8CM", "2 LONAS 3X1": o número antes do nome do produto é a quantidade.
 _QUANTIDADE_PRODUTO = re.compile(
-    r"(?i)(?<![\d,.])(?P<valor>\d+)\s*(?:adesivos?|lonas?|banners?|placas?|pe[çc]as?)\b"
+    r"(?i)(?<![\d,.])(?P<valor>\d+)\s*(?:adesivos?|lonas?|banners?|placas?|pe[çc]as?|impress(?:[õo]es|[ãa]o)|c[óo]pias?)\b"
 )
 
 
