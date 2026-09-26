@@ -98,6 +98,11 @@ class TestInventarioGeometrico(unittest.TestCase):
 
 
 class TestMaterial(unittest.TestCase):
+    def test_material_so_como_palavra(self):
+        # OCR do nome desenhado "Qd_Institucional" contém "lona" no meio (pedido 6_etapa).
+        self.assertIsNone(parse_material("Qd_Instltuclonal_B"))
+        self.assertEqual(parse_material("LONA 440G")["material"], "lona")
+
     def test_descricao_completa_do_adesivo(self):
         # "blackout" muda o material: não pode virar só "adesivo fosco" (pedido 4_etapa).
         for texto, esperado in (

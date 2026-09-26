@@ -48,8 +48,10 @@ _MODIFICADORES_ADESIVO = (
 def parse_material(texto: str) -> dict | None:
     """Extrai material e acabamento de instruções usuais da gráfica."""
     normalizado = " ".join(texto.casefold().split())
-    adesivo = "adesivo" in normalizado or "vinil" in normalizado
-    banner = "banner" in normalizado or "lona" in normalizado
+    # Início de palavra: "Qd_Institucional" não é lona ("_" também separa palavras).
+    palavras = normalizado.replace("_", " ")
+    adesivo = re.search(r"\b(?:adesivo|vinil)", palavras) is not None
+    banner = re.search(r"\b(?:banner|lona)", palavras) is not None
     if adesivo and banner:
         return None  # documento misto: a associação precisa ser regional
     if not adesivo and not banner:
