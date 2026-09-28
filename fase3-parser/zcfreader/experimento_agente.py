@@ -605,10 +605,10 @@ def _especificacao_material(texto: str) -> dict | None:
     if "branco" in normalizado and valor_material == "adesivo":
         valor_material = "adesivo branco"
     acabamento = material.get("acabamento")
-    especiais = []
+    especiais = ["banner"] if acabamento == "banner" else []
     if "frente e verso" in normalizado:
         especiais.append("frente e verso")
-    if "ilh" in normalizado:
+    if re.search(r"\bilh", normalizado):
         especiais.append("ilhós")
     if "verniz" in normalizado:
         especiais.append("verniz")

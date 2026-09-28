@@ -98,6 +98,15 @@ class TestInventarioGeometrico(unittest.TestCase):
 
 
 class TestMaterial(unittest.TestCase):
+    def test_banner_e_lona_com_acabamento_banner(self):
+        self.assertEqual(parse_material("BANNER"), {"material": "lona", "acabamento": "banner"})
+
+    def test_brilhoso_nao_e_ilhos(self):
+        from zcfreader.experimento_agente import _especificacao_material
+
+        self.assertIsNone(_especificacao_material("VINIL BRILHOSO")["acabamento"])
+        self.assertEqual(_especificacao_material("Lona fosca com ilhoes")["acabamento"], "ilhós")
+
     def test_material_so_como_palavra(self):
         # OCR do nome desenhado "Qd_Institucional" contém "lona" no meio (pedido 6_etapa).
         self.assertIsNone(parse_material("Qd_Instltuclonal_B"))

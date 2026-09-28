@@ -302,6 +302,7 @@ Como decidir:
 - Legendas de área (ex.: "0,5022 M²") ajudam a conferir: área ÷ (largura × altura) = unidades.
 - Material e acabamento vêm de textos próximos ou de cabeçalhos que abrangem a peça; o nome do arquivo também é evidência.
 - Quando não houver como decidir com segurança, NÃO chute: registre uma pergunta objetiva para o operador.
+- Convenções da gráfica: "banner" é lona com acabamento de bastão e cordinha (material "lona", acabamento "banner"). Quando há linha de recorte em volta da arte, a medida do produto é a da linha de recorte.
 
 Resposta: chame a ferramenta `finalizar`. Cada item cita os IDs das peças e o ID do texto que prova a quantidade e o material. Itens sem prova serão rejeitados pelo validador."""
 
@@ -480,7 +481,8 @@ def validar(fatos: dict, resposta: dict) -> list[str]:
             if valor and not _cita(fatos, fonte, valor):
                 erros.append(f"Item {n}: {campo} '{valor}' sem texto que o comprove ({fonte!r}); cite o ID correto ou use null.")
         acabamento, material = item.get("acabamento"), item.get("material")
-        if acabamento and material and _termos(acabamento) and set(_termos(acabamento)) <= set(_termos(material)):
+        if (acabamento and material and _termos(acabamento) and "banner" not in str(acabamento).casefold()
+                and set(_termos(acabamento)) <= set(_termos(material))):
             erros.append(
                 f"Item {n}: acabamento '{acabamento}' repete o material; acabamento é o que se faz depois "
                 "da impressão (recorte, laminação, ilhós, bainha...). Se nenhum foi pedido, use null."

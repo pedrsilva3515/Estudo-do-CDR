@@ -57,7 +57,8 @@ def parse_material(texto: str) -> dict | None:
     if not adesivo and not banner:
         return None
     if banner:
-        material = "lona" if "lona" in normalizado else "banner"
+        # Na gráfica, banner é lona com acabamento de bastão e cordinha.
+        material = "lona"
     elif "transparente" in normalizado or "trasnparente" in normalizado:
         material = "adesivo transparente"
     elif "fosco" in normalizado:
@@ -84,6 +85,8 @@ def parse_material(texto: str) -> dict | None:
         acabamento = "sem recorte"
     elif re.search(r"\brecortad[oa]s?\b", normalizado):
         acabamento = "recortado"
+    elif re.search(r"\bbanners?\b", palavras):
+        acabamento = "banner"
     else:
         acabamento = None
     return {"material": material, "acabamento": acabamento}

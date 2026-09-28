@@ -259,7 +259,8 @@ class TestMateriaisRegionais(unittest.TestCase):
 
         resultado = {item["candidato_id"]: item for item in associar_materiais_acabamentos(catalogo)}
 
-        self.assertEqual(resultado["A01"]["material"], "banner")
+        self.assertEqual(resultado["A01"]["material"], "lona")  # banner = lona com acabamento banner
+        self.assertEqual(resultado["A01"]["acabamento"], "banner")
         self.assertEqual(resultado["A02"]["material"], "adesivo")
         self.assertEqual(resultado["A02"]["acabamento"], "sem recorte")
 
@@ -371,7 +372,7 @@ class TestMateriaisRegionais(unittest.TestCase):
 
         self.assertIsNone(resultado["material"])
         self.assertEqual(resultado["status_associacao"], "revisao_conflito")
-        self.assertEqual(resultado["conflitos"][0]["valores"], ["adesivo", "banner"])
+        self.assertEqual(resultado["conflitos"][0]["valores"], ["adesivo", "lona"])
         self.assertFalse(resultado["exportavel_automaticamente"])
 
     def test_divergencia_com_correcao_humana_preserva_evidencias(self):
