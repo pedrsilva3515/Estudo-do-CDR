@@ -1,74 +1,241 @@
-' Codigo da janela frmLeitor (Leitor de Pedidos CDR).
-' Cole tudo isto no codigo de um UserForm chamado frmLeitor.
-' Os botoes e a lista sao criados sozinhos quando a janela abre.
+' Código da janela frmLeitor (Leitor de Pedidos CDR) - versão 2, com correção.
+' Cole tudo isto no código de um UserForm chamado frmLeitor.
+' Os botões, a lista e os campos são criados sozinhos quando a janela abre.
 Option Explicit
 
 Private WithEvents lstItens As MSForms.ListBox
 Private WithEvents btnRegras As MSForms.CommandButton
 Private WithEvents btnIA As MSForms.CommandButton
+Private WithEvents btnAdicionar As MSForms.CommandButton
+Private WithEvents btnTrocar As MSForms.CommandButton
+Private WithEvents btnRemover As MSForms.CommandButton
+Private WithEvents btnAplicar As MSForms.CommandButton
+Private WithEvents btnSalvar As MSForms.CommandButton
 Private WithEvents btnFechar As MSForms.CommandButton
 Private lblStatus As MSForms.Label
+Private lblItem As MSForms.Label
+Private txtQtd As MSForms.TextBox
+Private txtMat As MSForms.TextBox
+Private txtAcab As MSForms.TextBox
+Private txtMotivo As MSForms.TextBox
+Private txtObs As MSForms.TextBox
+Private cmbOrQ As MSForms.ComboBox
+Private cmbOrM As MSForms.ComboBox
+Private cmbOrA As MSForms.ComboBox
 
+' Itens (1..nItens), inclusive os removidos (marcados, para não bagunçar os índices).
+Private itOrig() As Long          ' número do item na análise (0 = item novo)
+Private itQtd() As String
+Private itLarg() As Double, itAlt() As Double
+Private itMat() As String, itAcab() As String
+Private itOrQ() As String, itOrM() As String, itOrA() As String
+Private itPeca() As String        ' "analise" ou "corel"
+Private itMotivo() As String, itObjs() As String, itSit() As String
 Private itEsq() As Double, itDir() As Double, itBase() As Double, itTopo() As Double
-Private itTem() As Boolean
+Private itTem() As Boolean, itRemovido() As Boolean
 Private nItens As Long
+Private atual As Long
+Private linhaParaItem() As Long
 Private docAnalisado As String
+Private carregando As Boolean     ' evita o clique automático ao redesenhar a lista
+
+' ------------------------------------------------------------------ montagem da janela
+
+Private Function NovoBotao(ByVal nome As String, ByVal legenda As String, ByVal x As Single, ByVal y As Single, ByVal w As Single) As MSForms.CommandButton
+    Dim b As MSForms.CommandButton
+    Set b = Me.Controls.Add("Forms.CommandButton.1", nome)
+    b.Left = x: b.Top = y: b.Width = w: b.Height = 24: b.Caption = legenda
+    Set NovoBotao = b
+End Function
+
+Private Function NovoTexto(ByVal nome As String, ByVal x As Single, ByVal y As Single, ByVal w As Single) As MSForms.TextBox
+    Dim t As MSForms.TextBox
+    Set t = Me.Controls.Add("Forms.TextBox.1", nome)
+    t.Left = x: t.Top = y: t.Width = w: t.Height = 20
+    Set NovoTexto = t
+End Function
+
+Private Function NovoRotulo(ByVal legenda As String, ByVal x As Single, ByVal y As Single, ByVal w As Single) As MSForms.Label
+    Dim r As MSForms.Label
+    Set r = Me.Controls.Add("Forms.Label.1")
+    r.Left = x: r.Top = y + 3: r.Width = w: r.Height = 18: r.Caption = legenda
+    Set NovoRotulo = r
+End Function
+
+Private Function NovaOrigem(ByVal nome As String, ByVal x As Single, ByVal y As Single) As MSForms.ComboBox
+    Dim c As MSForms.ComboBox
+    Set c = Me.Controls.Add("Forms.ComboBox.1", nome)
+    c.Left = x: c.Top = y: c.Width = 150: c.Height = 20
+    c.Style = 2
+    c.AddItem "Estava no arquivo"
+    c.AddItem "Padrão da gráfica"
+    c.AddItem "Faltou no pedido"
+    c.ListIndex = 0
+    Set NovaOrigem = c
+End Function
 
 Private Sub UserForm_Initialize()
     Me.Caption = "Leitor de Pedidos"
-    Me.Width = 560
-    Me.Height = 340
+    Me.Width = 600
+    Me.Height = 480
 
-    Set lblStatus = Me.Controls.Add("Forms.Label.1", "lblStatus")
-    With lblStatus
-        .Left = 8: .Top = 6: .Width = 536: .Height = 30
-        .WordWrap = True
-        .Caption = "Abra o pedido no CorelDRAW e clique em Analisar."
-    End With
+    Set lblStatus = NovoRotulo("Abra o pedido no CorelDRAW e clique em Analisar.", 8, 4, 576)
+    lblStatus.Height = 28
+    lblStatus.WordWrap = True
 
     Set lstItens = Me.Controls.Add("Forms.ListBox.1", "lstItens")
     With lstItens
-        .Left = 8: .Top = 40: .Width = 536: .Height = 220
-        .ColumnCount = 5
-        .ColumnWidths = "24;50;110;200;140"
+        .Left = 8: .Top = 36: .Width = 576: .Height = 160
+        .ColumnCount = 6
+        .ColumnWidths = "22;46;100;150;130;110"
     End With
 
-    Set btnRegras = Me.Controls.Add("Forms.CommandButton.1", "btnRegras")
-    With btnRegras
-        .Left = 8: .Top = 270: .Width = 150: .Height = 26
-        .Caption = "Analisar (sem IA)"
-    End With
+    Set btnRegras = NovoBotao("btnRegras", "Analisar (sem IA)", 8, 202, 130)
+    Set btnIA = NovoBotao("btnIA", "Analisar com IA", 144, 202, 130)
+    Set btnAdicionar = NovoBotao("btnAdicionar", "Adicionar item da seleção", 404, 202, 180)
 
-    Set btnIA = Me.Controls.Add("Forms.CommandButton.1", "btnIA")
-    With btnIA
-        .Left = 166: .Top = 270: .Width = 150: .Height = 26
-        .Caption = "Analisar com IA"
-    End With
+    Set lblItem = NovoRotulo("Item selecionado: nenhum. Clique num item da lista.", 8, 234, 576)
+    lblItem.Font.Bold = True
 
-    Set btnFechar = Me.Controls.Add("Forms.CommandButton.1", "btnFechar")
-    With btnFechar
-        .Left = 464: .Top = 270: .Width = 80: .Height = 26
-        .Caption = "Fechar"
-    End With
+    NovoRotulo "Quantidade", 8, 256, 70
+    Set txtQtd = NovoTexto("txtQtd", 80, 256, 130)
+    Set cmbOrQ = NovaOrigem("cmbOrQ", 216, 256)
+    NovoRotulo "Material", 8, 280, 70
+    Set txtMat = NovoTexto("txtMat", 80, 280, 130)
+    Set cmbOrM = NovaOrigem("cmbOrM", 216, 280)
+    NovoRotulo "Acabamento", 8, 304, 70
+    Set txtAcab = NovoTexto("txtAcab", 80, 304, 130)
+    Set cmbOrA = NovaOrigem("cmbOrA", 216, 304)
+
+    Set btnAplicar = NovoBotao("btnAplicar", "Aplicar alterações", 404, 256, 180)
+    Set btnTrocar = NovoBotao("btnTrocar", "Trocar peça pela seleção", 404, 282, 180)
+    Set btnRemover = NovoBotao("btnRemover", "Remover item", 404, 308, 180)
+
+    NovoRotulo "Por que estava errado", 8, 332, 120
+    Set txtMotivo = NovoTexto("txtMotivo", 130, 332, 454)
+    NovoRotulo "Observação do pedido", 8, 362, 120
+    Set txtObs = NovoTexto("txtObs", 130, 362, 454)
+
+    Set btnSalvar = NovoBotao("btnSalvar", "Salvar correção", 8, 396, 160)
+    Set btnFechar = NovoBotao("btnFechar", "Fechar", 504, 396, 80)
 End Sub
+
+' ------------------------------------------------------------------ dados dos itens
+
+Private Sub Crescer(ByVal n As Long)
+    ReDim Preserve itOrig(1 To n): ReDim Preserve itQtd(1 To n)
+    ReDim Preserve itLarg(1 To n): ReDim Preserve itAlt(1 To n)
+    ReDim Preserve itMat(1 To n): ReDim Preserve itAcab(1 To n)
+    ReDim Preserve itOrQ(1 To n): ReDim Preserve itOrM(1 To n): ReDim Preserve itOrA(1 To n)
+    ReDim Preserve itPeca(1 To n): ReDim Preserve itMotivo(1 To n)
+    ReDim Preserve itObjs(1 To n): ReDim Preserve itSit(1 To n)
+    ReDim Preserve itEsq(1 To n): ReDim Preserve itDir(1 To n)
+    ReDim Preserve itBase(1 To n): ReDim Preserve itTopo(1 To n)
+    ReDim Preserve itTem(1 To n): ReDim Preserve itRemovido(1 To n)
+End Sub
+
+Private Function CodigoOrigem(ByVal c As MSForms.ComboBox) As String
+    Select Case c.ListIndex
+        Case 1: CodigoOrigem = "padrao_grafica"
+        Case 2: CodigoOrigem = "faltou_no_pedido"
+        Case Else: CodigoOrigem = "arquivo"
+    End Select
+End Function
+
+Private Function IndiceOrigem(ByVal codigo As String) As Long
+    Select Case codigo
+        Case "padrao_grafica": IndiceOrigem = 1
+        Case "faltou_no_pedido": IndiceOrigem = 2
+        Case Else: IndiceOrigem = 0
+    End Select
+End Function
+
+Private Function Marca(ByVal codigo As String) As String
+    If codigo = "padrao_grafica" Then Marca = " (padrão)"
+    If codigo = "faltou_no_pedido" Then Marca = " (faltou)"
+End Function
+
+Private Function Numero(ByVal x As Double) As String
+    Numero = Replace(CStr(Round(x, 3)), ",", ".")
+End Function
+
+Private Function Limpo(ByVal texto As String) As String
+    Limpo = Trim(Replace(Replace(Replace(texto, Chr(9), " "), Chr(13), " "), Chr(10), " "))
+End Function
+
+Private Sub AtualizarLista(Optional ByVal manter As Long = 0)
+    Dim k As Long, linha As Long
+    carregando = True
+    lstItens.Clear
+    ReDim linhaParaItem(0 To nItens + 1)
+    linha = 0
+    For k = 1 To nItens
+        If Not itRemovido(k) Then
+            lstItens.AddItem CStr(linha + 1)
+            lstItens.List(linha, 1) = itQtd(k) & " un" & Marca(itOrQ(k))
+            lstItens.List(linha, 2) = Format(itLarg(k), "0.0#") & " x " & Format(itAlt(k), "0.0#") & " cm"
+            lstItens.List(linha, 3) = itMat(k) & Marca(itOrM(k))
+            lstItens.List(linha, 4) = itAcab(k) & Marca(itOrA(k))
+            lstItens.List(linha, 5) = itSit(k)
+            linhaParaItem(linha) = k
+            If k = manter Then lstItens.ListIndex = linha
+            linha = linha + 1
+        End If
+    Next k
+    carregando = False
+End Sub
+
+Private Sub MostrarItem(ByVal k As Long)
+    atual = k
+    If k = 0 Then
+        lblItem.Caption = "Item selecionado: nenhum. Clique num item da lista."
+        txtQtd.Text = "": txtMat.Text = "": txtAcab.Text = "": txtMotivo.Text = ""
+        cmbOrQ.ListIndex = 0: cmbOrM.ListIndex = 0: cmbOrA.ListIndex = 0
+        Exit Sub
+    End If
+    lblItem.Caption = "Item selecionado: " & Format(itLarg(k), "0.0#") & " x " & Format(itAlt(k), "0.0#") & " cm" _
+        & IIf(itPeca(k) = "corel", "  (peça escolhida no Corel)", "")
+    txtQtd.Text = itQtd(k): txtMat.Text = itMat(k): txtAcab.Text = itAcab(k)
+    txtMotivo.Text = itMotivo(k)
+    cmbOrQ.ListIndex = IndiceOrigem(itOrQ(k))
+    cmbOrM.ListIndex = IndiceOrigem(itOrM(k))
+    cmbOrA.ListIndex = IndiceOrigem(itOrA(k))
+End Sub
+
+Private Function PainelAlterado() As Boolean
+    If atual = 0 Then Exit Function
+    PainelAlterado = (txtQtd.Text <> itQtd(atual)) Or (txtMat.Text <> itMat(atual)) Or (txtAcab.Text <> itAcab(atual)) _
+        Or (txtMotivo.Text <> itMotivo(atual)) Or (CodigoOrigem(cmbOrQ) <> itOrQ(atual)) _
+        Or (CodigoOrigem(cmbOrM) <> itOrM(atual)) Or (CodigoOrigem(cmbOrA) <> itOrA(atual))
+End Function
+
+Private Function DocumentoCerto() As Boolean
+    If docAnalisado = "" Then
+        MsgBox "Analise o arquivo primeiro.", 0
+        Exit Function
+    End If
+    If Documents.Count = 0 Then Exit Function
+    If ActiveDocument.FullFileName <> docAnalisado Then
+        MsgBox "O arquivo ativo no Corel não é o que foi analisado.", 0
+        Exit Function
+    End If
+    DocumentoCerto = True
+End Function
+
+' ------------------------------------------------------------------ análise
 
 Private Sub btnRegras_Click()
     Analisar "regras"
 End Sub
 
 Private Sub btnIA_Click()
-    If MsgBox("A analise com IA usa o modelo configurado no aplicativo e pode ter custo." & Chr(13) _
+    If MsgBox("A análise com IA usa o modelo configurado no aplicativo e pode ter custo." & Chr(13) _
               & "Continuar?", 4) <> 6 Then Exit Sub
     Analisar "ia"
 End Sub
 
-Private Sub btnFechar_Click()
-    Unload Me
-End Sub
-
 Private Sub Analisar(ByVal modo As String)
-    Dim linhas As Collection, l As Variant, partes As Variant
-    Dim info As String, perguntas As String, total As Long
+    Dim linhas As Collection, l As Variant, partes As Variant, info As String, perguntas As String
 
     If Documents.Count = 0 Then
         MsgBox "Nenhum arquivo aberto no CorelDRAW.", 0
@@ -79,27 +246,28 @@ Private Sub Analisar(ByVal modo As String)
         Exit Sub
     End If
     If ActiveDocument.Dirty Then
-        If MsgBox("O arquivo tem alteracoes nao salvas. A analise le a versao salva no disco." & Chr(13) _
+        If MsgBox("O arquivo tem alterações não salvas. A análise lê a versão salva no disco." & Chr(13) _
                   & "Continuar mesmo assim?", 4) <> 6 Then Exit Sub
     End If
 
+    carregando = True
     lstItens.Clear
+    carregando = False
     nItens = 0
+    docAnalisado = ""
+    MostrarItem 0
+    txtObs.Text = ""
     lblStatus.Caption = "Analisando " & ActiveDocument.FileName & " ... (pode levar alguns segundos)"
     Me.Repaint
     DoEvents
 
     Set linhas = RodarAnalise(ActiveDocument.FullFileName, modo)
-    total = linhas.Count + 1
-    ReDim itEsq(1 To total): ReDim itDir(1 To total)
-    ReDim itBase(1 To total): ReDim itTopo(1 To total)
-    ReDim itTem(1 To total)
-
+    Crescer linhas.Count + 1
     For Each l In linhas
         partes = Split(l, Chr(9))
         Select Case partes(0)
         Case "ERRO"
-            lblStatus.Caption = "Erro na analise: " & partes(1)
+            lblStatus.Caption = "Erro na análise: " & partes(1)
             Exit Sub
         Case "INFO"
             info = "Resolvido por: " & partes(1) & "  |  " & partes(2) & " s"
@@ -107,13 +275,16 @@ Private Sub Analisar(ByVal modo As String)
         Case "ITEM"
             If UBound(partes) >= 11 Then
                 nItens = nItens + 1
-                lstItens.AddItem partes(1)
-                lstItens.List(nItens - 1, 1) = partes(2) & " un"
-                lstItens.List(nItens - 1, 2) = Format(Val(partes(3)), "0.0#") & " x " & Format(Val(partes(4)), "0.0#") & " cm"
-                lstItens.List(nItens - 1, 3) = partes(5)
-                lstItens.List(nItens - 1, 4) = Trim(partes(6) & " " & IIf(partes(11) = "a confirmar", "(a confirmar)", ""))
-                If partes(7) <> "" Then
-                    itTem(nItens) = True
+                itOrig(nItens) = nItens
+                itQtd(nItens) = partes(2)
+                itLarg(nItens) = Val(partes(3)): itAlt(nItens) = Val(partes(4))
+                itMat(nItens) = partes(5): itAcab(nItens) = partes(6)
+                itOrQ(nItens) = "arquivo": itOrM(nItens) = "arquivo": itOrA(nItens) = "arquivo"
+                itPeca(nItens) = "analise": itMotivo(nItens) = "": itObjs(nItens) = ""
+                itSit(nItens) = IIf(partes(11) = "a confirmar", "a confirmar", "")
+                itRemovido(nItens) = False
+                itTem(nItens) = (partes(7) <> "")
+                If itTem(nItens) Then
                     itEsq(nItens) = Val(partes(7)): itDir(nItens) = Val(partes(8))
                     itBase(nItens) = Val(partes(9)): itTopo(nItens) = Val(partes(10))
                 End If
@@ -126,27 +297,160 @@ Private Sub Analisar(ByVal modo As String)
     docAnalisado = ActiveDocument.FullFileName
     CarregarFormas
     CalibrarDeslocamento itEsq, itDir, itBase, itTopo, itTem, nItens
-    lblStatus.Caption = info & "  |  " & nItens & " item(ns). Clique num item para selecionar a peca no desenho."
+    AtualizarLista
+    lblStatus.Caption = info & "  |  " & nItens & " item(ns). Clique num item para ver a peça no desenho e corrigir."
     If perguntas <> "" Then MsgBox "Perguntas para o operador:" & perguntas, 0
 End Sub
 
+' ------------------------------------------------------------------ correção
+
 Private Sub lstItens_Click()
     Dim k As Long, n As Long
-    k = lstItens.ListIndex + 1
-    If k < 1 Or k > nItens Then Exit Sub
-    If Documents.Count = 0 Then Exit Sub
-    If ActiveDocument.FullFileName <> docAnalisado Then
-        lblStatus.Caption = "O arquivo ativo nao e o que foi analisado. Analise de novo."
+    If carregando Then Exit Sub
+    If lstItens.ListIndex < 0 Then Exit Sub
+    k = linhaParaItem(lstItens.ListIndex)
+    If k = atual Then Exit Sub
+    If PainelAlterado() Then
+        If MsgBox("Você alterou o item anterior e não clicou em Aplicar. Aplicar agora?", 4) = 6 Then
+            If Not AplicarPainel() Then Exit Sub
+        End If
+    End If
+    MostrarItem k
+    If Not DocumentoCerto() Then Exit Sub
+    If itTem(k) Then
+        n = SelecionarRegiao(itEsq(k), itDir(k), itBase(k), itTopo(k))
+        If n = 0 Then lblStatus.Caption = "Não encontrei a peça deste item no desenho."
+    End If
+End Sub
+
+Private Function AplicarPainel() As Boolean
+    If atual = 0 Then Exit Function
+    If Val(txtQtd.Text) < 1 Then
+        MsgBox "Quantidade inválida.", 0
+        Exit Function
+    End If
+    itQtd(atual) = CStr(CLng(Val(txtQtd.Text)))
+    itMat(atual) = Limpo(txtMat.Text)
+    itAcab(atual) = Limpo(txtAcab.Text)
+    itMotivo(atual) = Limpo(txtMotivo.Text)
+    itOrQ(atual) = CodigoOrigem(cmbOrQ)
+    itOrM(atual) = CodigoOrigem(cmbOrM)
+    itOrA(atual) = CodigoOrigem(cmbOrA)
+    If itOrig(atual) > 0 And itSit(atual) <> "peça do Corel" Then itSit(atual) = "editado"
+    AtualizarLista atual
+    MostrarItem atual
+    AplicarPainel = True
+End Function
+
+Private Sub btnAplicar_Click()
+    If atual = 0 Then
+        MsgBox "Clique primeiro num item da lista.", 0
         Exit Sub
     End If
-    If Not itTem(k) Then
-        lblStatus.Caption = "Item " & k & ": a analise nao informou a posicao da peca."
+    If AplicarPainel() Then lblStatus.Caption = "Alterações aplicadas. Quando terminar, clique em Salvar correção."
+End Sub
+
+Private Sub btnTrocar_Click()
+    Dim e As Double, d As Double, b As Double, t As Double, objs As String
+    If atual = 0 Then
+        MsgBox "Clique primeiro no item que está com a peça errada.", 0
         Exit Sub
     End If
-    n = SelecionarRegiao(itEsq(k), itDir(k), itBase(k), itTopo(k))
-    If n > 0 Then
-        lblStatus.Caption = "Item " & k & ": " & n & " objeto(s) selecionado(s) no desenho."
+    If Not DocumentoCerto() Then Exit Sub
+    If LerSelecao(e, d, b, t, objs) = 0 Then
+        MsgBox "Selecione no Corel a peça certa (pode ser mais de um objeto) e clique de novo.", 0
+        Exit Sub
+    End If
+    itEsq(atual) = e: itDir(atual) = d: itBase(atual) = b: itTopo(atual) = t
+    itTem(atual) = True
+    itLarg(atual) = d - e: itAlt(atual) = t - b
+    itPeca(atual) = "corel": itObjs(atual) = objs
+    itSit(atual) = "peça do Corel"
+    AtualizarLista atual
+    MostrarItem atual
+    lblStatus.Caption = "Peça trocada: " & Format(d - e, "0.0#") & " x " & Format(t - b, "0.0#") & " cm."
+End Sub
+
+Private Sub btnRemover_Click()
+    If atual = 0 Then
+        MsgBox "Clique primeiro no item que não existe no pedido.", 0
+        Exit Sub
+    End If
+    If MsgBox("Remover este item? (ele não faz parte do pedido)", 4) <> 6 Then Exit Sub
+    itRemovido(atual) = True
+    MostrarItem 0
+    AtualizarLista
+    lblStatus.Caption = "Item removido. Quando terminar, clique em Salvar correção."
+End Sub
+
+Private Sub btnAdicionar_Click()
+    Dim e As Double, d As Double, b As Double, t As Double, objs As String
+    If Not DocumentoCerto() Then Exit Sub
+    If LerSelecao(e, d, b, t, objs) = 0 Then
+        MsgBox "Selecione no Corel a peça que ficou faltando e clique de novo.", 0
+        Exit Sub
+    End If
+    If PainelAlterado() Then
+        If MsgBox("Você alterou o item anterior e não clicou em Aplicar. Aplicar agora?", 4) = 6 Then AplicarPainel
+    End If
+    nItens = nItens + 1
+    Crescer nItens
+    itOrig(nItens) = 0
+    itQtd(nItens) = "1": itMat(nItens) = "": itAcab(nItens) = ""
+    itOrQ(nItens) = "arquivo": itOrM(nItens) = "arquivo": itOrA(nItens) = "arquivo"
+    itMotivo(nItens) = "": itRemovido(nItens) = False
+    itEsq(nItens) = e: itDir(nItens) = d: itBase(nItens) = b: itTopo(nItens) = t
+    itTem(nItens) = True
+    itLarg(nItens) = d - e: itAlt(nItens) = t - b
+    itPeca(nItens) = "corel": itObjs(nItens) = objs
+    itSit(nItens) = "novo"
+    AtualizarLista nItens
+    MostrarItem nItens
+    lblStatus.Caption = "Item novo criado. Preencha quantidade, material e acabamento e clique em Aplicar alterações."
+    txtQtd.SetFocus
+End Sub
+
+Private Sub btnSalvar_Click()
+    Dim k As Long, conteudo As String, resposta As String, partes As Variant, restantes As Long
+    If Not DocumentoCerto() Then Exit Sub
+    If PainelAlterado() Then
+        If MsgBox("Você alterou o item e não clicou em Aplicar. Aplicar antes de salvar?", 4) = 6 Then
+            If Not AplicarPainel() Then Exit Sub
+        End If
+    End If
+    For k = 1 To nItens
+        If Not itRemovido(k) Then restantes = restantes + 1
+    Next k
+    If restantes = 0 Then
+        If MsgBox("Nenhum item no pedido. Salvar assim mesmo?", 4) <> 6 Then Exit Sub
+    End If
+
+    conteudo = "OBS" & Chr(9) & Limpo(txtObs.Text)
+    For k = 1 To nItens
+        If Not itRemovido(k) Then
+            conteudo = conteudo & Chr(13) & Chr(10) & Join(Array("ITEM", CStr(itOrig(k)), itQtd(k), _
+                Numero(itLarg(k)), Numero(itAlt(k)), Limpo(itMat(k)), Limpo(itAcab(k)), _
+                itOrQ(k), itOrM(k), itOrA(k), itPeca(k), _
+                IIf(itTem(k), Numero(itEsq(k)), ""), IIf(itTem(k), Numero(itDir(k)), ""), _
+                IIf(itTem(k), Numero(itBase(k)), ""), IIf(itTem(k), Numero(itTopo(k)), ""), _
+                Limpo(itMotivo(k)), itObjs(k)), Chr(9))
+        End If
+    Next k
+
+    lblStatus.Caption = "Salvando a correção..."
+    Me.Repaint
+    DoEvents
+    resposta = SalvarCorrecao(docAnalisado, conteudo)
+    partes = Split(resposta, Chr(9))
+    If partes(0) = "OK" Then
+        lblStatus.Caption = "Correção salva: " & partes(1)
+        MsgBox "Correção salva como pacote de revisão:" & Chr(13) & partes(1), 0
     Else
-        lblStatus.Caption = "Item " & k & ": nao encontrei a peca no desenho."
+        lblStatus.Caption = "Erro ao salvar."
+        MsgBox "Não consegui salvar a correção:" & Chr(13) & resposta, 0
     End If
+End Sub
+
+Private Sub btnFechar_Click()
+    Unload Me
 End Sub

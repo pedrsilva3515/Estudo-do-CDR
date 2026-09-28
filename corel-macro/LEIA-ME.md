@@ -5,8 +5,11 @@ ao clicar num item, seleciona no desenho a peça que o programa interpretou.
 A análise roda fora do Corel, pela pasta `Documentos\Estudo-do-CDR` (a mesma
 do aplicativo), chamada por `scripts\ponte_corel.bat`.
 
-Versão 1: analisar, mostrar os itens e selecionar a peça. A correção pela
-seleção no Corel vem na versão 2.
+Versão 2: analisar, mostrar os itens, selecionar a peça e corrigir pelo
+próprio Corel (editar, remover, trocar a peça pela seleção, adicionar item da
+seleção). "Salvar correção" grava o pacote de revisão no mesmo formato do
+aplicativo (pasta Documentos\LeitorPedidosCDR\Relatorios), com o CDR se essa
+opção estiver ligada no aplicativo; o pacote entra nas provas.
 
 ## Instalar (uma vez)
 
@@ -29,6 +32,19 @@ seleção no Corel vem na versão 2.
 - **Analisar com IA**: o mesmo fluxo do aplicativo (regras, depois a IA
   configurada no aplicativo).
 - Clique num item da lista: a peça fica selecionada e a tela aproxima nela.
+
+## Corrigir
+
+- **Editar**: clique no item, mude quantidade, material ou acabamento, marque
+  de onde veio cada um (Estava no arquivo / Padrão da gráfica / Faltou no
+  pedido) e clique **Aplicar alterações**.
+- **Peça errada**: clique no item, selecione no Corel a peça certa (pode ser
+  mais de um objeto) e clique **Trocar peça pela seleção**. A medida vem do Corel.
+- **Item a mais**: clique no item e em **Remover item**.
+- **Item que faltou**: selecione a peça no Corel e clique **Adicionar item da
+  seleção**; depois preencha e aplique.
+- **Salvar correção** no final. Se estava tudo certo, salvar sem mudar nada
+  registra o pedido como confirmado.
 
 ## Atualizar
 

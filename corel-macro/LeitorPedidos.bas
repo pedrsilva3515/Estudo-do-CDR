@@ -26,24 +26,29 @@ Private Function ArquivoResultado() As String
     ArquivoResultado = Environ("TEMP") & "\leitor_corel_resultado.txt"
 End Function
 
+' Chama scripts\ponte_corel.bat (analise ou gravacao). Devolve False se o .bat nao existe.
+Private Function RodarPonte(ByVal arg1 As String, ByVal arg2 As String, ByVal modo As String) As Boolean
+    Dim bat As String, comando As String
+    bat = PastaProjeto() & "\scripts\ponte_corel.bat"
+    If Dir(bat) = "" Then Exit Function
+    comando = "cmd /c " & Chr(34) & Chr(34) & bat & Chr(34) & " " & Chr(34) & arg1 & Chr(34) _
+        & " " & Chr(34) & arg2 & Chr(34) & " " & modo & Chr(34)
+    CreateObject("WScript.Shell").Run comando, 0, True
+    RodarPonte = True
+End Function
+
 ' Roda a analise (fora do Corel) e devolve as linhas do resultado.
 Public Function RodarAnalise(ByVal caminho As String, ByVal modo As String) As Collection
     Dim linhas As New Collection
-    Dim saida As String, bat As String, comando As String
-    Dim f As Integer, linha As String
+    Dim saida As String, f As Integer, linha As String
 
     saida = ArquivoResultado()
     If Dir(saida) <> "" Then Kill saida
-    bat = PastaProjeto() & "\scripts\ponte_corel.bat"
-    If Dir(bat) = "" Then
-        linhas.Add "ERRO" & Chr(9) & "Nao encontrei " & bat
+    If Not RodarPonte(caminho, saida, modo) Then
+        linhas.Add "ERRO" & Chr(9) & "Nao encontrei " & PastaProjeto() & "\scripts\ponte_corel.bat"
         Set RodarAnalise = linhas
         Exit Function
     End If
-
-    comando = "cmd /c " & Chr(34) & Chr(34) & bat & Chr(34) & " " & Chr(34) & caminho & Chr(34) _
-        & " " & Chr(34) & saida & Chr(34) & " " & modo & Chr(34)
-    CreateObject("WScript.Shell").Run comando, 0, True
 
     If Dir(saida) = "" Then
         linhas.Add "ERRO" & Chr(9) & "A analise nao gerou resultado."
@@ -57,6 +62,53 @@ Public Function RodarAnalise(ByVal caminho As String, ByVal modo As String) As C
         Close #f
     End If
     Set RodarAnalise = linhas
+End Function
+
+' Grava a correcao como pacote de revisao (mesmo formato do aplicativo).
+' Devolve "OK<TAB>caminho do pacote" ou "ERRO<TAB>mensagem".
+Public Function SalvarCorrecao(ByVal cdr As String, ByVal conteudo As String) As String
+    Dim arq As String, resposta As String, f As Integer, linha As String
+    arq = Environ("TEMP") & "\leitor_corel_correcao.txt"
+    resposta = arq & ".ok"
+    If Dir(resposta) <> "" Then Kill resposta
+    f = FreeFile
+    Open arq For Output As #f
+    Print #f, "ORIGINAL" & Chr(9) & ArquivoResultado() & ".json"
+    Print #f, conteudo
+    Close #f
+    If Not RodarPonte(cdr, arq, "salvar") Then
+        SalvarCorrecao = "ERRO" & Chr(9) & "Nao encontrei " & PastaProjeto() & "\scripts\ponte_corel.bat"
+        Exit Function
+    End If
+    If Dir(resposta) = "" Then
+        SalvarCorrecao = "ERRO" & Chr(9) & "A gravacao nao respondeu."
+        Exit Function
+    End If
+    f = FreeFile
+    Open resposta For Input As #f
+    Line Input #f, linha
+    Close #f
+    SalvarCorrecao = linha
+End Function
+
+' Le a selecao atual do Corel: caixa (cm, nas coordenadas da analise) e a lista
+' dos objetos (StaticID:tipo). Devolve quantos objetos estao selecionados.
+Public Function LerSelecao(ByRef e As Double, ByRef d As Double, ByRef b As Double, ByRef t As Double, _
+                           ByRef objs As String) As Long
+    Dim sr As ShapeRange, unidade As Long, i As Long
+    Set sr = ActiveSelectionRange
+    If sr Is Nothing Then Exit Function
+    If sr.Count = 0 Then Exit Function
+    unidade = ActiveDocument.Unit
+    ActiveDocument.Unit = 4
+    e = sr.LeftX - mDx: d = sr.RightX - mDx
+    b = sr.BottomY - mDy: t = sr.TopY - mDy
+    objs = ""
+    For i = 1 To sr.Count
+        objs = objs & CStr(sr(i).StaticID) & ":" & CStr(sr(i).Type) & ";"
+    Next i
+    ActiveDocument.Unit = unidade
+    LerSelecao = sr.Count
 End Function
 
 ' Guarda a caixa (em cm) de todos os objetos da pagina, inclusive dentro de grupos.

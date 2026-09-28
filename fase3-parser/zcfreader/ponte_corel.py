@@ -52,7 +52,7 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
         resultado = resultado_das_regras(auditoria)
         for item in resultado["itens"]:
             item["situacao"] = "regras"
-        return {"itens": resultado["itens"], "perguntas_operador": [], "processamento": {"camada_final": "regras"}}
+        return {"itens": resultado["itens"], "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras"}}
     itens = []
     for regra in auditoria.get("itens") or []:
         if regra.get("papel") not in {"produto_confirmado", "produto_plausivel"}:
@@ -66,7 +66,7 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
             "candidatos": [regra["candidato_id"]],
             "situacao": "a confirmar",
         })
-    return {"itens": itens, "perguntas_operador": [], "processamento": {"camada_final": "regras (a confirmar)"}}
+    return {"itens": itens, "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras (a confirmar)"}}
 
 
 def _analisar_ia(caminho: Path, fatos: dict) -> dict:
@@ -110,8 +110,114 @@ def linhas_de_saida(resultado: dict, candidatos: dict, duracao_s: float) -> list
     return linhas
 
 
+_ORIGENS_VALIDAS = {"arquivo", "padrao_grafica", "faltou_no_pedido"}
+
+
+def _numero_ou_none(texto: str) -> float | None:
+    try:
+        return float(texto.replace(",", "."))
+    except (AttributeError, ValueError):
+        return None
+
+
+def resultado_corrigido(original: dict, linhas: list[str]) -> tuple[dict, str]:
+    """Monta o resultado correto a partir do arquivo de correção escrito pela macro.
+
+    Linhas (TAB):
+        OBS   texto
+        ITEM  n_original  quantidade  largura_cm  altura_cm  material  acabamento
+              origem_quantidade  origem_material  origem_acabamento  peca  esquerda  direita  base  topo
+              motivo  objetos
+    ``n_original`` 0 = item novo; ``peca`` "corel" = peça escolhida selecionando no CorelDRAW.
+    """
+    from copy import deepcopy
+
+    from .origem_campos import definir_origens
+
+    originais = original.get("itens") or []
+    itens, observacao = [], ""
+    for linha in linhas:
+        campos = linha.rstrip("\r\n").split("\t")
+        if campos[0] == "OBS" and len(campos) > 1:
+            observacao = campos[1].strip()
+        if campos[0] != "ITEM" or len(campos) < 17:
+            continue
+        indice_original = int(campos[1] or 0)
+        base = deepcopy(originais[indice_original - 1]) if 0 < indice_original <= len(originais) else {}
+        item = base
+        quantidade = int(float(campos[2] or 0) or 1)
+        largura, altura = _numero_ou_none(campos[3]) or 0.0, _numero_ou_none(campos[4]) or 0.0
+        antes_dim = base.get("dimensoes") or {}
+
+        if (base.get("quantidade") or {}).get("valor") != quantidade:
+            item["quantidade"] = {"valor": quantidade, "unidade": "unidade", "fonte": "correcao_operador", "confianca": 1.0}
+        for campo, valor in (("material", campos[5]), ("acabamento", campos[6])):
+            valor = valor.strip() or None
+            if (base.get(campo) or {}).get("valor") != valor:
+                item[campo] = {"valor": valor, "fonte": "correcao_operador", "confianca": 1.0}
+
+        if campos[10] == "corel" or not antes_dim:
+            item["dimensoes"] = {
+                "largura_mm": round(largura * 10, 3), "altura_mm": round(altura * 10, 3),
+                "tipo": "peca_indicada_pelo_operador", "fonte": "correcao_operador", "confianca": 1.0,
+            }
+        caixa = [_numero_ou_none(c) for c in campos[11:15]]
+        if all(v is not None for v in caixa):
+            item["caixa_cm"] = dict(zip(("esquerda", "direita", "base", "topo"), caixa))
+        if campos[10] == "corel":
+            item["peca_correta"] = {
+                "origem": "selecao_corel", "largura_cm": largura, "altura_cm": altura,
+                "objetos_corel": [o for o in campos[16].split(";") if o],
+            }
+            if base:
+                item["peca_correta"]["antes"] = {
+                    "ids": list(base.get("candidatos") or []),
+                    "largura_cm": round((antes_dim.get("largura_mm") or 0) / 10, 3),
+                    "altura_cm": round((antes_dim.get("altura_mm") or 0) / 10, 3),
+                }
+        if campos[15].strip():
+            item["observacao_operador"] = campos[15].strip()
+        origens = {
+            campo: codigo for campo, codigo in zip(("quantidade", "material", "acabamento"), campos[7:10])
+            if codigo in _ORIGENS_VALIDAS
+        }
+        itens.append(definir_origens(item, origens))
+    correto = {k: v for k, v in original.items() if k != "itens"}
+    correto["itens"] = itens
+    return correto, observacao
+
+
+def salvar_correcao(caminho: Path, arquivo_correcao: Path) -> Path:
+    from .configuracao import carregar_configuracao
+    from .relatorios import classificar_diferencas, gerar_pacote_diagnostico
+
+    linhas = arquivo_correcao.read_text(encoding="cp1252").splitlines()
+    original_json = next((l.split("\t", 1)[1] for l in linhas if l.startswith("ORIGINAL\t")), None)
+    if not original_json or not Path(original_json).exists():
+        raise FileNotFoundError("Resultado da análise não encontrado; analise o arquivo de novo antes de salvar.")
+    dados = json.loads(Path(original_json).read_text(encoding="utf-8"))
+    if Path(dados["arquivo"]).resolve() != Path(caminho).resolve():
+        raise ValueError("A análise guardada é de outro arquivo; analise este arquivo de novo antes de salvar.")
+    original = dados["resultado"]
+    correto, observacao = resultado_corrigido(original, linhas)
+    situacao = "corrigido" if classificar_diferencas(original, correto) else "confirmado"
+    configuracao = carregar_configuracao()
+    return gerar_pacote_diagnostico(
+        Path(caminho), original, correto, situacao=situacao, observacao_operador=observacao,
+        incluir_cdr=bool(configuracao.get("incluir_cdr_diagnostico", True)),
+    )
+
+
 def main(argumentos: list[str]) -> int:
     caminho, saida, modo = Path(argumentos[0]), Path(argumentos[1]), (argumentos[2] if len(argumentos) > 2 else "regras")
+    if modo == "salvar":
+        # Aqui "saida" é o arquivo de correção escrito pela macro; a resposta vai para <correcao>.ok
+        try:
+            linhas = ["\t".join(["OK", str(salvar_correcao(caminho, saida))])]
+        except Exception as erro:
+            linhas = ["\t".join(["ERRO", _campo(f"{type(erro).__name__}: {erro}")])]
+        Path(str(saida) + ".ok").write_text("\r\n".join(linhas) + "\r\n", encoding="cp1252", errors="replace", newline="")
+        return 0
     inicio = perf_counter()
     try:
         # O CorelDRAW aberto nunca é usado pela análise: o desenho vem do próprio arquivo.

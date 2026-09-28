@@ -35,5 +35,72 @@ class TestLinhasDeSaida(unittest.TestCase):
         self.assertEqual(campos[7:11], ["", "", "", ""])
 
 
+
+class TestCorrecao(unittest.TestCase):
+    ORIGINAL = {
+        "processamento": {"fluxo": "macro_corel", "camada_final": "regras"},
+        "itens": [
+            {"quantidade": {"valor": 6}, "dimensoes": {"largura_mm": 400, "altura_mm": 300},
+             "material": {"valor": "adesivo"}, "acabamento": {"valor": None}, "candidatos": ["A05"]},
+            {"quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 10, "altura_mm": 10},
+             "material": {"valor": None}, "acabamento": {"valor": None}, "candidatos": ["A01"]},
+        ],
+    }
+
+    def test_editar_trocar_peca_remover_e_adicionar(self):
+        from zcfreader.ponte_corel import resultado_corrigido
+
+        linhas = [
+            "OBS\tpedido de teste",
+            # item 1 mantido, acabamento que faltou no pedido
+            "ITEM\t1\t6\t40\t30\tadesivo\t\tarquivo\tarquivo\tfaltou_no_pedido\tanalise\t-47.1\t-7.1\t-20.2\t9.8\t\t",
+            # item 2 removido (não aparece); item novo escolhido no Corel
+            "ITEM\t0\t3\t20.05\t19.95\tadesivo fosco\t\tarquivo\tpadrao_grafica\tarquivo\tcorel\t27\t47\t-15\t5\tnão tinha sido lido\t123:3;124:7",
+        ]
+        correto, observacao = resultado_corrigido(self.ORIGINAL, linhas)
+        self.assertEqual(observacao, "pedido de teste")
+        self.assertEqual(len(correto["itens"]), 2)
+        primeiro, novo = correto["itens"]
+        self.assertEqual(primeiro["origem_campos"], {"acabamento": "faltou_no_pedido"})
+        self.assertEqual(primeiro["dimensoes"]["largura_mm"], 400)
+        self.assertEqual(novo["quantidade"]["valor"], 3)
+        self.assertEqual(novo["dimensoes"]["largura_mm"], 200.5)
+        self.assertEqual(novo["material"]["valor"], "adesivo fosco")
+        self.assertEqual(novo["origem_campos"], {"material": "padrao_grafica"})
+        self.assertEqual(novo["peca_correta"]["objetos_corel"], ["123:3", "124:7"])
+        self.assertEqual(novo["observacao_operador"], "não tinha sido lido")
+
+    def test_salvar_gera_pacote(self):
+        import json
+        import tempfile
+        from unittest import mock
+        from zipfile import ZipFile
+
+        from zcfreader import ponte_corel
+
+        with tempfile.TemporaryDirectory() as pasta:
+            pasta = Path(pasta)
+            cdr = pasta / "pedido.cdr"
+            cdr.write_bytes(b"conteudo")
+            original = pasta / "resultado.txt.json"
+            original.write_text(json.dumps({"arquivo": str(cdr), "resultado": self.ORIGINAL}), encoding="utf-8")
+            correcao = pasta / "correcao.txt"
+            correcao.write_text(
+                f"ORIGINAL\t{original}\r\n"
+                "ITEM\t1\t6\t40\t30\tadesivo\t\tarquivo\tarquivo\tarquivo\tanalise\t-47.1\t-7.1\t-20.2\t9.8\t\t\r\n",
+                encoding="cp1252",
+            )
+            with mock.patch("zcfreader.relatorios.pasta_relatorios", return_value=pasta / "Relatorios"), \
+                 mock.patch("zcfreader.relatorios.extrair_preview", return_value=None), \
+                 mock.patch("zcfreader.configuracao.carregar_configuracao", return_value={"incluir_cdr_diagnostico": True}):
+                ponte_corel.main([str(cdr), str(correcao), "salvar"])
+            resposta = (pasta / "correcao.txt.ok").read_text(encoding="cp1252").split("\t")
+            self.assertEqual(resposta[0], "OK", resposta)
+            with ZipFile(resposta[1].strip()) as pacote:
+                correto = json.loads(pacote.read("resultado-correto.json"))
+                self.assertIn("arquivo-original/pedido.cdr", pacote.namelist())
+            self.assertEqual(len(correto["itens"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
