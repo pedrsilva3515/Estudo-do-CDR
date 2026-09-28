@@ -599,6 +599,8 @@ def _especificacao_material(texto: str) -> dict | None:
         material = parse_material("adesivo " + texto)
     if "papelcouche" in compacto or "papelcouchê" in compacto:
         material = {"material": "papel couche", "acabamento": None}
+    elif "papeloutdoor" in compacto:
+        material = {"material": "papel outdoor", "acabamento": None}
     if material is None:
         return None
     valor_material = material["material"]
