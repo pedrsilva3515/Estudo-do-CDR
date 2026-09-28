@@ -1,0 +1,152 @@
+' Codigo da janela frmLeitor (Leitor de Pedidos CDR).
+' Cole tudo isto no codigo de um UserForm chamado frmLeitor.
+' Os botoes e a lista sao criados sozinhos quando a janela abre.
+Option Explicit
+
+Private WithEvents lstItens As MSForms.ListBox
+Private WithEvents btnRegras As MSForms.CommandButton
+Private WithEvents btnIA As MSForms.CommandButton
+Private WithEvents btnFechar As MSForms.CommandButton
+Private lblStatus As MSForms.Label
+
+Private itEsq() As Double, itDir() As Double, itBase() As Double, itTopo() As Double
+Private itTem() As Boolean
+Private nItens As Long
+Private docAnalisado As String
+
+Private Sub UserForm_Initialize()
+    Me.Caption = "Leitor de Pedidos"
+    Me.Width = 560
+    Me.Height = 340
+
+    Set lblStatus = Me.Controls.Add("Forms.Label.1", "lblStatus")
+    With lblStatus
+        .Left = 8: .Top = 6: .Width = 536: .Height = 30
+        .WordWrap = True
+        .Caption = "Abra o pedido no CorelDRAW e clique em Analisar."
+    End With
+
+    Set lstItens = Me.Controls.Add("Forms.ListBox.1", "lstItens")
+    With lstItens
+        .Left = 8: .Top = 40: .Width = 536: .Height = 220
+        .ColumnCount = 5
+        .ColumnWidths = "24;50;110;200;140"
+    End With
+
+    Set btnRegras = Me.Controls.Add("Forms.CommandButton.1", "btnRegras")
+    With btnRegras
+        .Left = 8: .Top = 270: .Width = 150: .Height = 26
+        .Caption = "Analisar (sem IA)"
+    End With
+
+    Set btnIA = Me.Controls.Add("Forms.CommandButton.1", "btnIA")
+    With btnIA
+        .Left = 166: .Top = 270: .Width = 150: .Height = 26
+        .Caption = "Analisar com IA"
+    End With
+
+    Set btnFechar = Me.Controls.Add("Forms.CommandButton.1", "btnFechar")
+    With btnFechar
+        .Left = 464: .Top = 270: .Width = 80: .Height = 26
+        .Caption = "Fechar"
+    End With
+End Sub
+
+Private Sub btnRegras_Click()
+    Analisar "regras"
+End Sub
+
+Private Sub btnIA_Click()
+    If MsgBox("A analise com IA usa o modelo configurado no aplicativo e pode ter custo." & Chr(13) _
+              & "Continuar?", 4) <> 6 Then Exit Sub
+    Analisar "ia"
+End Sub
+
+Private Sub btnFechar_Click()
+    Unload Me
+End Sub
+
+Private Sub Analisar(ByVal modo As String)
+    Dim linhas As Collection, l As Variant, partes As Variant
+    Dim info As String, perguntas As String, total As Long
+
+    If Documents.Count = 0 Then
+        MsgBox "Nenhum arquivo aberto no CorelDRAW.", 0
+        Exit Sub
+    End If
+    If ActiveDocument.FullFileName = "" Then
+        MsgBox "Salve o arquivo antes de analisar.", 0
+        Exit Sub
+    End If
+    If ActiveDocument.Dirty Then
+        If MsgBox("O arquivo tem alteracoes nao salvas. A analise le a versao salva no disco." & Chr(13) _
+                  & "Continuar mesmo assim?", 4) <> 6 Then Exit Sub
+    End If
+
+    lstItens.Clear
+    nItens = 0
+    lblStatus.Caption = "Analisando " & ActiveDocument.FileName & " ... (pode levar alguns segundos)"
+    Me.Repaint
+    DoEvents
+
+    Set linhas = RodarAnalise(ActiveDocument.FullFileName, modo)
+    total = linhas.Count + 1
+    ReDim itEsq(1 To total): ReDim itDir(1 To total)
+    ReDim itBase(1 To total): ReDim itTopo(1 To total)
+    ReDim itTem(1 To total)
+
+    For Each l In linhas
+        partes = Split(l, Chr(9))
+        Select Case partes(0)
+        Case "ERRO"
+            lblStatus.Caption = "Erro na analise: " & partes(1)
+            Exit Sub
+        Case "INFO"
+            info = "Resolvido por: " & partes(1) & "  |  " & partes(2) & " s"
+            If Val(partes(3)) > 0 Then info = info & "  |  US$ " & partes(3)
+        Case "ITEM"
+            If UBound(partes) >= 11 Then
+                nItens = nItens + 1
+                lstItens.AddItem partes(1)
+                lstItens.List(nItens - 1, 1) = partes(2) & " un"
+                lstItens.List(nItens - 1, 2) = Format(Val(partes(3)), "0.0#") & " x " & Format(Val(partes(4)), "0.0#") & " cm"
+                lstItens.List(nItens - 1, 3) = partes(5)
+                lstItens.List(nItens - 1, 4) = Trim(partes(6) & " " & IIf(partes(11) = "a confirmar", "(a confirmar)", ""))
+                If partes(7) <> "" Then
+                    itTem(nItens) = True
+                    itEsq(nItens) = Val(partes(7)): itDir(nItens) = Val(partes(8))
+                    itBase(nItens) = Val(partes(9)): itTopo(nItens) = Val(partes(10))
+                End If
+            End If
+        Case "PERGUNTA"
+            perguntas = perguntas & Chr(13) & "- " & partes(1)
+        End Select
+    Next l
+
+    docAnalisado = ActiveDocument.FullFileName
+    CarregarFormas
+    CalibrarDeslocamento itEsq, itDir, itBase, itTopo, itTem, nItens
+    lblStatus.Caption = info & "  |  " & nItens & " item(ns). Clique num item para selecionar a peca no desenho."
+    If perguntas <> "" Then MsgBox "Perguntas para o operador:" & perguntas, 0
+End Sub
+
+Private Sub lstItens_Click()
+    Dim k As Long, n As Long
+    k = lstItens.ListIndex + 1
+    If k < 1 Or k > nItens Then Exit Sub
+    If Documents.Count = 0 Then Exit Sub
+    If ActiveDocument.FullFileName <> docAnalisado Then
+        lblStatus.Caption = "O arquivo ativo nao e o que foi analisado. Analise de novo."
+        Exit Sub
+    End If
+    If Not itTem(k) Then
+        lblStatus.Caption = "Item " & k & ": a analise nao informou a posicao da peca."
+        Exit Sub
+    End If
+    n = SelecionarRegiao(itEsq(k), itDir(k), itBase(k), itTopo(k))
+    If n > 0 Then
+        lblStatus.Caption = "Item " & k & ": " & n & " objeto(s) selecionado(s) no desenho."
+    Else
+        lblStatus.Caption = "Item " & k & ": nao encontrei a peca no desenho."
+    End If
+End Sub
