@@ -131,10 +131,10 @@ def interpretar_nome_arquivo(nome: str) -> dict:
     quantidade = parse_quantidade(sem_acentos)
     dimensoes = parse_dimensoes(sem_acentos)
     if dimensoes is None:
-        sem_unidade = re.search(r"(?<!\d)(\d+[.,]\d+)\s*[x×]\s*(\d+[.,]\d+)(?!\d)", sem_acentos)
+        sem_unidade = re.search(r"(?<!\d)(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)(?!\d)", sem_acentos)
         if sem_unidade:
             a, b = (float(valor.replace(",", ".")) for valor in sem_unidade.groups())
-            # Nomes como 1,00x0,55 em gráficas normalmente expressam metros.
+            # Nomes como 1,00x0,55 ou 3x1 expressam metros; 71X61 ou 60 X90, centímetros.
             fator = 1000.0 if max(a, b) <= 5 else 10.0
             dimensoes = {"largura_mm": a * fator, "altura_mm": b * fator, "texto_origem": sem_unidade.group(0)}
     return {"texto": texto, "material": material, "quantidade": quantidade, "dimensoes": dimensoes}

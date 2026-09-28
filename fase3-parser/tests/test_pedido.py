@@ -203,6 +203,17 @@ class TestNomeArquivo(unittest.TestCase):
         self.assertEqual(resultado["dimensoes"]["largura_mm"], 300)
         self.assertEqual(resultado["dimensoes"]["altura_mm"], 400)
 
+    def test_dimensao_inteira_sem_unidade_no_nome(self):
+        # Pedido ARTHUR: "71X61" no nome, sem unidade, são centímetros; "3x1" são metros.
+        for nome, esperado in (
+            ("ARTHUR FINHA ADESIVO SEM RECORTE 71X61.cdr", (710, 610)),
+            ("BANNER 60 X90 MONTADO.cdr", (600, 900)),
+            ("lona 3x2.cdr", (3000, 2000)),
+        ):
+            with self.subTest(nome=nome):
+                dimensoes = interpretar_nome_arquivo(nome)["dimensoes"]
+                self.assertEqual((dimensoes["largura_mm"], dimensoes["altura_mm"]), esperado)
+
     def test_dimensao_em_metros_sem_unidade_no_nome(self):
         resultado = interpretar_nome_arquivo("ADESIVO TRANSPARENTE 1,00X0,55.cdr")
         self.assertEqual(resultado["dimensoes"]["largura_mm"], 1000)
