@@ -182,7 +182,9 @@ def carregar_casos(pasta: Path) -> list[dict]:
             nomes = pacote.namelist()
             if "diagnostico.json" not in nomes or "resultado-correto.json" not in nomes:
                 continue
-            cdr = next((n for n in nomes if n.startswith("arquivo-original/") and n.casefold().endswith(".cdr")), None)
+            # O CDR pode vir renomeado ".cdr.zip" (arquivos baixados do WhatsApp); o conteúdo é o mesmo.
+            cdr = next((n for n in nomes if n.startswith("arquivo-original/")
+                        and n.casefold().endswith((".cdr", ".cdr.zip"))), None)
             if not cdr:
                 continue
             diagnostico = json.loads(pacote.read("diagnostico.json"))
