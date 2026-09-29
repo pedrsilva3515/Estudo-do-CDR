@@ -7,7 +7,7 @@ e lê o resultado em texto simples (Windows-1252, separado por TAB), que o VBA
 lê sem bibliotecas extras. Uma linha por registro:
 
     INFO      camada   duracao_s   custo_usd
-    ITEM      n  quantidade  largura_cm  altura_cm  material  acabamento  esquerda  direita  base  topo  situacao
+    ITEM      n  quantidade  largura_cm  altura_cm  material  acabamento  esquerda  direita  base  topo  situacao  origem_material
     PERGUNTA  texto
     ERRO      mensagem
 
@@ -91,6 +91,29 @@ def _analisar_ia(caminho: Path, fatos: dict) -> dict:
     )
 
 
+def aplicar_catalogo(resultado: dict) -> dict:
+    """Troca material e acabamento pelos nomes do Portal Flow, guardando o texto lido.
+
+    O material que vem só do padrão da gráfica (o pedido dizia apenas "adesivo")
+    fica marcado em ``origem_campos`` para aparecer como "(padrão)" na macro.
+    """
+    from .catalogo_portal import acabamentos_portal, material_portal
+
+    for item in resultado.get("itens") or []:
+        material = (item.get("material") or {}).get("valor")
+        acabamento = (item.get("acabamento") or {}).get("valor")
+        nome, origem = material_portal(material, acabamento)
+        if nome:
+            item["material"] = {**(item.get("material") or {}), "valor": nome, "texto_lido": material}
+            if origem == "padrao_grafica":
+                item["origem_campos"] = {**(item.get("origem_campos") or {}), "material": "padrao_grafica"}
+        acabamentos = acabamentos_portal(material, acabamento)
+        if acabamentos:
+            item["acabamento"] = {**(item.get("acabamento") or {}), "valor": " + ".join(acabamentos),
+                                  "texto_lido": acabamento}
+    return resultado
+
+
 def _campo(valor) -> str:
     texto = "" if valor is None else str(valor)
     return " ".join(texto.replace("\t", " ").split())
@@ -113,6 +136,7 @@ def linhas_de_saida(resultado: dict, candidatos: dict, duracao_s: float) -> list
             _numero((dimensoes.get("largura_mm") or 0) / 10), _numero((dimensoes.get("altura_mm") or 0) / 10),
             _campo((item.get("material") or {}).get("valor")), _campo((item.get("acabamento") or {}).get("valor")),
             *coordenadas, _campo(item.get("situacao") or ""),
+            _campo((item.get("origem_campos") or {}).get("material") or "arquivo"),
         ]))
     for pergunta in resultado.get("perguntas_operador") or []:
         linhas.append("\t".join(["PERGUNTA", _campo(pergunta.get("pergunta") if isinstance(pergunta, dict) else pergunta)]))
@@ -236,6 +260,7 @@ def main(argumentos: list[str]) -> int:
 
         fatos = extrair_fatos(caminho)
         resultado = _analisar_ia(caminho, fatos) if modo == "ia" else _analisar_regras(caminho, fatos)
+        aplicar_catalogo(resultado)
         linhas = linhas_de_saida(resultado, fatos.get("candidatos") or {}, perf_counter() - inicio)
         Path(str(saida) + ".json").write_text(
             json.dumps({"arquivo": str(caminho), "modo": modo, "resultado": resultado}, ensure_ascii=False,

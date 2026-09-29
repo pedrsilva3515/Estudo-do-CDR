@@ -15,8 +15,8 @@ Private WithEvents btnFechar As MSForms.CommandButton
 Private lblStatus As MSForms.Label
 Private lblItem As MSForms.Label
 Private txtQtd As MSForms.TextBox
-Private txtMat As MSForms.TextBox
-Private txtAcab As MSForms.TextBox
+Private txtMat As MSForms.ComboBox
+Private txtAcab As MSForms.ComboBox
 Private txtMotivo As MSForms.TextBox
 Private txtObs As MSForms.TextBox
 Private cmbOrQ As MSForms.ComboBox
@@ -62,6 +62,20 @@ Private Function NovoRotulo(ByVal legenda As String, ByVal x As Single, ByVal y 
     Set NovoRotulo = r
 End Function
 
+' Lista com os nomes do Portal Flow; aceita digitar outro valor.
+Private Function NovaLista(ByVal nome As String, ByVal x As Single, ByVal y As Single, ByVal w As Single, ByVal itens As Variant) As MSForms.ComboBox
+    Dim c As MSForms.ComboBox, v As Variant
+    Set c = Me.Controls.Add("Forms.ComboBox.1", nome)
+    c.Left = x: c.Top = y: c.Width = w: c.Height = 20
+    c.Style = 0
+    c.ListRows = 12
+    c.ListWidth = 240
+    For Each v In itens
+        c.AddItem v
+    Next v
+    Set NovaLista = c
+End Function
+
 Private Function NovaOrigem(ByVal nome As String, ByVal x As Single, ByVal y As Single) As MSForms.ComboBox
     Dim c As MSForms.ComboBox
     Set c = Me.Controls.Add("Forms.ComboBox.1", nome)
@@ -101,10 +115,10 @@ Private Sub UserForm_Initialize()
     Set txtQtd = NovoTexto("txtQtd", 80, 256, 130)
     Set cmbOrQ = NovaOrigem("cmbOrQ", 216, 256)
     NovoRotulo "Material", 8, 280, 70
-    Set txtMat = NovoTexto("txtMat", 80, 280, 130)
+    Set txtMat = NovaLista("txtMat", 80, 280, 130, Array("Adesivo Leitoso Interm.", "Adesivo Fosco", "Adesivo Transparente", "Adesivo Fosco Blackout", "Adesivo Blackout", "Adesivo Perfurado", "Papel Outdoor", "Lona Brilho 440g", "Lona Fosca", "PS 2 mm", "PS 1 mm", "Impressão a Laser Couchê 250g 12x18", "Impressão a Laser Couchê 250g A4", "Impressão a Laser Couchê 150g A4", "Material do Cliente Adesivo", "Material do Cliente Lona", "Material do Cliente Prismático Branco", "Material do Cliente Prismático Amarelo"))
     Set cmbOrM = NovaOrigem("cmbOrM", 216, 280)
     NovoRotulo "Acabamento", 8, 304, 70
-    Set txtAcab = NovoTexto("txtAcab", 80, 304, 130)
+    Set txtAcab = NovaLista("txtAcab", 80, 304, 130, Array("Recorte", "Somente Recorte", "Corte Especial", "Refilado", "Banner", "Ilhós", "Verniz", "Laminação", "Frente e Verso", "Banner + Ilhós", "Verniz + Recorte"))
     Set cmbOrA = NovaOrigem("cmbOrA", 216, 304)
 
     Set btnAplicar = NovoBotao("btnAplicar", "Aplicar alterações", 404, 256, 180)
@@ -280,6 +294,9 @@ Private Sub Analisar(ByVal modo As String)
                 itLarg(nItens) = Val(partes(3)): itAlt(nItens) = Val(partes(4))
                 itMat(nItens) = partes(5): itAcab(nItens) = partes(6)
                 itOrQ(nItens) = "arquivo": itOrM(nItens) = "arquivo": itOrA(nItens) = "arquivo"
+                If UBound(partes) >= 12 Then
+                    If partes(12) = "padrao_grafica" Then itOrM(nItens) = "padrao_grafica"
+                End If
                 itPeca(nItens) = "analise": itMotivo(nItens) = "": itObjs(nItens) = ""
                 itSit(nItens) = IIf(partes(11) = "regras", "", partes(11))
                 itRemovido(nItens) = False
