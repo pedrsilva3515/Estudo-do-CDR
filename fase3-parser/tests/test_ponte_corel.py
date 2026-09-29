@@ -102,5 +102,24 @@ class TestCorrecao(unittest.TestCase):
             self.assertEqual(len(correto["itens"]), 1)
 
 
+class TestPecasSemTexto(unittest.TestCase):
+    def test_modo_sem_ia_lista_pecas_sem_texto_de_3_cm(self):
+        from zcfreader.ponte_corel import _analisar_regras
+
+        def regra(id_, papel, largura, altura, material=None):
+            return {"candidato_id": id_, "papel": papel, "largura_cm": largura, "altura_cm": altura,
+                    "quantidade_pedido": None, "quantidade_desenhada": 1, "material": material, "acabamento": None}
+
+        fatos = {"auditoria_regional": {"itens": [
+            regra("A01", "produto_plausivel", 40, 30, "adesivo"),
+            regra("A02", "sem_classificacao", 20, 28),
+            regra("A03", "sem_classificacao", 2, 0.8),        # etiqueta pequena: fica de fora
+            regra("A04", "detalhe_interno_do_produto", 10, 10),
+        ]}}
+        resultado = _analisar_regras(None, fatos)
+        self.assertEqual([i["candidatos"] for i in resultado["itens"]], [["A01"], ["A02"]])
+        self.assertEqual([i["situacao"] for i in resultado["itens"]], ["a confirmar", "sem texto - confirmar"])
+
+
 if __name__ == "__main__":
     unittest.main()

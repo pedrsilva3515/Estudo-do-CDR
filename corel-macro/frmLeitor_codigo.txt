@@ -281,7 +281,7 @@ Private Sub Analisar(ByVal modo As String)
                 itMat(nItens) = partes(5): itAcab(nItens) = partes(6)
                 itOrQ(nItens) = "arquivo": itOrM(nItens) = "arquivo": itOrA(nItens) = "arquivo"
                 itPeca(nItens) = "analise": itMotivo(nItens) = "": itObjs(nItens) = ""
-                itSit(nItens) = IIf(partes(11) = "a confirmar", "a confirmar", "")
+                itSit(nItens) = IIf(partes(11) = "regras", "", partes(11))
                 itRemovido(nItens) = False
                 itTem(nItens) = (partes(7) <> "")
                 If itTem(nItens) Then

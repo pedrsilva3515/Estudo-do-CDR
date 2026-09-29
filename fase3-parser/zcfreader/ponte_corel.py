@@ -28,6 +28,9 @@ from pathlib import Path
 from time import perf_counter
 
 
+LADO_MINIMO_SEM_TEXTO_CM = 3.0
+
+
 def _caixa_do_item(item: dict, candidatos: dict) -> dict | None:
     if item.get("caixa_cm"):
         return item["caixa_cm"]
@@ -55,7 +58,13 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
         return {"itens": resultado["itens"], "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras"}}
     itens = []
     for regra in auditoria.get("itens") or []:
-        if regra.get("papel") not in {"produto_confirmado", "produto_plausivel"}:
+        produto = regra.get("papel") in {"produto_confirmado", "produto_plausivel"}
+        # Peças que o programa enxerga mas sem texto que as explique. Nas correções pela
+        # macro, adicionar peça dá muito mais trabalho que remover; simulação nos 68
+        # pedidos revisados: faltando 31 -> 8 linhas, com ~44 a mais para remover.
+        sem_texto = (regra.get("papel") == "sem_classificacao"
+                     and min(regra["largura_cm"], regra["altura_cm"]) >= LADO_MINIMO_SEM_TEXTO_CM)
+        if not (produto or sem_texto):
             continue
         itens.append({
             "indice": len(itens) + 1,
@@ -64,7 +73,7 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
             "material": {"valor": regra.get("material")},
             "acabamento": {"valor": regra.get("acabamento")},
             "candidatos": [regra["candidato_id"]],
-            "situacao": "a confirmar",
+            "situacao": "a confirmar" if produto else "sem texto - confirmar",
         })
     return {"itens": itens, "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras (a confirmar)"}}
 
