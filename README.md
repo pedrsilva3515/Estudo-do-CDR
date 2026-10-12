@@ -20,6 +20,23 @@ estruturados está documentado em
 componentes, modo de cor, DPI, alertas e pendências sem inventar informações
 ausentes.
 
+### Instalação automática no Windows
+
+O script `instalar-leitor-pedidos.ps1` instala Python e Git (via winget, se
+faltarem), baixa esta branch em `%LOCALAPPDATA%\LeitorPedidosCDR`, cria um
+ambiente virtual com as dependências da interface, um atalho na Área de
+Trabalho e importa a macro `AnalisarPedidoAtivo` no GlobalMacros do CorelDRAW:
+
+```powershell
+iwr https://raw.githubusercontent.com/pedrsilva3515/Estudo-do-CDR/codex/mvp-interpretacao-pedidos/instalar-leitor-pedidos.ps1 -OutFile "$env:TEMP\instalar-leitor-pedidos.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:TEMP\instalar-leitor-pedidos.ps1"
+```
+
+A macro (`macro-corel/LeitorPedidosCDR.bas`) salva o documento ativo, se o
+operador quiser, e o abre no Leitor de pedidos. Se a importação automática não
+for possível, o script mostra os passos para importá-la pelo editor VBA.
+Para atualizar, execute o script novamente.
+
 ### Instalação em outro computador
 
 Requer Python 3.10 ou mais recente. O parser não depende do CorelDRAW para abrir

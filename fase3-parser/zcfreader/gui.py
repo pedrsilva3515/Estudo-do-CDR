@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 from queue import Empty, Queue
+import sys
 import threading
 from time import perf_counter
 import tkinter as tk
@@ -1192,9 +1193,13 @@ class AplicacaoPedido:
         messagebox.showinfo("Resultado exportado", f"Arquivo salvo em:\n{destino}")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    argumentos = sys.argv[1:] if argv is None else argv
     raiz = TkinterDnD.Tk() if TkinterDnD is not None else tk.Tk()
-    AplicacaoPedido(raiz)
+    aplicacao = AplicacaoPedido(raiz)
+    if argumentos:
+        # Arquivo recebido pela linha de comando, por exemplo pela macro do CorelDRAW.
+        raiz.after(300, lambda: aplicacao.analisar(Path(argumentos[0])))
     raiz.mainloop()
 
 
