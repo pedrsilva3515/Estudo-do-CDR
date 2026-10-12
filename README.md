@@ -39,7 +39,7 @@ Para atualizar, execute o script novamente.
 
 ### Instalação em outro computador
 
-Requer Python 3.10 ou mais recente. O parser não depende do CorelDRAW para abrir
+Requer Python 3.10, 3.11 ou 3.12 (o OCR ainda não tem pacotes para 3.13+). O parser não depende do CorelDRAW para abrir
 arquivos CDR modernos no formato ZCF.
 
 ```powershell

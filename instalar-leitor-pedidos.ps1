@@ -9,7 +9,7 @@ Ou, sem clonar nada antes:
     powershell -ExecutionPolicy Bypass -File "$env:TEMP\instalar-leitor-pedidos.ps1"
 
 Etapas:
-  1. Garante Python 3.10+ e Git (instala pelo winget quando faltam).
+  1. Garante Python 3.10 a 3.12 e Git (instala pelo winget quando faltam).
   2. Baixa ou atualiza o repositório em %LOCALAPPDATA%\LeitorPedidosCDR\app.
   3. Cria um ambiente virtual próprio e instala as dependências da interface.
   4. Cria atalho na Área de Trabalho.
@@ -33,13 +33,20 @@ function Atualizar-Path {
                 [Environment]::GetEnvironmentVariable("Path", "User")
 }
 
+# O OCR (rapidocr-onnxruntime 1.4.4) só tem pacotes para Python 3.10 a 3.12.
 function Encontrar-Python {
-    foreach ($cmd in @(@("py", "-3"), @("python"))) {
+    foreach ($v in @("3.12", "3.11", "3.10")) {
         try {
-            $versao = & $cmd[0] $cmd[1..9] -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
-            if ($LASTEXITCODE -eq 0 -and [version]$versao -ge [version]"3.10") { return ,$cmd }
+            & py "-$v" -c "import sys" 2>$null
+            if ($LASTEXITCODE -eq 0) { return ,@("py", "-$v") }
         } catch {}
     }
+    try {
+        $versao = & python -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
+        if ($LASTEXITCODE -eq 0 -and [version]$versao -ge [version]"3.10" -and [version]$versao -lt [version]"3.13") {
+            return ,@("python")
+        }
+    } catch {}
     return $null
 }
 
@@ -59,7 +66,7 @@ New-Item -ItemType Directory -Force -Path $pasta | Out-Null
 Etapa "Verificando Python"
 $python = Encontrar-Python
 if (-not $python) {
-    Write-Host "Python 3.10+ não encontrado. Instalando Python 3.12..."
+    Write-Host "Python 3.10 a 3.12 não encontrado. Instalando Python 3.12..."
     Instalar-Winget "Python.Python.3.12"
     $python = Encontrar-Python
     if (-not $python) { throw "Python instalado, mas não encontrado no PATH. Feche e abra o PowerShell e rode de novo." }
@@ -87,10 +94,18 @@ if (Test-Path (Join-Path $app ".git")) {
 if ($LASTEXITCODE -ne 0) { throw "Falha ao baixar o repositório." }
 
 Etapa "Instalando dependências"
-if (-not (Test-Path (Join-Path $venv "Scripts\python.exe"))) {
+$pyVenv = Join-Path $venv "Scripts\python.exe"
+if (Test-Path $pyVenv) {
+    # Recria o ambiente se ele foi criado com uma versão incompatível (ex.: 3.13+).
+    $versaoVenv = & $pyVenv -c "import sys; print('%d.%d' % sys.version_info[:2])"
+    if ([version]$versaoVenv -ge [version]"3.13" -or [version]$versaoVenv -lt [version]"3.10") {
+        Write-Host "Recriando ambiente (Python $versaoVenv incompatível)..."
+        Remove-Item -Recurse -Force $venv
+    }
+}
+if (-not (Test-Path $pyVenv)) {
     & $python[0] $python[1..9] -m venv $venv
 }
-$pyVenv = Join-Path $venv "Scripts\python.exe"
 $pywVenv = Join-Path $venv "Scripts\pythonw.exe"
 & $pyVenv -m pip install --upgrade pip
 & $pyVenv -m pip install -e "$app[gui,api]"
