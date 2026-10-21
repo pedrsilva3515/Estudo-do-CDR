@@ -424,5 +424,49 @@ class TestMateriaisRegionais(unittest.TestCase):
         self.assertEqual(resumo["itens"][2]["estado"], "revisao_necessaria")
 
 
+class TestQuantidadePadrao(unittest.TestCase):
+    """Sem quantidade escrita no pedido, cada peça desenhada vale 1 (pedido "TRANSPARENTE")."""
+
+    def _catalogo(self, textos=("ADESIVO TRANSPARENTE",), solta=False):
+        faixa = candidato("A02", 12.73, 92.27, {"esquerda": -88.9, "direita": -76.2, "base": -47.2, "topo": 45.0})
+        brasao = candidato("A15", 52.07, 87.27, {"esquerda": -67.6, "direita": -15.5, "base": -42.2, "topo": 45.0})
+        bitmap = candidato("A16", 41.95, 46.63, {"esquerda": -60.0, "direita": -18.0, "base": -10.0, "topo": 36.6})
+        candidatos = [faixa, brasao, bitmap]
+        if solta:
+            candidatos.append(candidato("A20", 20, 20, {"esquerda": 10, "direita": 30, "base": 0, "topo": 20}))
+        for item in candidatos:
+            item["visivel_inicialmente"] = True
+        rodape = {"fonte": "texto_cdr", "regra": "rodape_regional", "texto": textos[0], "confianca": 0.92}
+        materiais = [{
+            "candidato_id": cid, "material": "adesivo transparente", "acabamento": None,
+            "papel_candidato": "produto_plausivel", "motivo_classificacao": "associacao_regional_sem_prova_estrutural",
+            "evidencias": [rodape], "conflitos": [],
+        } for cid in ("A02", "A15")]
+        return {
+            "arquivo": "TRANSPARENTE.cdr", "candidatos": candidatos, "blocos_producao": [],
+            "evidencias_textuais": [{"texto": t} for t in textos],
+            "ocr_regional": {"associacoes": [], "leituras_ocr": []}, "materiais_regionais": materiais,
+        }
+
+    def test_sem_quantidade_escrita_vale_1_e_bitmap_interno_e_parte_do_produto(self):
+        itens = {i["candidato_id"]: i for i in resumir_catalogo_regional(self._catalogo())["itens"]}
+        for cid in ("A02", "A15"):
+            self.assertEqual(itens[cid]["papel"], "produto_confirmado")
+            self.assertEqual(itens[cid]["quantidade_pedido"], 1)
+            self.assertTrue(itens[cid]["quantidade_padrao"])
+        self.assertEqual(itens["A16"]["estado"], "estrutura_auxiliar")
+        self.assertEqual(itens["A16"]["motivo"], "contido_no_produto_A15")
+
+    def test_quantidade_escrita_em_algum_texto_mantem_a_duvida(self):
+        itens = resumir_catalogo_regional(self._catalogo(("ADESIVO TRANSPARENTE", "10 UN")))["itens"]
+        self.assertTrue(all(not i.get("quantidade_padrao") for i in itens))
+        self.assertEqual(itens[0]["papel"], "produto_plausivel")
+
+    def test_peca_solta_sem_texto_mantem_a_duvida(self):
+        itens = resumir_catalogo_regional(self._catalogo(solta=True))["itens"]
+        self.assertTrue(all(i["quantidade_pedido"] is None for i in itens))
+        self.assertEqual(next(i for i in itens if i["candidato_id"] == "A20")["estado"], "revisao_necessaria")
+
+
 if __name__ == "__main__":
     unittest.main()

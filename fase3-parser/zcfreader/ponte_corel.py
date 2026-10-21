@@ -7,7 +7,7 @@ e lê o resultado em texto simples (Windows-1252, separado por TAB), que o VBA
 lê sem bibliotecas extras. Uma linha por registro:
 
     INFO      camada   duracao_s   custo_usd
-    ITEM      n  quantidade  largura_cm  altura_cm  material  acabamento  esquerda  direita  base  topo  situacao  origem_material
+    ITEM      n  quantidade  largura_cm  altura_cm  material  acabamento  esquerda  direita  base  topo  situacao  origem_material  origem_quantidade
     PERGUNTA  texto
     ERRO      mensagem
 
@@ -233,6 +233,7 @@ def linhas_de_saida(resultado: dict, candidatos: dict, duracao_s: float) -> list
             _campo((item.get("material") or {}).get("valor")), _campo((item.get("acabamento") or {}).get("valor")),
             *coordenadas, _campo(item.get("situacao") or ""),
             _campo((item.get("origem_campos") or {}).get("material") or "arquivo"),
+            _campo((item.get("origem_campos") or {}).get("quantidade") or "arquivo"),
         ]))
     for pergunta in resultado.get("perguntas_operador") or []:
         linhas.append("\t".join(["PERGUNTA", _campo(pergunta.get("pergunta") if isinstance(pergunta, dict) else pergunta)]))

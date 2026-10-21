@@ -297,6 +297,9 @@ Private Sub Analisar(ByVal modo As String)
                 If UBound(partes) >= 12 Then
                     If partes(12) = "padrao_grafica" Then itOrM(nItens) = "padrao_grafica"
                 End If
+                If UBound(partes) >= 13 Then
+                    If partes(13) = "padrao_grafica" Then itOrQ(nItens) = "padrao_grafica"
+                End If
                 itPeca(nItens) = "analise": itMotivo(nItens) = "": itObjs(nItens) = ""
                 itSit(nItens) = IIf(partes(11) = "regras", "", partes(11))
                 itRemovido(nItens) = False

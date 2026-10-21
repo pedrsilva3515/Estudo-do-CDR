@@ -82,7 +82,10 @@ def resultado_das_regras(auditoria: dict) -> dict:
         if regra.get("papel") != "produto_confirmado":
             continue
         evidencia = next((e.get("texto") for e in regra.get("evidencias") or [] if e.get("texto")), None)
+        # Sem quantidade escrita, 1 por peça é o padrão da gráfica, não algo lido no arquivo.
+        extras = {"origem_campos": {"quantidade": "padrao_grafica"}} if regra.get("quantidade_padrao") else {}
         itens.append({
+            **extras,
             "indice": len(itens) + 1,
             "quantidade": {"valor": int(regra["quantidade_pedido"]), "fonte": "regras_regionais", "confianca": 0.95},
             "dimensoes": {

@@ -24,8 +24,8 @@ class TestLinhasDeSaida(unittest.TestCase):
         linhas = linhas_de_saida(resultado, candidatos, 4.25)
         self.assertEqual(linhas[0], "INFO\tregras\t4.2\t0.0000")
         campos = linhas[1].split("\t")
-        self.assertEqual(len(campos), 13)
-        self.assertEqual(campos[12], "arquivo")
+        self.assertEqual(len(campos), 14)
+        self.assertEqual(campos[12:], ["arquivo", "arquivo"])
         self.assertEqual(campos[:7], ["ITEM", "1", "6", "40.000", "30.000", "adesivo fosco", ""])
         self.assertEqual(campos[7:11], ["-47.100", "-7.100", "-20.200", "9.800"])
         self.assertEqual(linhas[2], "PERGUNTA\tQual o acabamento?")
@@ -34,6 +34,11 @@ class TestLinhasDeSaida(unittest.TestCase):
         resultado = {"itens": [{"quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 100, "altura_mm": 100}}]}
         campos = linhas_de_saida(resultado, {}, 1)[1].split("\t")
         self.assertEqual(campos[7:11], ["", "", "", ""])
+
+    def test_quantidade_padrao_sai_na_ultima_coluna(self):
+        resultado = {"itens": [{"quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 100, "altura_mm": 100},
+                                "origem_campos": {"quantidade": "padrao_grafica"}}]}
+        self.assertEqual(linhas_de_saida(resultado, {}, 1)[1].split("\t")[13], "padrao_grafica")
 
 
 

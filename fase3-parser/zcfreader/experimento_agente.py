@@ -1167,6 +1167,55 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
     }
 
 
+def _aplicar_quantidade_padrao(catalogo: dict, itens: list[dict], por_id: dict, conflitos: list[dict]) -> None:
+    """Sem quantidade escrita em lugar nenhum, cada peça desenhada vale 1 (convenção da gráfica).
+
+    Só vale quando isso resolve o pedido inteiro: todo produto tem material provado
+    por texto, e o que sobra é estrutura ou peça sem texto dentro de um produto
+    (ex.: o bitmap do brasão dentro do grupo do brasão). Se algum texto tiver
+    quantidade, a ausência nas outras peças é dúvida de verdade e nada muda.
+    """
+    if conflitos or catalogo.get("ocr_regional", {}).get("associacoes"):
+        return
+    textos = [e.get("texto") or "" for e in catalogo.get("evidencias_textuais", [])]
+    textos += [l.get("texto") or "" for l in catalogo.get("ocr_regional", {}).get("leituras_ocr", [])]
+    if any(parse_quantidade(texto) for texto in textos):
+        return
+    produtos = [i for i in itens if i["papel"] in {"produto_confirmado", "produto_plausivel"}]
+    if not produtos or any(not i["material"] or not i["evidencias"] or i["quantidade_pedido"] for i in produtos):
+        return
+
+    def produto_que_contem(item: dict) -> str | None:
+        caixa = por_id[item["candidato_id"]]["caixa_cm"]
+        for produto in produtos:
+            ocorrencias = caixas_das_ocorrencias(por_id[produto["candidato_id"]]) or [por_id[produto["candidato_id"]]["caixa_cm"]]
+            if any(_contem_caixa(o, caixa, 0.3) for o in ocorrencias):
+                return produto["candidato_id"]
+        return None
+
+    internos = {}
+    for item in itens:
+        if item in produtos or item["estado"] == "estrutura_auxiliar":
+            continue
+        dono = produto_que_contem(item) if item["papel"] == "sem_classificacao" else None
+        if dono is None:
+            return  # peça solta sem texto: continua para conferência
+        internos[item["candidato_id"]] = dono
+
+    for item in itens:
+        if item["candidato_id"] in internos:
+            item.update({
+                "papel": "detalhe_interno_do_produto", "estado": "estrutura_auxiliar",
+                "motivo": f"contido_no_produto_{internos[item['candidato_id']]}",
+            })
+        elif item in produtos:
+            item.update({
+                "papel": "produto_confirmado", "estado": "confirmado_por_evidencia",
+                "quantidade_pedido": int(item.get("quantidade_desenhada") or 1),
+                "quantidade_padrao": True, "motivo": "sem_quantidade_escrita_vale_1_por_peca",
+            })
+
+
 def resumir_catalogo_regional(catalogo: dict) -> dict:
     """Converte o catálogo pesado em uma auditoria adequada à interface e ao log."""
     candidatos = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
@@ -1234,6 +1283,7 @@ def resumir_catalogo_regional(catalogo: dict) -> dict:
                 **conflito, "candidato_id": candidato_id,
                 "evidencias": evidencias, "requer_revisao": True,
             })
+    _aplicar_quantidade_padrao(catalogo, itens, {item["id"]: item for item in visiveis}, conflitos)
     produtivos = [item for item in itens if item["papel"] in {"produto_confirmado", "produto_plausivel"}]
     auxiliares = [item for item in itens if item["estado"] == "estrutura_auxiliar"]
     ambiguos = [item for item in itens if item["estado"] == "revisao_necessaria"]
