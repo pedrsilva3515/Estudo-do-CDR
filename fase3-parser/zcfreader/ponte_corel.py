@@ -47,6 +47,68 @@ def _caixa_do_item(item: dict, candidatos: dict) -> dict | None:
     }
 
 
+def separar_ocorrencias(resultado: dict, candidatos: dict, auditoria: dict | None = None) -> dict:
+    """Ajusta itens cuja peça tem várias ocorrências desenhadas da mesma medida.
+
+    - Artes diferentes (bitmaps diferentes) com quantidade igual ao número de
+      ocorrências: um item de 1 unidade por arte, cada um com a sua caixa.
+    - Cópias da mesma arte: a caixa passa a ser a de uma ocorrência, para exportar
+      uma peça com a quantidade, e não todas juntas.
+    - "N de cada" com K peças desenhadas (quantidade N × K): K itens de N unidades,
+      seja qual for a arte, porque "de cada" já diz que cada peça é um produto.
+    - Sem como saber (arte só em vetor) ou quantidade diferente: marca para conferir.
+    """
+    from copy import deepcopy
+    from .agente import _quantidade_de_cada
+    from .experimento_agente import caixas_das_ocorrencias
+
+    # Quantidade por peça das instruções "N DE CADA" ligadas a cada candidata.
+    por_ocorrencia = {}
+    for regra in (auditoria or {}).get("itens") or []:
+        for evidencia in regra.get("evidencias") or []:
+            por_peca = _quantidade_de_cada(evidencia.get("texto"))
+            if por_peca:
+                por_ocorrencia.setdefault(regra["candidato_id"], por_peca)
+
+    itens = []
+    for item in resultado.get("itens") or []:
+        ids = item.get("candidatos") or []
+        candidato = candidatos.get(ids[0]) if len(ids) == 1 else None
+        caixas = caixas_das_ocorrencias(candidato) if candidato else []
+        if len(caixas) <= 1:
+            itens.append(item)
+            continue
+        artes = candidato.get("artes")
+        quantidade = (item.get("quantidade") or {}).get("valor") or 0
+        por_peca = por_ocorrencia.get(ids[0])
+        if por_peca and por_peca * len(caixas) == quantidade:
+            # "N de cada" com K peças desenhadas: K itens de N unidades, cada um com a sua caixa.
+            for caixa in caixas:
+                novo = deepcopy(item)
+                novo["quantidade"] = {**(novo.get("quantidade") or {}), "valor": por_peca}
+                novo["caixa_cm"] = caixa
+                novo["situacao"] = (novo.get("situacao") or "").replace(" - conferir artes", "")
+                itens.append(novo)
+            continue
+        if artes == "distintas" and quantidade == len(caixas):
+            for caixa in caixas:
+                novo = deepcopy(item)
+                novo["quantidade"] = {**(novo.get("quantidade") or {}), "valor": 1}
+                novo["caixa_cm"] = caixa
+                itens.append(novo)
+            continue
+        if artes == "iguais":
+            item["caixa_cm"] = caixas[0]
+        else:
+            situacao = item.get("situacao") or ""
+            item["situacao"] = f"{situacao} - conferir artes" if situacao else "conferir artes"
+        itens.append(item)
+    for indice, item in enumerate(itens, 1):
+        item["indice"] = indice
+    resultado["itens"] = itens
+    return resultado
+
+
 def _analisar_regras(caminho: Path, fatos: dict) -> dict:
     from .camadas import regras_resolvem, resultado_das_regras
 
@@ -75,6 +137,40 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
             "candidatos": [regra["candidato_id"]],
             "situacao": "a confirmar" if produto else "sem texto - confirmar",
         })
+    # Peça sem texto que está dentro de outra peça da lista é parte dela (ex.: o bitmap
+    # dentro do grupo com fundo), não um item a mais.
+    candidatos = fatos.get("candidatos") or {}
+    listados = {item["candidatos"][0] for item in itens}
+
+    from .experimento_agente import caixas_das_ocorrencias
+
+    def dentro_de_ocorrencia(caixa: dict, pai: dict) -> bool:
+        # A caixa de uma peça repetida cobre todas as cópias e o espaço entre elas:
+        # só conta como "dentro" o que cabe numa das ocorrências.
+        ocorrencias = caixas_das_ocorrencias(pai) or [pai["caixa_cm"]]
+        return any(
+            o["esquerda"] - 0.3 <= caixa["esquerda"] and caixa["direita"] <= o["direita"] + 0.3
+            and o["base"] - 0.3 <= caixa["base"] and caixa["topo"] <= o["topo"] + 0.3
+            for o in ocorrencias
+        )
+
+    def dentro_de_listado(candidato_id: str) -> bool:
+        vistos = set()
+        caixa = (candidatos.get(candidato_id) or {}).get("caixa_cm")
+        pai = (candidatos.get(candidato_id) or {}).get("pai_id")
+        while caixa and pai and pai not in vistos:
+            if pai in listados and dentro_de_ocorrencia(caixa, candidatos[pai]):
+                return True
+            vistos.add(pai)
+            pai = (candidatos.get(pai) or {}).get("pai_id")
+        return False
+
+    itens = [
+        item for item in itens
+        if item["situacao"] != "sem texto - confirmar" or not dentro_de_listado(item["candidatos"][0])
+    ]
+    for indice, item in enumerate(itens, 1):
+        item["indice"] = indice
     return {"itens": itens, "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras (a confirmar)"}}
 
 
@@ -260,6 +356,7 @@ def main(argumentos: list[str]) -> int:
 
         fatos = extrair_fatos(caminho)
         resultado = _analisar_ia(caminho, fatos) if modo == "ia" else _analisar_regras(caminho, fatos)
+        separar_ocorrencias(resultado, fatos.get("candidatos") or {}, fatos.get("auditoria_regional"))
         aplicar_catalogo(resultado)
         linhas = linhas_de_saida(resultado, fatos.get("candidatos") or {}, perf_counter() - inicio)
         Path(str(saida) + ".json").write_text(

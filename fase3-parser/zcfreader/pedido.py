@@ -503,6 +503,7 @@ def _dimensoes_componentes(instancias) -> list[dict]:
                 "y": round(instancia.dpi_efetivo_y, 1) if instancia.dpi_efetivo_y else None,
             },
             "espaco_cor": instancia.registro.imagem.espaco_de_cor,
+            "identificador_bitmap": instancia.identificador_bitmap,
             "caixa_mm": _caixa_mm(caixa),
         })
     return componentes
@@ -536,9 +537,14 @@ def _aplicar_materiais(itens: list[dict], instrucoes: list[dict]) -> list[dict]:
         instrucao = min(globais, key=lambda x: _distancia(item["_caixa"], x["objeto"].caixa))
         caixa_instrucao = instrucao["objeto"].caixa
         centros = [_centro(outro["_caixa"]) for outro in itens]
-        cabecalho_global = bool(centros) and all(
-            caixa_instrucao.esquerda <= x <= caixa_instrucao.direita and y < caixa_instrucao.topo
-            for x, y in centros
+        # Texto que cobre na horizontal todas as peças vale para todas, seja cabeçalho
+        # (acima de todas) ou rodapé (abaixo de todas).
+        cobre_todas = bool(centros) and all(
+            caixa_instrucao.esquerda <= x <= caixa_instrucao.direita for x, _ in centros
+        )
+        cabecalho_global = cobre_todas and (
+            all(y < caixa_instrucao.topo for _, y in centros)
+            or all(y > caixa_instrucao.base for _, y in centros)
         )
         explicita_global = bool(re.search(r"(?i)\b(todos?|todas?)\b", instrucao["texto_origem"]))
         if len(itens) > 1 and not (explicita_global or cabecalho_global):
@@ -598,19 +604,25 @@ def _consolidar_mesmo_tamanho(itens: list[dict]) -> list[dict]:
         if item["quantidade"]["fonte"] != "contagem_de_composicoes":
             avulsos.append(item)
             continue
+        # Cópias da mesma arte apontam para o mesmo bitmap; artes diferentes do mesmo
+        # tamanho (bitmaps diferentes) continuam como itens separados.
+        assinatura = tuple(sorted(c.get("identificador_bitmap") or 0 for c in item.get("componentes") or []))
         chave = (
             round(item["dimensoes"]["largura_mm"], 1), round(item["dimensoes"]["altura_mm"], 1),
-            item["material"]["valor"], item["acabamento"]["valor"],
+            item["material"]["valor"], item["acabamento"]["valor"], assinatura,
         )
         grupos[chave].append(item)
     resultado = avulsos[:]
-    for grupo in grupos.values():
+    for chave, grupo in grupos.items():
         principal = grupo[0]
         principal["quantidade"]["valor"] = len(grupo)
         if len(grupo) > 1:
             principal["quantidade"]["confianca"] = 0.8
             principal["agrupamento"] = "mesmo_tamanho_e_material"
             principal["caixas_origem_mm"] = [_caixa_mm(item["_caixa"]) for item in grupo]
+            if not chave[-1]:
+                # Sem bitmap não dá para saber se são cópias da mesma arte.
+                principal["situacao"] = "conferir artes"
         resultado.append(principal)
     return resultado
 
@@ -687,6 +699,9 @@ def interpretar_pedido(caminho) -> dict:
                     "material": {"valor": None, "fonte": None, "confianca": 0.0},
                     "acabamento": {"valor": None, "fonte": None, "confianca": 0.0},
                     "evidencia_geometrica": candidato["tipo"],
+                    # Caixa da peça inteira (o grupo), em cm: quem seleciona a peça no
+                    # CorelDRAW precisa dela; sem isso sobra só a caixa dos bitmaps internos.
+                    "caixa_cm": {chave: valor / 10 for chave, valor in _caixa_mm(candidato["caixa"]).items()},
                     "_caixa": candidato["caixa"],
                 })
 

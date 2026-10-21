@@ -241,6 +241,39 @@ def _anotar_hierarquia(candidatos: list[dict], recipientes_powerclip: list[dict]
         ]
 
 
+def caixas_das_ocorrencias(candidato: dict) -> list[dict]:
+    """Caixa (cm) de cada ocorrência desenhada, de cima para baixo e da esquerda para a direita."""
+    largura, altura = float(candidato["largura_cm"]), float(candidato["altura_cm"])
+    caixas = [
+        {"esquerda": p["x"] - largura / 2, "direita": p["x"] + largura / 2,
+         "base": p["y"] - altura / 2, "topo": p["y"] + altura / 2}
+        for p in candidato.get("posicoes_centro_cm") or []
+    ]
+    return sorted(caixas, key=lambda c: (-round(c["topo"], 1), c["esquerda"]))
+
+
+def _anotar_artes(candidatos: list[dict], bitmaps: list[tuple[float, float, int]]) -> None:
+    """Diz se as ocorrências de mesma medida são cópias da mesma arte ou artes diferentes.
+
+    No CorelDRAW, uma arte duplicada aponta para o mesmo bitmap (mesmo identificador);
+    artes diferentes do mesmo tamanho (ex.: selos de 20%, 30%, 40% e 50%) têm bitmaps
+    diferentes. Sem bitmap em alguma ocorrência (arte só em vetor), fica "desconhecidas".
+    """
+    for candidato in candidatos:
+        caixas = caixas_das_ocorrencias(candidato)
+        if len(caixas) <= 1:
+            continue
+        assinaturas = [
+            frozenset(ident for x, y, ident in bitmaps
+                      if c["esquerda"] <= x <= c["direita"] and c["base"] <= y <= c["topo"])
+            for c in caixas
+        ]
+        if not all(assinaturas):
+            candidato["artes"] = "desconhecidas"
+        else:
+            candidato["artes"] = "iguais" if len(set(assinaturas)) == 1 else "distintas"
+
+
 def _caixa_texto_cm(evidencia: dict) -> dict:
     caixa = evidencia["caixa_mm"]
     return {chave: float(caixa[chave]) / 10 for chave in ("esquerda", "direita", "base", "topo")}
@@ -923,6 +956,17 @@ def associar_materiais_acabamentos(catalogo: dict) -> list[dict]:
             texto_sobre_candidato = caixa["esquerda"] <= centro_texto_x <= caixa["direita"]
             if sobreposicao >= 0.25 or texto_sobre_candidato:
                 acima.append((caixa["base"] - caixa_texto["topo"], -candidato.get("quantidade_geometrica", 1), candidato))
+        # Rodapé que cobre na horizontal duas ou mais peças de topo vale para todas elas,
+        # como o cabeçalho que abrange várias peças.
+        cobertas = [
+            item for _, _, item in acima
+            if item.get("camada", 0) == 0
+            and caixa_texto["esquerda"] <= (item["caixa_cm"]["esquerda"] + item["caixa_cm"]["direita"]) / 2 <= caixa_texto["direita"]
+        ]
+        if len(cobertas) >= 2:
+            for candidato in cobertas:
+                propor(candidato["id"], fonte, "rodape_regional", 0.92)
+            continue
         if acima:
             menor_distancia = min(item[0] for item in acima)
             proximos = [item for distancia, _, item in acima if distancia - menor_distancia <= max(3.0, menor_distancia * 0.2)]
@@ -1008,6 +1052,11 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
         rasos = _candidatos_arte(doc)
         evidencias = _evidencias_textuais(doc)
         montagens = _grupos_montagem(doc, estrutura)
+        bitmaps = [
+            ((i.objeto.caixa.esquerda + i.objeto.caixa.direita) / 200_000,
+             (i.objeto.caixa.base + i.objeto.caixa.topo) / 200_000, i.identificador_bitmap)
+            for i in doc.instancias_bitmaps() if i.objeto is not None and i.objeto.caixa is not None
+        ]
 
     candidatos = []
     for item_bruto in profundos:
@@ -1100,6 +1149,7 @@ def extrair_candidatos_agente(caminho: Path) -> dict:
     ordenar_e_numerar(candidatos)
     _anotar_hierarquia(candidatos, recipientes_powerclip)
     _aplicar_montagens(candidatos, montagens)
+    _anotar_artes(candidatos, bitmaps)
     blocos_producao = detectar_blocos_producao(candidatos, evidencias)
 
     limites = None
