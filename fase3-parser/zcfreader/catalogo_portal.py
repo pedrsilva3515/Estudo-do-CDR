@@ -62,7 +62,7 @@ def material_portal(material, acabamento=None) -> tuple[str | None, str]:
             return "Material do Cliente Lona", "arquivo"
         if _tem(t, "adesiv", "vinil"):
             return "Material do Cliente Adesivo", "arquivo"
-    if _tem(t, "papel outdoor", "outdoor"):
+    if _tem(t, "papel outdoor", "outdoor", "outdor"):
         return "Papel Outdoor", "arquivo"
     if _tem(t, "couche"):
         gramatura = re.search(r" (150|250) ?g", t)
@@ -82,7 +82,7 @@ def material_portal(material, acabamento=None) -> tuple[str | None, str]:
             return ("Adesivo Fosco Blackout" if _tem(t, "fosc") else "Adesivo Blackout"), "arquivo"
         if _tem(t, "perfurad"):
             return "Adesivo Perfurado", "arquivo"
-        if _tem(t, "transparent", "trasnparent"):
+        if _tem(t, "transparent", "trasnparent", "trasparent", "tranparent"):
             return "Adesivo Transparente", "arquivo"
         if _tem(t, "fosc"):
             return "Adesivo Fosco", "arquivo"

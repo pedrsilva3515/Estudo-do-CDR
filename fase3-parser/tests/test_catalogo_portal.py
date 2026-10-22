@@ -17,6 +17,7 @@ class TestMaterialPortal(unittest.TestCase):
             ("adesivo branco fosco blackout", "Adesivo Fosco Blackout"),
             ("ADESIVO PERFURADO", "Adesivo Perfurado"),
             ("adesivo trasnparente", "Adesivo Transparente"),
+            ("ADS TRASPARENTE RECORTADO", "Adesivo Transparente"),
             ("Lona fosca com ilhoes", "Lona Fosca"),
             ("Papel outdoor", "Papel Outdoor"),
             ("Material do cliente adesivo", "Material do Cliente Adesivo"),

@@ -34,10 +34,13 @@ class FluxoTexto:
 
     @property
     def texto(self) -> str:
-        """Texto legível, separando trechos marcados como parágrafo."""
+        """Texto legível, separando trechos marcados como parágrafo ou quebra de linha.
+
+        Sem a quebra de linha, "4x4" e "100und" em linhas separadas viravam "4x4100und".
+        """
         partes: list[str] = []
         for indice, trecho in enumerate(self.trechos):
-            if indice and self.trechos[indice - 1].quebra == "para":
+            if indice and self.trechos[indice - 1].quebra in ("para", "line"):
                 partes.append("\n")
             partes.append(trecho.texto)
         return "".join(partes)

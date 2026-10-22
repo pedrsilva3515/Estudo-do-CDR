@@ -99,3 +99,17 @@ class TestTexto(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestQuebraDeLinha(unittest.TestCase):
+    def test_quebra_de_linha_separa_os_trechos(self):
+        from zcfreader.text import parse_textinfo
+
+        xml = (
+            '<TextInfo><TextStream>'
+            '<TextRun break="para" lang="1046">ads recortados </TextRun>'
+            '<TextRun break="line" lang="1046">4x4</TextRun>'
+            '<TextRun break="line" lang="1046">100und</TextRun>'
+            '</TextStream></TextInfo>'
+        ).encode("utf-8")
+        self.assertEqual(parse_textinfo(xml)[0].texto, "ads recortados \n4x4\n100und")

@@ -4,3 +4,4 @@ __pycache__/
 build/
 dist/
 gerados-casos-avancados/
+fase3-parser/tests/amostras_locais.json

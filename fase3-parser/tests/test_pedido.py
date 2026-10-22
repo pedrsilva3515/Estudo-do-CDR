@@ -10,7 +10,7 @@ _AQUI = Path(__file__).resolve().parent
 sys.path.insert(0, str(_AQUI.parent))
 
 from zcfreader import interpretar_nome_arquivo, parse_dimensoes, parse_material, parse_quantidade  # noqa: E402
-from zcfreader.pedido import _associar_um_a_um, _inventario_geometrico, _itens_de_instrucoes_explicitas, selecionar_inventario_geometrico  # noqa: E402
+from zcfreader.pedido import _aplicar_nome_arquivo, _associar_um_a_um, _inventario_geometrico, _itens_de_instrucoes_explicitas, selecionar_inventario_geometrico  # noqa: E402
 
 
 def _caixa_cm(x, y, largura, altura):
@@ -141,8 +141,14 @@ class TestMaterial(unittest.TestCase):
             {"material": "adesivo transparente", "acabamento": "recorte especial"},
         )
 
+    def test_transparente_com_erro_de_digitacao(self):
+        for texto in ("adesivo trasparente", "vinil tranparente", "adesivo trasnparente"):
+            with self.subTest(texto=texto):
+                self.assertEqual(parse_material(texto)["material"], "adesivo transparente")
+
     def test_texto_sem_material(self):
         self.assertIsNone(parse_material("14und"))
+        self.assertIsNone(parse_material("Google Ads"))  # "ads" só é adesivo no nome do arquivo
 
     def test_vinil_transparente_no_nome(self):
         self.assertEqual(
@@ -196,7 +202,94 @@ class TestDimensoes(unittest.TestCase):
         self.assertEqual(associacoes, {0: 0, 1: 0})
 
 
+def _item_sem_material(material=None):
+    return {"material": {"valor": material, "fonte": None, "confianca": 0.0},
+            "acabamento": {"valor": None, "fonte": None, "confianca": 0.0},
+            "quantidade": {"valor": 1, "fonte": "texto_cdr"}}
+
+
+class TestUnidadeGrudadaELaminacao(unittest.TestCase):
+    def test_und_grudado_em_ads(self):
+        texto = "5x5\n50undads recortados"
+        self.assertEqual(parse_quantidade(texto), (50, "unidade"))
+        self.assertEqual(parse_dimensoes(texto)["largura_mm"], 50.0)
+        self.assertEqual(parse_material(texto), {"material": "adesivo", "acabamento": "recortado"})
+
+    def test_transparente_aplicado_em_cima_e_laminacao(self):
+        self.assertEqual(
+            parse_material("50x50 1und ads leitoso com trasparente aplicado em cima"),
+            {"material": "adesivo leitoso", "acabamento": "laminação"},
+        )
+        self.assertEqual(parse_material("adesivo recortado e laminado")["acabamento"], "recortado + laminação")
+
+    def test_medida_e_quantidade_em_linhas_separadas(self):
+        texto = "ads recortados \n4x4\n100und"
+        self.assertEqual(parse_quantidade(texto), (100, "unidade"))
+        dimensoes = parse_dimensoes(texto)
+        self.assertEqual((dimensoes["largura_mm"], dimensoes["altura_mm"]), (40.0, 40.0))
+
+    def test_painel_outdoor_e_papel_outdoor(self):
+        self.assertEqual(parse_material("painel outdoor")["material"], "papel outdoor")
+        self.assertEqual(parse_material("paineis outdoor 1und de cada")["material"], "papel outdoor")
+
+    def test_ads_solto_na_arte_nao_e_material(self):
+        self.assertIsNone(parse_material("Google Ads"))
+
+
+class TestPlacaPS(unittest.TestCase):
+    def test_ps_adesivado_tem_quantidade_e_material(self):
+        texto = "1 PS ADESIVADO NO TAMANHO 20X30 CM"
+        self.assertEqual(parse_quantidade(texto), (1, "unidade"))
+        self.assertEqual(parse_material(texto), {"material": "ps adesivado", "acabamento": None})
+
+    def test_espessura_e_ps_solto_na_arte(self):
+        self.assertEqual(parse_material("placa de PS 2mm")["material"], "ps 2 mm")
+        self.assertIsNone(parse_material("PS: obrigado pela preferência"))
+
+
+class TestDimensoesComUnidadeNasDuasMedidas(unittest.TestCase):
+    def test_metros_nas_duas_medidas(self):
+        dimensoes = parse_dimensoes("1,10M X 2,40M")
+        self.assertEqual((dimensoes["largura_mm"], dimensoes["altura_mm"]), (1100.0, 2400.0))
+
+
 class TestNomeArquivo(unittest.TestCase):
+    def test_material_do_nome_vale_para_todas_as_pecas(self):
+        itens = [_item_sem_material() for _ in range(4)]
+        _aplicar_nome_arquivo(itens, interpretar_nome_arquivo("ADESIVOS CLIENTE.cdr"))
+        self.assertEqual([item["material"]["valor"] for item in itens], ["adesivo"] * 4)
+        self.assertTrue(all(item["material"]["fonte"] == "nome_arquivo" for item in itens))
+
+    def test_material_do_nome_nao_entra_quando_o_cdr_diz_outro(self):
+        itens = [_item_sem_material("lona"), _item_sem_material()]
+        _aplicar_nome_arquivo(itens, interpretar_nome_arquivo("ADESIVOS CLIENTE.cdr"))
+        self.assertEqual([item["material"]["valor"] for item in itens], ["lona", None])
+
+    def test_nome_generico_nao_completa_quando_o_cdr_e_mais_especifico(self):
+        itens = [_item_sem_material("adesivo transparente"), _item_sem_material()]
+        _aplicar_nome_arquivo(itens, interpretar_nome_arquivo("logo cliente ads.cdr"))
+        self.assertEqual([item["material"]["valor"] for item in itens], ["adesivo transparente", None])
+
+    def test_nome_com_outro_produto_nao_vale_para_todas(self):
+        itens = [_item_sem_material() for _ in range(2)]
+        _aplicar_nome_arquivo(itens, interpretar_nome_arquivo("paineis e adesivo cliente.cdr"))
+        self.assertEqual([item["material"]["valor"] for item in itens], [None, None])
+
+    def test_acabamento_do_nome_completa_material_generico_do_cdr(self):
+        itens = [_item_sem_material("adesivo") for _ in range(2)]
+        _aplicar_nome_arquivo(itens, interpretar_nome_arquivo("VINIL_BRILHOSO_RECORTADO.cdr"))
+        self.assertEqual([item["acabamento"]["valor"] for item in itens], ["recortado"] * 2)
+
+    def test_variacoes_de_recorte_e_prismatico(self):
+        for nome, esperado in (
+            ("VINIL BRANCO - APENAS RECORTE NO BRANCO.cdr", {"material": "adesivo branco", "acabamento": "somente recorte"}),
+            ("adesivos impressos com corte especial.cdr", {"material": "adesivo", "acabamento": "recorte especial"}),
+            ("VINIL PRISMATICO AMARELO - 502.cdr", {"material": "adesivo prismatico", "acabamento": None}),
+            ("Adesivos_Perfurado_Cliente.cdr", {"material": "adesivo perfurado", "acabamento": None}),
+        ):
+            with self.subTest(nome=nome):
+                self.assertEqual(interpretar_nome_arquivo(nome)["material"], esperado)
+
     def test_sufixo_de_copia_nao_vira_quantidade(self):
         resultado = interpretar_nome_arquivo("guanarabara iza ads (1).cdr")
         self.assertIsNone(resultado["quantidade"])
@@ -205,6 +298,10 @@ class TestNomeArquivo(unittest.TestCase):
         resultado = interpretar_nome_arquivo("adesivos BK set - sem rec.cdr")
         self.assertEqual(resultado["material"]["material"], "adesivo")
         self.assertEqual(resultado["material"]["acabamento"], "sem recorte")
+
+    def test_ads_transparente_recortado(self):
+        resultado = interpretar_nome_arquivo("logo cliente ADS TRASPARENTE RECORTADO.cdr")
+        self.assertEqual(resultado["material"], {"material": "adesivo transparente", "acabamento": "recortado"})
 
     def test_quantidade_e_dimensao_explicitas(self):
         resultado = interpretar_nome_arquivo("20und adesivo 30x40cm.cdr")
