@@ -9,6 +9,11 @@ Caminhos:
     estrutural          interpretar_pedido() atual, sem IA
     estrutural_ia_salva estrutural atual + reconciliação com a resposta de IA salva no pacote
     regional            produtos da arquitetura regional experimental (sem IA)
+    macro               o que a macro do CorelDRAW mostra no botão sem IA (ponte_corel, modo regras)
+
+Respostas certas ajustadas depois da revisão ficam em <pasta>/gabarito/<caso_id>.json.
+Use --saida para guardar uma rodada e --comparar <rodada anterior> para ver quais
+pedidos melhoraram ou pioraram.
 """
 from __future__ import annotations
 
@@ -21,6 +26,16 @@ from zcfreader.experimento_agente import executar_arquitetura_regional
 from zcfreader.pedido import interpretar_pedido
 from zcfreader.visao_api import reconciliar_analise_visual
 
+def _macro(cdr: Path, pacote) -> dict:
+    from zcfreader import ponte_corel
+    from zcfreader.agente import extrair_fatos
+
+    fatos = extrair_fatos(cdr)
+    resultado = ponte_corel._analisar_regras(cdr, fatos)
+    ponte_corel.separar_ocorrencias(resultado, fatos.get("candidatos") or {}, fatos.get("auditoria_regional"))
+    return ponte_corel.aplicar_catalogo(resultado)
+
+
 CAMINHOS = {
     "app_na_epoca": lambda cdr, pacote: json.loads(pacote.read("resultado-original.json")),
     "estrutural": lambda cdr, pacote: interpretar_pedido(cdr),
@@ -28,7 +43,29 @@ CAMINHOS = {
         interpretar_pedido(cdr), json.loads(pacote.read("analise-visual.json")), fonte="modelo_local",
     ),
     "regional": lambda cdr, pacote: resultado_de_auditoria_regional(executar_arquitetura_regional(cdr)),
+    "macro": _macro,
 }
+
+
+def _comparar_rodadas(anterior: dict, atual: dict) -> None:
+    """Lista os pedidos que mudaram de certo para errado (e vice-versa) entre duas rodadas."""
+    antes = {c.get("caso_id") or c["arquivo"]: c for c in anterior["casos"]}
+    for nome in atual["totais"]:
+        pioraram, melhoraram = [], []
+        for caso in atual["casos"]:
+            velho = (antes.get(caso.get("caso_id") or caso["arquivo"]) or {}).get("metricas", {}).get(nome)
+            novo = caso["metricas"][nome]
+            if not velho or "erro" in velho or "erro" in novo:
+                continue
+            if velho["pedido_correto"] and not novo["pedido_correto"]:
+                pioraram.append(caso["arquivo"])
+            elif novo["pedido_correto"] and not velho["pedido_correto"]:
+                melhoraram.append(caso["arquivo"])
+        print(f"\n{nome}: melhoraram {len(melhoraram)} | PIORARAM {len(pioraram)}")
+        for arquivo in melhoraram:
+            print(f"   + {arquivo}")
+        for arquivo in pioraram:
+            print(f"   - {arquivo}")
 
 
 def main() -> None:
@@ -37,11 +74,17 @@ def main() -> None:
     parser.add_argument("--caminhos", nargs="+", choices=list(CAMINHOS), default=list(CAMINHOS))
     parser.add_argument("--saida", type=Path, help="grava o JSON completo")
     parser.add_argument("--sem-corel", action="store_true", help="usa o preview embutido em vez de abrir o CorelDRAW")
+    parser.add_argument("--comparar", type=Path, help="JSON de uma rodada anterior (--saida) para comparar")
+    parser.add_argument("--somente", nargs="+", help="só os pedidos cujo nome contém algum destes trechos")
     args = parser.parse_args()
     if args.sem_corel:
         import zcfreader.visao_api as visao_api
         visao_api.renderizar_com_corel = lambda caminho, *a, **k: None
-    resultado = avaliar_caminhos(args.pasta, {nome: CAMINHOS[nome] for nome in args.caminhos})
+    if "macro" in args.caminhos:
+        # A macro nunca usa o CorelDRAW aberto: o desenho vem do próprio arquivo.
+        import zcfreader.visao_api as visao_api
+        visao_api.renderizar_com_corel = lambda caminho, *a, **k: None
+    resultado = avaliar_caminhos(args.pasta, {nome: CAMINHOS[nome] for nome in args.caminhos}, args.somente)
     if args.saida:
         args.saida.write_text(json.dumps(resultado, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -69,6 +112,9 @@ def main() -> None:
                if t.get("faltas_esperadas") else "")
             + (f" | FALHAS {t['falhas']}" if t["falhas"] else "")
         )
+
+    if args.comparar:
+        _comparar_rodadas(json.loads(args.comparar.read_text(encoding="utf-8")), resultado)
 
 
 if __name__ == "__main__":

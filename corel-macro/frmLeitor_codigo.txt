@@ -7,6 +7,7 @@ Private WithEvents lstItens As MSForms.ListBox
 Private WithEvents btnRegras As MSForms.CommandButton
 Private WithEvents btnIA As MSForms.CommandButton
 Private WithEvents btnAdicionar As MSForms.CommandButton
+Private WithEvents btnJuntar As MSForms.CommandButton
 Private WithEvents btnTrocar As MSForms.CommandButton
 Private WithEvents btnRemover As MSForms.CommandButton
 Private WithEvents btnAplicar As MSForms.CommandButton
@@ -106,6 +107,7 @@ Private Sub UserForm_Initialize()
 
     Set btnRegras = NovoBotao("btnRegras", "Analisar (sem IA)", 8, 202, 130)
     Set btnIA = NovoBotao("btnIA", "Analisar com IA", 144, 202, 130)
+    Set btnJuntar = NovoBotao("btnJuntar", "Juntar em grade", 280, 202, 118)
     Set btnAdicionar = NovoBotao("btnAdicionar", "Adicionar item da seleção", 404, 202, 180)
 
     Set lblItem = NovoRotulo("Item selecionado: nenhum. Clique num item da lista.", 8, 234, 576)
@@ -428,6 +430,51 @@ Private Sub btnAdicionar_Click()
     MostrarItem nItens
     lblStatus.Caption = "Item novo criado. Preencha quantidade, material e acabamento e clique em Aplicar alterações."
     txtQtd.SetFocus
+End Sub
+
+' Grade montada pelo cliente: o que vale é a grade inteira, não as peças.
+' Os itens da lista que ficam dentro da seleção somem e viram 1 item com o tamanho da grade.
+Private Sub btnJuntar_Click()
+    Dim e As Double, d As Double, b As Double, t As Double, objs As String
+    Dim k As Long, cx As Double, cy As Double, juntados As Long, modelo As Long
+    Const FOLGA As Double = 0.3
+    If Not DocumentoCerto() Then Exit Sub
+    If LerSelecao(e, d, b, t, objs) = 0 Then
+        MsgBox "Selecione no Corel a grade inteira (arraste um retângulo em volta dela) e clique de novo.", 0
+        Exit Sub
+    End If
+    If PainelAlterado() Then
+        If MsgBox("Você alterou o item anterior e não clicou em Aplicar. Aplicar agora?", 4) = 6 Then AplicarPainel
+    End If
+    For k = 1 To nItens
+        If Not itRemovido(k) And itTem(k) Then
+            cx = (itEsq(k) + itDir(k)) / 2: cy = (itBase(k) + itTopo(k)) / 2
+            If cx >= e - FOLGA And cx <= d + FOLGA And cy >= b - FOLGA And cy <= t + FOLGA Then
+                itRemovido(k) = True
+                juntados = juntados + 1
+                If modelo = 0 And (itMat(k) <> "" Or itAcab(k) <> "") Then modelo = k
+            End If
+        End If
+    Next k
+    nItens = nItens + 1
+    Crescer nItens
+    itOrig(nItens) = 0
+    itQtd(nItens) = "1": itMat(nItens) = "": itAcab(nItens) = ""
+    itOrQ(nItens) = "arquivo": itOrM(nItens) = "arquivo": itOrA(nItens) = "arquivo"
+    If modelo > 0 Then
+        itMat(nItens) = itMat(modelo): itAcab(nItens) = itAcab(modelo)
+        itOrM(nItens) = itOrM(modelo): itOrA(nItens) = itOrA(modelo)
+    End If
+    itMotivo(nItens) = "grade montada": itRemovido(nItens) = False
+    itEsq(nItens) = e: itDir(nItens) = d: itBase(nItens) = b: itTopo(nItens) = t
+    itTem(nItens) = True
+    itLarg(nItens) = d - e: itAlt(nItens) = t - b
+    itPeca(nItens) = "corel": itObjs(nItens) = objs
+    itSit(nItens) = "grade"
+    AtualizarLista nItens
+    MostrarItem nItens
+    lblStatus.Caption = juntados & " item(ns) da lista juntado(s) em 1 grade de " & Format(d - e, "0.0#") & " x " _
+        & Format(t - b, "0.0#") & " cm. Confira quantidade, material e acabamento e clique em Aplicar alterações."
 End Sub
 
 Private Sub btnSalvar_Click()

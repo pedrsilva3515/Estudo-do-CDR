@@ -10,6 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 from pathlib import Path
+import re
 import tempfile
 import unicodedata
 from zipfile import ZipFile
@@ -182,16 +183,43 @@ def carregar_casos(pasta: Path) -> list[dict]:
             nomes = pacote.namelist()
             if "diagnostico.json" not in nomes or "resultado-correto.json" not in nomes:
                 continue
-            # O CDR pode vir renomeado ".cdr.zip" (arquivos baixados do WhatsApp); o conteúdo é o mesmo.
+            # O CDR pode vir renomeado ".cdr.zip" ou ".cdr (1).zip" (arquivos baixados do WhatsApp);
+            # o conteúdo é o mesmo.
             cdr = next((n for n in nomes if n.startswith("arquivo-original/")
-                        and n.casefold().endswith((".cdr", ".cdr.zip"))), None)
+                        and re.search(r"\.cdr(?: \(\d+\))?(?:\.zip)?$", n.casefold())), None)
             if not cdr:
                 continue
             diagnostico = json.loads(pacote.read("diagnostico.json"))
             revisoes[diagnostico["arquivo"]["sha256"]] = {
                 "zip": zip_path, "membro_cdr": cdr, "nome": diagnostico["arquivo"]["nome"],
+                "caso_id": diagnostico.get("caso_id"),
             }
     return list(revisoes.values())
+
+
+PASTA_GABARITO = "gabarito"
+
+
+def gabarito_ajustado(pasta: Path, caso_id: str | None) -> dict | None:
+    """Resposta certa revista depois do pacote, em ``<pasta>/gabarito/<caso_id>.json``.
+
+    O pacote original nunca é alterado; o ajuste existe para revisões gravadas num
+    formato que depois mudou (ex.: grade montada salva como "N x peça").
+    """
+    if not caso_id:
+        return None
+    arquivo = Path(pasta) / PASTA_GABARITO / f"{caso_id}.json"
+    return json.loads(arquivo.read_text(encoding="utf-8")) if arquivo.is_file() else None
+
+
+def sem_faca_de_recorte(esperado: dict) -> dict:
+    """Tira do gabarito as linhas que o operador marcou como faca de recorte.
+
+    A faca (o contorno do corte, em vetor, ao lado da arte) vem no arquivo mas não
+    é um produto; o operador a marca com o material "faca de recorte".
+    """
+    itens = [i for i in esperado.get("itens") or [] if not re.search(r"\bfaca\b", _texto(_valor(i, "material")))]
+    return {**esperado, "itens": itens}
 
 
 def avaliar_caminhos(pasta: Path, caminhos: dict, somente: list[str] | None = None) -> dict:
@@ -206,14 +234,16 @@ def avaliar_caminhos(pasta: Path, caminhos: dict, somente: list[str] | None = No
         with ZipFile(caso["zip"]) as pacote, tempfile.TemporaryDirectory(prefix="cdr-aval-") as tmp:
             cdr = Path(tmp) / Path(caso["membro_cdr"]).name
             cdr.write_bytes(pacote.read(caso["membro_cdr"]))
-            esperado = json.loads(pacote.read("resultado-correto.json"))
+            esperado = sem_faca_de_recorte(
+                gabarito_ajustado(pasta, caso["caso_id"]) or json.loads(pacote.read("resultado-correto.json"))
+            )
             metricas = {}
             for nome, funcao in caminhos.items():
                 try:
                     metricas[nome] = comparar_tolerante(funcao(cdr, pacote), deepcopy(esperado))
                 except Exception as erro:  # um caminho quebrado não deve esconder os demais
                     metricas[nome] = {"erro": f"{type(erro).__name__}: {erro}"}
-        casos.append({"arquivo": caso["nome"], "metricas": metricas})
+        casos.append({"arquivo": caso["nome"], "caso_id": caso["caso_id"], "metricas": metricas})
     totais = {}
     for nome in caminhos:
         validos = [c["metricas"][nome] for c in casos if "erro" not in c["metricas"][nome]]
