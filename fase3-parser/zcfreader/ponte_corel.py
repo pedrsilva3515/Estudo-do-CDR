@@ -109,6 +109,17 @@ def separar_ocorrencias(resultado: dict, candidatos: dict, auditoria: dict | Non
     return resultado
 
 
+def _material_do_nome_arquivo(caminho: Path | None, itens: list[dict]) -> None:
+    """Preenche material e acabamento vazios pelo nome do arquivo, como faz o leitor estrutural."""
+    from .pedido import interpretar_nome_arquivo, _aplicar_nome_arquivo
+
+    if caminho is None or not itens:
+        return
+    evidencia = interpretar_nome_arquivo(caminho.name)
+    # Só material e acabamento: medida e quantidade continuam vindo do desenho.
+    _aplicar_nome_arquivo(itens, {"texto": evidencia["texto"], "material": evidencia["material"]})
+
+
 def _analisar_regras(caminho: Path, fatos: dict) -> dict:
     from .camadas import regras_resolvem, resultado_das_regras
 
@@ -117,6 +128,7 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
         resultado = resultado_das_regras(auditoria)
         for item in resultado["itens"]:
             item["situacao"] = "regras"
+        _material_do_nome_arquivo(caminho, resultado["itens"])
         return {"itens": resultado["itens"], "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras"}}
     itens = []
     for regra in auditoria.get("itens") or []:
@@ -171,6 +183,7 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
     ]
     for indice, item in enumerate(itens, 1):
         item["indice"] = indice
+    _material_do_nome_arquivo(caminho, itens)
     return {"itens": itens, "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras (a confirmar)"}}
 
 

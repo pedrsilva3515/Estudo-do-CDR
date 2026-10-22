@@ -126,6 +126,17 @@ class TestPecasSemTexto(unittest.TestCase):
         self.assertEqual([i["candidatos"] for i in resultado["itens"]], [["A01"], ["A02"]])
         self.assertEqual([i["situacao"] for i in resultado["itens"]], ["a confirmar", "sem texto - confirmar"])
 
+    def test_material_vem_do_nome_do_arquivo_como_no_leitor(self):
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {"auditoria_regional": {"itens": [{
+            "candidato_id": "A01", "papel": "sem_classificacao", "largura_cm": 125, "altura_cm": 40,
+            "quantidade_pedido": None, "quantidade_desenhada": 1, "material": None, "acabamento": None,
+        }]}}
+        resultado = _analisar_regras(Path("arte gabriel lava jato adesivo perfurado.cdr"), fatos)
+        self.assertEqual(resultado["itens"][0]["material"]["valor"], "adesivo perfurado")
+        self.assertEqual(resultado["itens"][0]["dimensoes"]["largura_mm"], 1250)
+
 
 if __name__ == "__main__":
     unittest.main()
