@@ -29,6 +29,11 @@ from time import perf_counter
 
 
 LADO_MINIMO_SEM_TEXTO_CM = 3.0
+# Muitas peças pequenas da mesma medida desenhadas: o cliente mandou a grade montada.
+# Nas revisões de 22/10/2026 eram grade 25, 30, 90 e 120 peças de 4 a 10 cm; não eram
+# 6 árvores de 20 cm, 5 faixas de 90 cm nem pares de peças grandes.
+GRADE_MINIMA_PECAS = 6
+GRADE_PECA_MAXIMA_CM = 15.0
 
 
 def _caixa_do_item(item: dict, candidatos: dict) -> dict | None:
@@ -57,6 +62,9 @@ def separar_ocorrencias(resultado: dict, candidatos: dict, auditoria: dict | Non
     - "N de cada" com K peças desenhadas (quantidade N × K): K itens de N unidades,
       seja qual for a arte, porque "de cada" já diz que cada peça é um produto.
     - Sem como saber (arte só em vetor) ou quantidade diferente: marca para conferir.
+    - Muitas peças pequenas desenhadas (``GRADE_MINIMA_PECAS`` ou mais, de até
+      ``GRADE_PECA_MAXIMA_CM``): o cliente mandou a grade
+      montada, e o que vai para a produção é 1 grade com o tamanho do conjunto.
     """
     from copy import deepcopy
     from .agente import _quantidade_de_cada
@@ -81,6 +89,20 @@ def separar_ocorrencias(resultado: dict, candidatos: dict, auditoria: dict | Non
         artes = candidato.get("artes")
         quantidade = (item.get("quantidade") or {}).get("valor") or 0
         por_peca = por_ocorrencia.get(ids[0])
+        pequena = max(candidato["largura_cm"], candidato["altura_cm"]) <= GRADE_PECA_MAXIMA_CM
+        if len(caixas) >= GRADE_MINIMA_PECAS and pequena and not por_peca:
+            grade = {
+                "esquerda": min(c["esquerda"] for c in caixas), "direita": max(c["direita"] for c in caixas),
+                "base": min(c["base"] for c in caixas), "topo": max(c["topo"] for c in caixas),
+            }
+            item["quantidade"] = {"valor": 1}
+            item["dimensoes"] = {"largura_mm": round((grade["direita"] - grade["esquerda"]) * 10, 1),
+                                 "altura_mm": round((grade["topo"] - grade["base"]) * 10, 1)}
+            item["caixa_cm"] = grade
+            item["grade"] = {"pecas": len(caixas), "peca_cm": [candidato["largura_cm"], candidato["altura_cm"]]}
+            item["situacao"] = f"grade de {len(caixas)} - confirmar"
+            itens.append(item)
+            continue
         if por_peca and por_peca * len(caixas) == quantidade:
             # "N de cada" com K peças desenhadas: K itens de N unidades, cada um com a sua caixa.
             for caixa in caixas:
@@ -103,10 +125,34 @@ def separar_ocorrencias(resultado: dict, candidatos: dict, auditoria: dict | Non
             situacao = item.get("situacao") or ""
             item["situacao"] = f"{situacao} - conferir artes" if situacao else "conferir artes"
         itens.append(item)
+    itens = _sem_repetir_grade(itens, candidatos)
     for indice, item in enumerate(itens, 1):
         item["indice"] = indice
     resultado["itens"] = itens
     return resultado
+
+
+def _sem_repetir_grade(itens: list[dict], candidatos: dict) -> list[dict]:
+    """Tira os itens que ocupam a mesma caixa de uma grade já listada.
+
+    A grade costuma vir em mais de uma camada (impressão e corte) e às vezes com o
+    contorno da folha desenhado: tudo isso é a mesma grade, não itens a mais.
+    """
+    def mesma_caixa(a: dict | None, b: dict) -> bool:
+        return bool(a) and all(abs(a[lado] - b[lado]) <= 0.5 for lado in ("esquerda", "direita", "base", "topo"))
+
+    grades = [_caixa_do_item(item, candidatos) for item in itens if item.get("grade")]
+    restantes, vistas = [], []
+    for item in itens:
+        caixa = _caixa_do_item(item, candidatos)
+        if item.get("grade"):
+            if any(mesma_caixa(caixa, g) for g in vistas):
+                continue
+            vistas.append(caixa)
+        elif any(mesma_caixa(caixa, g) for g in grades):
+            continue
+        restantes.append(item)
+    return restantes
 
 
 def _material_do_nome_arquivo(caminho: Path | None, itens: list[dict]) -> None:

@@ -138,5 +138,46 @@ class TestPecasSemTexto(unittest.TestCase):
         self.assertEqual(resultado["itens"][0]["dimensoes"]["largura_mm"], 1250)
 
 
+class TestGradeMontada(unittest.TestCase):
+    @staticmethod
+    def _candidato(colunas: int, linhas: int, lado: float = 5.0) -> dict:
+        posicoes = [{"x": c * lado + lado / 2, "y": l * lado + lado / 2} for c in range(colunas) for l in range(linhas)]
+        return {"largura_cm": lado, "altura_cm": lado, "posicoes_centro_cm": posicoes, "artes": "iguais",
+                "caixa_cm": {"esquerda": 0, "direita": colunas * lado, "base": 0, "topo": linhas * lado}}
+
+    @staticmethod
+    def _item(id_: str, quantidade: int, lado: float = 5.0) -> dict:
+        return {"quantidade": {"valor": quantidade}, "dimensoes": {"largura_mm": lado * 10, "altura_mm": lado * 10},
+                "material": {"valor": "adesivo"}, "acabamento": {"valor": "recorte"}, "candidatos": [id_]}
+
+    def test_muitas_pecas_desenhadas_viram_1_grade_e_camada_repetida_some(self):
+        from zcfreader.ponte_corel import separar_ocorrencias
+
+        candidatos = {"A01": self._candidato(10, 9), "A02": self._candidato(10, 9),
+                      "A03": {"largura_cm": 50, "altura_cm": 45, "caixa_cm": {"esquerda": 0, "direita": 50, "base": 0, "topo": 45}}}
+        resultado = {"itens": [self._item("A01", 90), {**self._item("A03", 1, 50), "dimensoes": {"largura_mm": 500, "altura_mm": 450}},
+                               self._item("A02", 90)]}
+        itens = separar_ocorrencias(resultado, candidatos)["itens"]
+        self.assertEqual(len(itens), 1)
+        self.assertEqual(itens[0]["quantidade"]["valor"], 1)
+        self.assertEqual((itens[0]["dimensoes"]["largura_mm"], itens[0]["dimensoes"]["altura_mm"]), (500, 450))
+        self.assertEqual(itens[0]["grade"]["pecas"], 90)
+
+    def test_poucas_pecas_grandes_continuam_com_quantidade(self):
+        from zcfreader.ponte_corel import separar_ocorrencias
+
+        candidatos = {"A01": self._candidato(1, 5, 20.0)}
+        itens = separar_ocorrencias({"itens": [self._item("A01", 5, 20.0)]}, candidatos)["itens"]
+        self.assertEqual([i["quantidade"]["valor"] for i in itens], [5])
+        self.assertNotIn("grade", itens[0])
+
+    def test_seis_artes_grandes_nao_sao_grade(self):
+        from zcfreader.ponte_corel import separar_ocorrencias
+
+        candidatos = {"A01": {**self._candidato(3, 2, 20.0), "artes": "distintas"}}
+        itens = separar_ocorrencias({"itens": [self._item("A01", 6, 20.0)]}, candidatos)["itens"]
+        self.assertEqual([i["quantidade"]["valor"] for i in itens], [1] * 6)
+
+
 if __name__ == "__main__":
     unittest.main()
