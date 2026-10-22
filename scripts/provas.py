@@ -48,15 +48,18 @@ def main() -> int:
         if "erro" in medidas:
             print(f"  ERRO  {nome}: {medidas['erro']}", flush=True)
         else:
-            marca = "OK" if medidas["regras_pedido_correto"] else "  "
-            print(f"  {marca}  {nome}  (peças certas visíveis {medidas['itens_com_peca']}/{medidas['itens_esperados']})",
-                  flush=True)
+            estrutural = "OK" if medidas["estrutural_pedido_correto"] else "--"
+            regras = "OK" if medidas["regras_pedido_correto"] else "--"
+            print(f"  estrutural {estrutural}  regras {regras}  {nome}  "
+                  f"(peças certas visíveis {medidas['itens_com_peca']}/{medidas['itens_esperados']})", flush=True)
 
     print(f"Refazendo os pedidos revisados de {args.pasta} ...")
     atual = medir_pasta(args.pasta, somente=args.casos, progresso=progresso)
     t = totais(atual)
     print(
-        f"\n{t['pedidos']} pedidos | regras certas {t['regras_pedido_correto']} | linhas {t['regras_linhas_corretas']}/"
+        f"\n{t['pedidos']} pedidos | estrutural certos {t['estrutural_pedido_correto']} | linhas "
+        f"{t['estrutural_linhas_corretas']}/{t['itens_esperados']} | regras certas {t['regras_pedido_correto']} | "
+        f"linhas {t['regras_linhas_corretas']}/"
         f"{t['itens_esperados']} | a mais {t['regras_a_mais']} | faltando {t['regras_faltando']} | "
         f"regras decidem sozinhas {t['regras_decidem']} (erradas {t['regras_decidem_errado']}) | "
         f"peças para a IA {t['pecas_para_ia']} | itens com peça visível {t['itens_com_peca']}/{t['itens_esperados']}"

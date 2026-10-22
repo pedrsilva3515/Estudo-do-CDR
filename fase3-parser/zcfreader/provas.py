@@ -5,6 +5,8 @@ refeitos pelos caminhos sem IA (gratuitos e sempre iguais) e comparados com a
 referência gravada. Qualquer pedido que piorar aparece na hora.
 
 O que se mede em cada pedido:
+- estrutural: o resultado da análise estrutural (o modo padrão da interface),
+  comparado com o resultado correto;
 - regras: o resultado das regras regionais, comparado com o resultado correto;
 - regras_decidem: se as regras respondem sozinhas (o fluxo em camadas nem chama
   a IA) e, nesse caso, se acertam; decidir sozinho e errar é o pior erro;
@@ -26,6 +28,12 @@ TOLERANCIA_PECA_CM = 1.5
 
 # Métrica -> True quando maior é melhor.
 METRICAS = {
+    "estrutural_pedido_correto": True,
+    "estrutural_linhas_corretas": True,
+    "estrutural_a_mais": False,
+    "estrutural_faltando": False,
+    "estrutural_material_ok": True,
+    "estrutural_acabamento_ok": True,
     "regras_pedido_correto": True,
     "regras_linhas_corretas": True,
     "regras_a_mais": False,
@@ -55,7 +63,9 @@ def _itens_com_peca(candidatos: list[dict], esperado: dict) -> int:
 def medir_caso(cdr: Path, esperado: dict) -> dict:
     """Mede um pedido pelos caminhos sem IA."""
     from .experimento_agente import executar_arquitetura_regional, extrair_candidatos_agente
+    from .pedido import interpretar_pedido
 
+    estrutural = comparar_tolerante(interpretar_pedido(cdr), deepcopy(esperado))
     auditoria = executar_arquitetura_regional(cdr)
     regras = comparar_tolerante(resultado_de_auditoria_regional(auditoria), deepcopy(esperado))
     decidem = regras_resolvem(auditoria)
@@ -65,6 +75,12 @@ def medir_caso(cdr: Path, esperado: dict) -> dict:
     candidatos = catalogo["candidatos"] + catalogo.get("blocos_producao", [])
     return {
         "itens_esperados": len(esperado.get("itens") or []),
+        "estrutural_pedido_correto": int(estrutural["pedido_correto"]),
+        "estrutural_linhas_corretas": estrutural["linhas_corretas"],
+        "estrutural_a_mais": estrutural["a_mais"],
+        "estrutural_faltando": estrutural["faltando"],
+        "estrutural_material_ok": estrutural["material_ok"],
+        "estrutural_acabamento_ok": estrutural["acabamento_ok"],
         "regras_pedido_correto": int(regras["pedido_correto"]),
         "regras_linhas_corretas": regras["linhas_corretas"],
         "regras_a_mais": regras["a_mais"],
@@ -126,6 +142,8 @@ def comparar_com_referencia(referencia: dict, atual: dict) -> dict:
 
 def totais(casos: dict) -> dict:
     validos = [m for m in casos.values() if "erro" not in m]
-    chaves = ["itens_esperados", "regras_pedido_correto", "regras_linhas_corretas", "regras_a_mais", "regras_faltando",
+    chaves = ["itens_esperados", "estrutural_pedido_correto", "estrutural_linhas_corretas", "regras_pedido_correto", "regras_linhas_corretas", "regras_a_mais", "regras_faltando",
               "regras_decidem", "regras_decidem_errado", "pecas_para_ia", "itens_com_peca"]
-    return {"pedidos": len(casos), "com_erro": len(casos) - len(validos), **{c: sum(m[c] for m in validos) for c in chaves}}
+    # Referências antigas não têm as métricas da análise estrutural.
+    return {"pedidos": len(casos), "com_erro": len(casos) - len(validos),
+            **{c: sum(m.get(c, 0) for m in validos) for c in chaves}}
