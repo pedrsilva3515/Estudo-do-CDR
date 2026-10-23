@@ -132,6 +132,69 @@ def separar_ocorrencias(resultado: dict, candidatos: dict, auditoria: dict | Non
     return resultado
 
 
+# Faca de recorte em volta da arte: curva que envolve a peça com uma margem pequena
+# (a borda branca). No pedido "PARA NATAL" as margens iam de 0,1 a 1,2 cm.
+FACA_MARGEM_MAXIMA_CM = 3.0
+
+
+def _faca_em_volta(caixa: dict, candidatos: dict, ignorar: set[str]) -> str | None:
+    melhor = None
+    for candidato_id, c in candidatos.items():
+        if candidato_id in ignorar or set(c.get("tipos") or []) != {"curva"} or not c.get("caixa_cm"):
+            continue
+        faca = c["caixa_cm"]
+        margens = (caixa["esquerda"] - faca["esquerda"], faca["direita"] - caixa["direita"],
+                   caixa["base"] - faca["base"], faca["topo"] - caixa["topo"])
+        if all(-0.05 <= m <= FACA_MARGEM_MAXIMA_CM for m in margens) and max(margens) > 0.2:
+            # A mais justa: uma moldura maior em volta da faca não é a faca.
+            if melhor is None or sum(margens) < melhor[0]:
+                melhor = (sum(margens), candidato_id)
+    return melhor[1] if melhor else None
+
+
+def aplicar_medida_da_faca(resultado: dict, candidatos: dict) -> dict:
+    """Peça com faca em volta: a medida do item é a da faca, que inclui a borda branca.
+
+    O acabamento não muda: a faca não quer dizer que a gráfica recorta (o cliente
+    pode recortar em casa); o recorte só entra quando está escrito.
+    """
+    itens = resultado.get("itens") or []
+    usados = {i for item in itens for i in item.get("candidatos") or []}
+    facas_listadas = set()
+    for item in itens:
+        caixa = _caixa_do_item(item, candidatos)
+        if not caixa:
+            continue
+        faca_id = _faca_em_volta(caixa, candidatos, set(item.get("candidatos") or []))
+        if not faca_id:
+            continue
+        faca = candidatos[faca_id]
+        dimensoes = item.get("dimensoes") or {}
+        item["faca"] = {"candidato": faca_id, "arte_cm": [round((dimensoes.get("largura_mm") or 0) / 10, 2),
+                                                           round((dimensoes.get("altura_mm") or 0) / 10, 2)]}
+        item["dimensoes"] = {**dimensoes, "largura_mm": round(faca["largura_cm"] * 10, 1),
+                             "altura_mm": round(faca["altura_cm"] * 10, 1), "tipo": "faca_de_recorte"}
+        item["caixa_cm"] = dict(faca["caixa_cm"])
+        if faca_id in usados:
+            facas_listadas.add(faca_id)
+    # A faca que as regras listaram como peça "sem texto" deixa de ser um item a mais.
+    resultado["itens"] = [
+        item for item in itens
+        if "faca" in item or len(item.get("candidatos") or []) != 1 or item["candidatos"][0] not in facas_listadas
+    ]
+    for indice, item in enumerate(resultado["itens"], 1):
+        item["indice"] = indice
+    return resultado
+
+
+def finalizar_resultado(resultado: dict, fatos: dict) -> dict:
+    """Ajustes depois das regras ou da IA, iguais na macro e na régua."""
+    candidatos = fatos.get("candidatos") or {}
+    separar_ocorrencias(resultado, candidatos, fatos.get("auditoria_regional"))
+    aplicar_medida_da_faca(resultado, candidatos)
+    return aplicar_catalogo(resultado)
+
+
 def _sem_repetir_grade(itens: list[dict], candidatos: dict) -> list[dict]:
     """Tira os itens que ocupam a mesma caixa de uma grade já listada.
 
@@ -431,8 +494,7 @@ def main(argumentos: list[str]) -> int:
 
         fatos = extrair_fatos(caminho)
         resultado = _analisar_ia(caminho, fatos) if modo == "ia" else _analisar_regras(caminho, fatos)
-        separar_ocorrencias(resultado, fatos.get("candidatos") or {}, fatos.get("auditoria_regional"))
-        aplicar_catalogo(resultado)
+        finalizar_resultado(resultado, fatos)
         linhas = linhas_de_saida(resultado, fatos.get("candidatos") or {}, perf_counter() - inicio)
         Path(str(saida) + ".json").write_text(
             json.dumps({"arquivo": str(caminho), "modo": modo, "resultado": resultado}, ensure_ascii=False,

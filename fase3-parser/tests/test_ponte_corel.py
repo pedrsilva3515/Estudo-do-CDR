@@ -150,6 +150,43 @@ class TestPecasSemTexto(unittest.TestCase):
         self.assertEqual(resultado["itens"][0]["dimensoes"]["largura_mm"], 1250)
 
 
+class TestMedidaDaFaca(unittest.TestCase):
+    @staticmethod
+    def _caixa(e, d, b, t):
+        return {"esquerda": e, "direita": d, "base": b, "topo": t}
+
+    def _candidato(self, e, d, b, t, tipos):
+        return {"caixa_cm": self._caixa(e, d, b, t), "largura_cm": d - e, "altura_cm": t - b, "tipos": tipos}
+
+    def test_peca_com_faca_em_volta_fica_com_a_medida_da_faca_e_sem_recorte_inventado(self):
+        from zcfreader.ponte_corel import aplicar_medida_da_faca
+
+        candidatos = {
+            "A07": self._candidato(0, 27, 0, 27, ["bitmap"]),
+            "A03": self._candidato(-0.8, 27.7, -0.1, 27.8, ["curva"]),     # faca: borda branca
+            "A90": self._candidato(-20, 80, -20, 80, ["curva"]),           # moldura grande: não é faca
+        }
+        item = {"quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 270, "altura_mm": 270},
+                "acabamento": {"valor": None}, "candidatos": ["A07"]}
+        faca_listada = {"quantidade": {"valor": 1}, "dimensoes": {"largura_mm": 285, "altura_mm": 279},
+                        "candidatos": ["A03"], "situacao": "sem texto - confirmar"}
+        itens = aplicar_medida_da_faca({"itens": [item, faca_listada]}, candidatos)["itens"]
+        self.assertEqual(len(itens), 1)  # a faca não fica como item a mais
+        self.assertEqual((itens[0]["dimensoes"]["largura_mm"], itens[0]["dimensoes"]["altura_mm"]), (285.0, 279.0))
+        self.assertEqual(itens[0]["faca"]["arte_cm"], [27.0, 27.0])
+        self.assertIsNone(itens[0]["acabamento"]["valor"])
+
+    def test_sem_faca_a_medida_nao_muda(self):
+        from zcfreader.ponte_corel import aplicar_medida_da_faca
+
+        candidatos = {"A01": self._candidato(0, 50, 0, 30, ["bitmap"]),
+                      "A02": self._candidato(0, 50, 0, 30, ["curva"])}  # mesma caixa: não há borda
+        item = {"dimensoes": {"largura_mm": 500, "altura_mm": 300}, "candidatos": ["A01"]}
+        itens = aplicar_medida_da_faca({"itens": [item]}, candidatos)["itens"]
+        self.assertEqual(itens[0]["dimensoes"]["largura_mm"], 500)
+        self.assertNotIn("faca", itens[0])
+
+
 class TestGradeMontada(unittest.TestCase):
     @staticmethod
     def _candidato(colunas: int, linhas: int, lado: float = 5.0) -> dict:

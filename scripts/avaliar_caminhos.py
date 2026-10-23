@@ -39,8 +39,7 @@ def _macro(cdr: Path, pacote) -> dict:
 
     fatos = extrair_fatos(cdr)
     resultado = ponte_corel._analisar_regras(cdr, fatos)
-    ponte_corel.separar_ocorrencias(resultado, fatos.get("candidatos") or {}, fatos.get("auditoria_regional"))
-    return ponte_corel.aplicar_catalogo(resultado)
+    return ponte_corel.finalizar_resultado(resultado, fatos)
 
 
 GASTO_IA: dict[str, float] = {}
@@ -58,8 +57,7 @@ def _macro_ia(nome: str, com_esqueleto: bool):
         fatos = agente.extrair_fatos(cdr)
         resultado = ponte_corel._analisar_ia(cdr, fatos)
         GASTO_IA[nome] = gasto + float((resultado.get("processamento") or {}).get("custo_usd") or 0)
-        ponte_corel.separar_ocorrencias(resultado, fatos.get("candidatos") or {}, fatos.get("auditoria_regional"))
-        return ponte_corel.aplicar_catalogo(resultado)
+        return ponte_corel.finalizar_resultado(resultado, fatos)
     return rodar
 
 
