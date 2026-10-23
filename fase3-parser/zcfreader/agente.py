@@ -235,21 +235,87 @@ def _medida(c: dict) -> str:
     return f"{c['largura_cm']:.2f} x {c['altura_cm']:.2f} cm"
 
 
+# Ficha com o esqueleto: posição de cada peça, quem está dentro de quem e os textos
+# mais próximos já calculados. Nos pedidos grandes a imagem reduzida deixa peças
+# pequenas com poucos pixels; os dados não perdem resolução.
+# Desligada até a comparação na régua terminar (23/10/2026: 18 pedidos medidos,
+# a ficha antiga acertou 6 e a com esqueleto 5; a rodada parou no limite da chave).
+FICHA_COM_ESQUELETO = False
+TEXTOS_PROXIMOS_POR_PECA = 2
+DISTANCIA_TEXTO_PROXIMO_CM = 15.0
+
+
+def _distancia_caixas(a: dict, b: dict) -> float:
+    dx = max(b["esquerda"] - a["direita"], a["esquerda"] - b["direita"], 0.0)
+    dy = max(b["base"] - a["topo"], a["base"] - b["topo"], 0.0)
+    return (dx ** 2 + dy ** 2) ** 0.5
+
+
+def _direcao(peca: dict, texto: dict) -> str:
+    if texto["base"] >= peca["topo"] - 0.2:
+        return "acima"
+    if texto["topo"] <= peca["base"] + 0.2:
+        return "abaixo"
+    if texto["direita"] <= peca["esquerda"] + 0.2:
+        return "à esquerda"
+    if texto["esquerda"] >= peca["direita"] - 0.2:
+        return "à direita"
+    return "dentro"
+
+
+def _contida(a: dict, b: dict, folga: float = 0.3) -> bool:
+    return (b["esquerda"] - folga <= a["esquerda"] and a["direita"] <= b["direita"] + folga
+            and b["base"] - folga <= a["base"] and a["topo"] <= b["topo"] + folga)
+
+
+def _esqueleto_da_peca(fatos: dict, candidato_id: str, visiveis: list[str], instrucoes: list[dict]) -> list[str]:
+    caixa = fatos["candidatos"][candidato_id]["caixa_cm"]
+    partes = [f"em x={caixa['esquerda']:.1f}..{caixa['direita']:.1f}, y={caixa['base']:.1f}..{caixa['topo']:.1f}"]
+    outras = [(i, fatos["candidatos"][i]["caixa_cm"]) for i in visiveis if i != candidato_id]
+    iguais = [i for i, c in outras if _contida(caixa, c, 0.5) and _contida(c, caixa, 0.5)]
+    dentro = [i for i, c in outras if i not in iguais and _contida(caixa, c)]
+    if iguais:
+        partes.append(f"mesma caixa que {','.join(iguais)}")
+    if dentro:
+        partes.append(f"dentro de {','.join(dentro)}")
+    linhas = ["; ".join(partes)]
+    proximos = sorted(((_distancia_caixas(caixa, t["caixa_cm"]), t) for t in instrucoes), key=lambda par: par[0])
+    for distancia, t in proximos[:TEXTOS_PROXIMOS_POR_PECA]:
+        if distancia <= DISTANCIA_TEXTO_PROXIMO_CM:
+            linhas.append(f"    texto mais próximo: {t['id']} \"{t['texto']}\" {_direcao(caixa, t['caixa_cm'])}, "
+                          f"a {distancia:.1f} cm" + (" (lido por OCR)" if t["fonte"] != "texto_nativo" else ""))
+    return linhas
+
+
 def ficha_fatos(fatos: dict) -> str:
     linhas = [
         f"ARQUIVO: {fatos['arquivo']}", "",
         "PEÇAS CANDIDATAS DE PRIMEIRO NÍVEL (medidas exatas do CDR;",
         "'ocorrências desenhadas' pode reunir artes diferentes do mesmo tamanho):",
     ]
-    for candidato_id, c in fatos["candidatos"].items():
-        if not c.get("visivel_inicialmente", True):
-            continue
+    visiveis = [i for i, c in fatos["candidatos"].items() if c.get("visivel_inicialmente", True)]
+    # Instruções: textos do arquivo e o que o OCR leu fora das peças (texto em curvas);
+    # o OCR de dentro de uma peça é o texto da própria arte.
+    instrucoes = [
+        t for t in fatos["textos"].values()
+        if t["fonte"] == "texto_nativo"
+        or (float(t.get("confianca") or 0) >= 0.8
+            and not any(_contida(t["caixa_cm"], fatos["candidatos"][i]["caixa_cm"]) for i in visiveis))
+    ]
+    for candidato_id in visiveis:
+        c = fatos["candidatos"][candidato_id]
         filhos = c.get("filhos_ids") or []
-        linhas.append(
+        linha = (
             f"- {candidato_id}: {_medida(c)}; ocorrências desenhadas: {c.get('quantidade_geometrica', 1)}; "
             f"origem: {c.get('origem')}; tipos: {','.join(c.get('tipos') or [])}"
             + (f"; contém {len(filhos)} candidata(s) interna(s)" if filhos else "")
         )
+        if FICHA_COM_ESQUELETO and c.get("caixa_cm"):
+            esqueleto = _esqueleto_da_peca(fatos, candidato_id, [i for i in visiveis if fatos["candidatos"][i].get("caixa_cm")], instrucoes)
+            linhas.append(f"{linha}; {esqueleto[0]}")
+            linhas += esqueleto[1:]
+        else:
+            linhas.append(linha)
     linhas += ["", "TEXTOS DA PÁGINA (de cima para baixo; posição em cm):"]
     for texto_id, t in fatos["textos"].items():
         caixa = t["caixa_cm"]
@@ -292,7 +358,7 @@ Objetivo: listar as LINHAS DE PRODUÇÃO do pedido — cada produto distinto com
 Você recebe:
 1. Imagem limpa da montagem.
 2. A mesma imagem com as peças candidatas de primeiro nível marcadas por ID (A01, A02…) e os textos por ID (T01, T02…).
-3. Uma ficha com as medidas EXATAS de cada candidata e todos os textos. As medidas vêm do arquivo: nunca estime nem invente medidas.
+3. Uma ficha com as medidas EXATAS de cada candidata e todos os textos. As medidas vêm do arquivo: nunca estime nem invente medidas. Para cada peça, a ficha já traz a posição, quem está dentro de quem e os textos mais próximos com direção e distância: use isso para ligar cada instrução à peça certa, sobretudo quando a peça é pequena demais para ler na imagem.
 
 Como decidir:
 - Um produto é uma peça que será impressa/cortada. Molduras de montagem, colchetes, setas, cotas, legendas e cabeçalhos NÃO são produtos.

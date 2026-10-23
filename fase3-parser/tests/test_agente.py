@@ -87,6 +87,33 @@ class TestValidadorAgente(unittest.TestCase):
         erros = validar(FATOS, {"itens": [_item(["A47"], 12, texto="T11", material="lona", texto_material="T11")]})
         self.assertTrue(any("material 'lona'" in e for e in erros))
 
+    def test_ficha_traz_posicao_e_texto_mais_proximo_de_cada_peca(self):
+        from zcfreader.agente import ficha_fatos
+        caixa = lambda e, d, b, t: {"esquerda": e, "direita": d, "base": b, "topo": t}
+        fatos = {
+            "arquivo": "x.cdr", "pistas_regras": [],
+            "candidatos": {
+                "A01": {"largura_cm": 9, "altura_cm": 5, "caixa_cm": caixa(0, 9, 0, 5)},
+                "A02": {"largura_cm": 4, "altura_cm": 4, "caixa_cm": caixa(20, 24, 0, 4)},
+            },
+            "textos": {
+                # Dois textos à mesma distância de A01: o desempate não pode comparar os textos.
+                "T01": {"id": "T01", "texto": "100 cartões", "fonte": "texto_nativo", "caixa_cm": caixa(0, 9, 5.4, 6)},
+                "T02": {"id": "T02", "texto": "200 adesivos", "fonte": "texto_nativo", "caixa_cm": caixa(0, 9, -1, -0.4)},
+                "T03": {"id": "T03", "texto": "Narz", "fonte": "ocr", "confianca": 0.6, "caixa_cm": caixa(10, 12, 0, 1)},
+            },
+        }
+        import zcfreader.agente as agente
+        antes, agente.FICHA_COM_ESQUELETO = agente.FICHA_COM_ESQUELETO, True
+        try:
+            ficha = ficha_fatos(fatos)
+        finally:
+            agente.FICHA_COM_ESQUELETO = antes
+        self.assertIn("A01: 9.00 x 5.00 cm", ficha)
+        self.assertIn('texto mais próximo: T01 "100 cartões" acima, a 0.4 cm', ficha)
+        self.assertIn('texto mais próximo: T02 "200 adesivos" abaixo, a 0.4 cm', ficha)
+        self.assertNotIn('próximo: T03', ficha)  # OCR de baixa confiança não vira instrução
+
     def test_nome_do_portal_flow_e_provado_pelo_texto_do_pedido(self):
         from zcfreader.agente import _cita_no_catalogo
         fatos = {"arquivo": "x.cdr", "textos": {

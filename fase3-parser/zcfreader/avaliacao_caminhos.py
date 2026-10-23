@@ -249,14 +249,18 @@ def sem_faca_de_recorte(esperado: dict) -> dict:
     return {**esperado, "itens": itens}
 
 
-def avaliar_caminhos(pasta: Path, caminhos: dict, somente: list[str] | None = None) -> dict:
+def avaliar_caminhos(pasta: Path, caminhos: dict, somente: list[str] | None = None,
+                     casos_ids: set[str] | None = None) -> dict:
     """``caminhos`` mapeia nome -> função(caminho_cdr, pacote) que devolve um resultado.
 
-    ``somente`` restringe aos casos cujo nome contém algum dos trechos informados.
+    ``somente`` restringe aos casos cujo nome contém algum dos trechos informados;
+    ``casos_ids``, aos casos com esses ``caso_id``.
     """
     casos = []
     for caso in carregar_casos(pasta):
         if somente and not any(t.casefold() in caso["nome"].casefold() for t in somente):
+            continue
+        if casos_ids is not None and caso["caso_id"] not in casos_ids:
             continue
         with ZipFile(caso["zip"]) as pacote, tempfile.TemporaryDirectory(prefix="cdr-aval-") as tmp:
             cdr = Path(tmp) / Path(caso["membro_cdr"]).name
