@@ -437,6 +437,28 @@ def _cita(fatos: dict, texto_id, valor: str) -> bool:
     )
 
 
+def _cita_no_catalogo(fatos: dict, texto_id, campo: str, valor: str) -> bool:
+    """O texto citado leva ao mesmo nome do Portal Flow que o valor informado?
+
+    As regras da casa pedem os nomes do Portal Flow: "paineis outdoor" prova
+    "Papel Outdoor" e "ads leitoso" prova "Adesivo Leitoso Interm.", embora as
+    palavras não sejam as mesmas.
+    """
+    from .catalogo_portal import acabamentos_portal, material_portal
+
+    if texto_id == "NOME_ARQUIVO":
+        fonte = fatos["arquivo"]
+    elif texto_id in fatos["textos"]:
+        fonte = fatos["textos"][texto_id]["texto"]
+    else:
+        return False
+    if campo == "material":
+        nome = material_portal(valor)[0]
+        return bool(nome) and material_portal(fonte)[0] == nome
+    pedidos = acabamentos_portal(None, valor)
+    return bool(pedidos) and set(pedidos) <= set(acabamentos_portal(None, fonte))
+
+
 def validar(fatos: dict, resposta: dict) -> list[str]:
     erros = []
     usados: dict[str, int] = {}
@@ -478,7 +500,7 @@ def validar(fatos: dict, resposta: dict) -> list[str]:
                 erros.append(f"Item {n}: {quantidade} unidades, mas há {esperado} ocorrência(s) desenhada(s) nesses IDs.")
         for campo in ("material", "acabamento"):
             valor, fonte = item.get(campo), item.get(f"texto_{campo}")
-            if valor and not _cita(fatos, fonte, valor):
+            if valor and not _cita(fatos, fonte, valor) and not _cita_no_catalogo(fatos, fonte, campo, valor):
                 erros.append(f"Item {n}: {campo} '{valor}' sem texto que o comprove ({fonte!r}); cite o ID correto ou use null.")
         acabamento, material = item.get("acabamento"), item.get("material")
         if (acabamento and material and _termos(acabamento) and "banner" not in str(acabamento).casefold()

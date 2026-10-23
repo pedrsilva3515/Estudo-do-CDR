@@ -87,6 +87,19 @@ class TestValidadorAgente(unittest.TestCase):
         erros = validar(FATOS, {"itens": [_item(["A47"], 12, texto="T11", material="lona", texto_material="T11")]})
         self.assertTrue(any("material 'lona'" in e for e in erros))
 
+    def test_nome_do_portal_flow_e_provado_pelo_texto_do_pedido(self):
+        from zcfreader.agente import _cita_no_catalogo
+        fatos = {"arquivo": "x.cdr", "textos": {
+            "T52": {"texto": "paineis outdoor 1und de cada"},
+            "T29": {"texto": "ads sem recorte leitoso"},
+            "T30": {"texto": "adesivo recortado"},
+        }}
+        self.assertTrue(_cita_no_catalogo(fatos, "T52", "material", "Papel Outdoor"))
+        self.assertTrue(_cita_no_catalogo(fatos, "T29", "material", "Adesivo Leitoso Interm."))
+        self.assertFalse(_cita_no_catalogo(fatos, "T29", "material", "Adesivo Fosco"))
+        self.assertTrue(_cita_no_catalogo(fatos, "T30", "acabamento", "Recorte"))
+        self.assertFalse(_cita_no_catalogo(fatos, "T29", "acabamento", "Recorte"))
+
     def test_material_abreviado_e_sinonimos_sao_aceitos(self):
         from zcfreader.agente import _cita
         fatos = {"arquivo": "wadna banner e adesivo sem recorte.cdr", "textos": {

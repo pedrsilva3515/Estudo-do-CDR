@@ -126,6 +126,18 @@ class TestPecasSemTexto(unittest.TestCase):
         self.assertEqual([i["candidatos"] for i in resultado["itens"]], [["A01"], ["A02"]])
         self.assertEqual([i["situacao"] for i in resultado["itens"]], ["a confirmar", "sem texto - confirmar"])
 
+    def test_folhas_de_um_painel_nao_viram_item_a_mais(self):
+        from zcfreader.ponte_corel import _analisar_regras
+
+        painel = {"esquerda": 0, "direita": 133.4, "base": 0, "topo": 200}
+        regra = lambda id_, l, a: {"candidato_id": id_, "papel": "sem_classificacao", "largura_cm": l, "altura_cm": a,
+                                   "quantidade_pedido": None, "quantidade_desenhada": 1, "material": None, "acabamento": None}
+        fatos = {"auditoria_regional": {"itens": [regra("A01", 133.4, 200), regra("A02", 33.35, 50)]},
+                 "candidatos": {"A01": {"caixa_cm": painel, "quantidade_geometrica": 1},
+                                "A02": {"caixa_cm": dict(painel), "quantidade_geometrica": 12}}}
+        resultado = _analisar_regras(None, fatos)
+        self.assertEqual([i["candidatos"] for i in resultado["itens"]], [["A01"]])
+
     def test_material_vem_do_nome_do_arquivo_como_no_leitor(self):
         from zcfreader.ponte_corel import _analisar_regras
 

@@ -223,9 +223,24 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
             pai = (candidatos.get(pai) or {}).get("pai_id")
         return False
 
+    def emendas_de_outra_peca(candidato_id: str) -> bool:
+        # Painel de papel outdoor dividido em folhas: as cópias juntas ocupam a mesma
+        # caixa de uma peça já listada, sem ser filhas dela no arquivo.
+        candidato = candidatos.get(candidato_id) or {}
+        if int(candidato.get("quantidade_geometrica") or 1) < 2 or not candidato.get("caixa_cm"):
+            return False
+        caixa = candidato["caixa_cm"]
+        return any(
+            outro != candidato_id and int((candidatos.get(outro) or {}).get("quantidade_geometrica") or 1) == 1
+            and all(abs(caixa[lado] - candidatos[outro]["caixa_cm"][lado]) <= 0.5
+                    for lado in ("esquerda", "direita", "base", "topo"))
+            for outro in listados if (candidatos.get(outro) or {}).get("caixa_cm")
+        )
+
     itens = [
         item for item in itens
-        if item["situacao"] != "sem texto - confirmar" or not dentro_de_listado(item["candidatos"][0])
+        if item["situacao"] != "sem texto - confirmar"
+        or not (dentro_de_listado(item["candidatos"][0]) or emendas_de_outra_peca(item["candidatos"][0]))
     ]
     for indice, item in enumerate(itens, 1):
         item["indice"] = indice
