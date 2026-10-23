@@ -13,7 +13,8 @@ Caminhos:
 
 Respostas certas ajustadas depois da revisão ficam em <pasta>/gabarito/<caso_id>.json.
 Use --saida para guardar uma rodada e --comparar <rodada anterior> para ver quais
-pedidos melhoraram ou pioraram.
+pedidos melhoraram ou pioraram. A leitura dos CDR fica em cache (<pasta>/_cache_leitura):
+a primeira rodada lê tudo, as seguintes só o que mudou; --sem-cache lê do zero.
 """
 from __future__ import annotations
 
@@ -76,7 +77,15 @@ def main() -> None:
     parser.add_argument("--sem-corel", action="store_true", help="usa o preview embutido em vez de abrir o CorelDRAW")
     parser.add_argument("--comparar", type=Path, help="JSON de uma rodada anterior (--saida) para comparar")
     parser.add_argument("--somente", nargs="+", help="só os pedidos cujo nome contém algum destes trechos")
+    parser.add_argument("--cache", type=Path,
+                        help="pasta do cache da leitura dos CDR (padrão: <pasta>/_cache_leitura)")
+    parser.add_argument("--sem-cache", action="store_true", help="lê todos os CDR do zero")
     args = parser.parse_args()
+    if not args.sem_cache:
+        # Peças, desenho da página e OCR só são refeitos quando o arquivo ou o código que os produz muda.
+        from zcfreader.cache_leitura import ativar
+
+        ativar(args.cache or args.pasta / "_cache_leitura")
     if args.sem_corel:
         import zcfreader.visao_api as visao_api
         visao_api.renderizar_com_corel = lambda caminho, *a, **k: None
