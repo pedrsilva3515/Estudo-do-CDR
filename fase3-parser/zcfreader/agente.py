@@ -298,7 +298,7 @@ Como decidir:
 - Um produto é uma peça que será impressa/cortada. Molduras de montagem, colchetes, setas, cotas, legendas e cabeçalhos NÃO são produtos.
 - Uma candidata pode ser uma montagem com vários produtos dentro, ou um detalhe interno (logo, texto da arte) de um produto. Use ver_detalhe com mostrar_filhos=true para investigar e escolher o nível certo.
 - "ocorrências desenhadas" é quantas vezes a MESMA MEDIDA aparece na mesma região. Podem ser artes diferentes do mesmo tamanho (use ver_detalhe para ver quais são). Isso NÃO é necessariamente a quantidade do pedido.
-- Quantidade: use o texto de instrução ("4 UN", "30 UNI DE CADA", "60 und"). "N DE CADA" vale N para CADA peça desenhada: uma candidata com K ocorrências e a instrução "N de cada" soma N x K unidades. Nesse caso, ou informe um item com quantidade N x K, ou separe em K itens de N unidades usando os IDs internos. Sem instrução, a quantidade é o número de ocorrências desenhadas.
+- Quantidade: use o texto de instrução ("4 UN", "30 UNI DE CADA", "60 und"). "N DE CADA" vale N para CADA peça desenhada: uma candidata com K ocorrências e a instrução "N de cada" soma N x K unidades. Nesse caso, ou informe um item com quantidade N x K, ou separe em K itens de N unidades usando os IDs internos. Sem instrução: uma peça só vale 1; peças grandes repetidas valem o número desenhado; muitas peças pequenas montadas são uma grade (veja as regras da casa).
 - Legendas de área (ex.: "0,5022 M²") ajudam a conferir: área ÷ (largura × altura) = unidades.
 - Material e acabamento vêm de textos próximos ou de cabeçalhos que abrangem a peça; o nome do arquivo também é evidência.
 - Quando não houver como decidir com segurança, NÃO chute: registre uma pergunta objetiva para o operador.
