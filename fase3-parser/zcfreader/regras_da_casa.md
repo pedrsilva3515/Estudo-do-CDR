@@ -12,7 +12,7 @@ GRADE MONTADA
 - A mesma grade desenhada duas vezes no mesmo lugar (camada de impressão e camada de corte) e o contorno da folha em volta dela são a mesma grade, não itens a mais.
 
 O QUE NÃO É PRODUTO
-- Faca de recorte: contorno em vetor, sem preenchimento, ao lado ou em volta da arte (às vezes na cor "CutContour"). Pode vir de formas variadas. Não é um item: serve para cortar a arte. Se houver faca, o acabamento da arte é Recorte.
+- Faca de recorte: contorno em vetor, sem preenchimento, ao lado ou em volta da arte (às vezes na cor "CutContour"). Pode vir de formas variadas. Não é um item: serve de contorno da arte. Se houver faca, a MEDIDA do item é a da faca (ela costuma ser maior que a arte por causa da borda branca), não a da arte. A faca NÃO quer dizer que a gráfica vai recortar: às vezes o cliente recorta em casa.
 - Fundo da montagem, contorno da folha, legendas, cabeçalhos, telefone e nome de quem montou o arquivo não são produtos.
 
 QUANTIDADE
@@ -30,5 +30,6 @@ MATERIAL (use os nomes do Portal Flow)
 - Arquivo com vários produtos ("lona e adesivos", "paineis e adesivo"): o material de cada peça vem do texto mais próximo dela; o nome do arquivo não vale para todas.
 
 ACABAMENTO
+- Só informe um acabamento quando ele estiver escrito: num texto do arquivo, em letras convertidas em curvas ou no nome do arquivo. A informação às vezes vem só no e-mail ou no WhatsApp, que você não vê: sem nada escrito ao seu alcance, o acabamento é nenhum (sem recorte). Nunca deduza o recorte pela faca, pela borda branca ou pelo formato da peça.
 - "Recortado" ou "com recorte": Recorte. "Sem recorte": sem acabamento.
 - "Somente recorte", "corte especial", "refilado", "ilhós", "verniz", "laminação": use o nome correspondente do Portal Flow.
