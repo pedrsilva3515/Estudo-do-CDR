@@ -96,7 +96,7 @@ def parse_material(texto: str) -> dict | None:
         return None
     if banner:
         # Na gráfica, banner é lona com acabamento de bastão e cordinha.
-        material = "lona"
+        material = "lona fosca" if re.search(r"\bfosc[ao]\b", palavras) else "lona"
     elif re.search(_TRANSPARENTE, normalizado):
         material = "adesivo transparente"
     elif "fosco" in normalizado:
@@ -176,6 +176,11 @@ def interpretar_nome_arquivo(nome: str) -> dict:
     )
     # "ADS" é a abreviação de adesivo nos nomes de arquivo; no texto da arte pode ser outra coisa.
     material = parse_material(re.sub(r"\bads\b", "adesivo", sem_acentos))
+    # No nome do arquivo, "Panel_Futebol", "paineis thiago" e "2 outdoor" são papel outdoor
+    # (na arte, "outdoor" sozinho pode ser só o tema); "paineis e adesivo" é misto.
+    if re.search(r"\b(?:paine(?:l|is)|panel|out\s?doo?r)\b", sem_acentos):
+        material = None if material and material["material"] != "papel outdoor" else {
+            "material": "papel outdoor", "acabamento": None}
     quantidade = parse_quantidade(sem_acentos)
     dimensoes = parse_dimensoes(sem_acentos)
     if dimensoes is None:

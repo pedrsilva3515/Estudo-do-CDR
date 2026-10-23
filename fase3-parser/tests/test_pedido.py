@@ -156,6 +156,17 @@ class TestMaterial(unittest.TestCase):
             {"material": "adesivo transparente", "acabamento": None},
         )
 
+    def test_lona_fosca_nao_vira_lona_padrao(self):
+        self.assertEqual(parse_material("Lona fosca com ilhoes _2,15 x 1,95_1 un")["material"], "lona fosca")
+        self.assertEqual(parse_material("Banner 80 cm X 53cm")["material"], "lona")
+
+    def test_painel_e_outdoor_no_nome_do_arquivo_sao_papel_outdoor(self):
+        from zcfreader.pedido import interpretar_nome_arquivo
+
+        for nome in ("Panel_Futebol_Heitor.cdr", "paineis thiago.cdr", "2 outdoor.cdr"):
+            self.assertEqual(interpretar_nome_arquivo(nome)["material"]["material"], "papel outdoor", nome)
+        self.assertIsNone(interpretar_nome_arquivo("paineis e adesivo alecia.cdr")["material"])  # misto
+
     def test_materiais_adicionais_e_documento_misto(self):
         self.assertEqual(parse_material("VINIL FOSCO")["material"], "adesivo fosco")
         self.assertEqual(parse_material("LONA COM ILHOS")["material"], "lona")

@@ -86,9 +86,10 @@ def material_portal(material, acabamento=None) -> tuple[str | None, str]:
             return "Adesivo Transparente", "arquivo"
         if _tem(t, "fosc"):
             return "Adesivo Fosco", "arquivo"
-        if _tem(t, "leitos"):
+        # Na gráfica, o vinil "brilhoso" é o próprio adesivo leitoso (operador, 22/10/2026).
+        if _tem(t, "leitos", "brilh"):
             return PADRAO_ADESIVO, "arquivo"
-        if _tem(t, "super cola", "brilh", "jatead", "refletiv", "prismatic"):
+        if _tem(t, "super cola", "jatead", "refletiv", "prismatic"):
             return None, ""  # o pedido diz um tipo que o catálogo não tem: o operador decide
         return PADRAO_ADESIVO, "padrao_grafica"
     return None, ""

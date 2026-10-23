@@ -32,6 +32,14 @@ class TestRegua(unittest.TestCase):
             ["Adesivo Leitoso Interm.", None],
         )
 
+    def test_texto_livre_antigo_e_nome_do_portal_sao_o_mesmo_material(self):
+        from zcfreader.avaliacao_caminhos import materiais_compativeis
+
+        self.assertTrue(materiais_compativeis("Adesivo Fosco Blackout", "adesivo branco fosco blackout"))
+        self.assertTrue(materiais_compativeis("Lona Brilho 440g", "Banner"))
+        self.assertFalse(materiais_compativeis("Lona Brilho 440g", "Lona fosca"))
+        self.assertFalse(materiais_compativeis(None, "adesivo"))
+
     def test_cdr_do_whatsapp_com_numero_entra_na_regua(self):
         with tempfile.TemporaryDirectory() as tmp:
             pasta = Path(tmp)

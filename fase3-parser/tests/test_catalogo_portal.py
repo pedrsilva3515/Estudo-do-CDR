@@ -31,7 +31,9 @@ class TestMaterialPortal(unittest.TestCase):
 
     def test_tipo_fora_do_catalogo_fica_para_o_operador(self):
         self.assertEqual(material_portal("adesivo super cola"), (None, ""))
-        self.assertEqual(material_portal("Vinil Brilhoso"), (None, ""))
+
+    def test_vinil_brilhoso_e_o_adesivo_leitoso(self):
+        self.assertEqual(material_portal("Vinil Brilhoso"), ("Adesivo Leitoso Interm.", "arquivo"))
 
     def test_acabamentos(self):
         self.assertEqual(acabamentos_portal("lona", "banner"), ["Banner"])

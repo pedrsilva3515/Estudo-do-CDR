@@ -42,6 +42,11 @@ def materiais_compativeis(obtido, esperado) -> bool:
         return True
     if {a, b} <= {"banner", "lona"}:
         return True
+    from .catalogo_portal import material_portal
+
+    nome_a, nome_b = material_portal(obtido)[0], material_portal(esperado)[0]
+    if nome_a and nome_a == nome_b:
+        return True
     # Material genérico no gabarito aceita subtipo mais específico, e vice-versa.
     return bool(a and b) and (a.startswith(b + " ") or b.startswith(a + " "))
 
