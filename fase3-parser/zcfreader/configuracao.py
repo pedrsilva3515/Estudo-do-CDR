@@ -22,7 +22,8 @@ MODELOS_OPENROUTER = (
 PROVEDORES = ("openai", "openrouter")
 MODOS = ("estrutural", "local", "automatico", "api", "camadas")
 # Fluxo em camadas (sempre pelo OpenRouter): regras → modelo rápido → modelo forte.
-MODELO_RAPIDO_PADRAO = "google/gemini-3.1-flash-lite"
+# Haiku 5.5: menos da metade do preço do Gemini 3.1 Flash Lite (escolha do operador, 23/10/2026).
+MODELO_RAPIDO_PADRAO = "anthropic/claude-haiku-5.5"
 MODELO_FORTE_PADRAO = "google/gemini-3.8-flash"
 LIMITE_PEDIDO_PADRAO_USD = 0.08
 # Servidor local compatível com a API da OpenAI (LM Studio, Ollama). Modelos

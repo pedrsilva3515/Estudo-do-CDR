@@ -44,7 +44,7 @@ from .visao_api import analisar_com_api, mesclar_analise_visual, precisa_adjudic
 
 NOMES_PROVEDORES = {"openai": "OpenAI", "openrouter": "OpenRouter"}
 MODELOS_RAPIDOS = (
-    "google/gemini-3.1-flash-lite", "openai/gpt-5.6-luna", "qwen/qwen3-vl-235b-a22b-instruct",
+    "anthropic/claude-haiku-5.5", "google/gemini-3.1-flash-lite", "openai/gpt-5.6-luna", "qwen/qwen3-vl-235b-a22b-instruct",
     "local:qwen/qwen3-vl-8b-instruct",
 )
 MODELOS_REFORCO = ("google/gemini-3.8-flash", "anthropic/claude-sonnet-5", "openai/gpt-5.6-sol")
