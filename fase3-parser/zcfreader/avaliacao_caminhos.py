@@ -180,8 +180,28 @@ def resultado_de_auditoria_regional(auditoria: dict) -> dict:
     return {"itens": itens, "total_unidades": sum(i["quantidade"]["valor"] for i in itens)}
 
 
+ARQUIVO_FORA_DA_REGUA = "fora_da_regua.txt"
+
+
+def casos_fora_da_regua(pasta: Path) -> set[str]:
+    """``caso_id`` listados em ``<pasta>/fora_da_regua.txt`` (um por linha; "#" comenta).
+
+    Para pedidos que não rodam na régua (ex.: arquivo grande demais para a memória);
+    o pacote continua guardado, só deixa de ser medido.
+    """
+    arquivo = Path(pasta) / ARQUIVO_FORA_DA_REGUA
+    if not arquivo.is_file():
+        return set()
+    return {
+        linha.split("#", 1)[0].strip()
+        for linha in arquivo.read_text(encoding="utf-8").splitlines()
+        if linha.split("#", 1)[0].strip()
+    }
+
+
 def carregar_casos(pasta: Path) -> list[dict]:
     """Uma revisão por CDR (a mais recente), com o CDR incluído no pacote."""
+    fora = casos_fora_da_regua(pasta)
     revisoes = {}
     for zip_path in sorted(Path(pasta).glob("*.zip")):
         with ZipFile(zip_path) as pacote:
@@ -195,6 +215,8 @@ def carregar_casos(pasta: Path) -> list[dict]:
             if not cdr:
                 continue
             diagnostico = json.loads(pacote.read("diagnostico.json"))
+            if diagnostico.get("caso_id") in fora:
+                continue
             revisoes[diagnostico["arquivo"]["sha256"]] = {
                 "zip": zip_path, "membro_cdr": cdr, "nome": diagnostico["arquivo"]["nome"],
                 "caso_id": diagnostico.get("caso_id"),

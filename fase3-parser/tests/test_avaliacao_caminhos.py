@@ -48,6 +48,14 @@ class TestRegua(unittest.TestCase):
             _pacote(pasta, "c.zip", "arquivo-original/foto.png", "c3", "s3")
             self.assertEqual(sorted(c["caso_id"] for c in carregar_casos(pasta)), ["c1", "c2"])
 
+    def test_pedido_fora_da_regua_nao_e_medido(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta = Path(tmp)
+            _pacote(pasta, "a.zip", "arquivo-original/a.cdr", "c1", "s1")
+            _pacote(pasta, "b.zip", "arquivo-original/b.cdr", "c2", "s2")
+            (pasta / "fora_da_regua.txt").write_text("# grande demais\nc2  # Joyce\n", encoding="utf-8")
+            self.assertEqual([c["caso_id"] for c in carregar_casos(pasta)], ["c1"])
+
     def test_gabarito_ajustado_tem_prioridade(self):
         with tempfile.TemporaryDirectory() as tmp:
             pasta = Path(tmp)
