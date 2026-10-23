@@ -109,6 +109,7 @@ def main() -> None:
                         help="pasta do cache da leitura dos CDR (padrão: <pasta>/_cache_leitura)")
     parser.add_argument("--sem-cache", action="store_true", help="lê todos os CDR do zero")
     parser.add_argument("--orcamento-ia", type=float, default=1.0, help="US$ máximo por caminho com IA nesta rodada")
+    parser.add_argument("--modelo-rapido", help="modelo rápido da IA nesta rodada (padrão: o da configuração)")
     parser.add_argument("--so-falhas", type=Path, help="rodada (--saida) cujos pedidos errados pela macro serão medidos")
     args = parser.parse_args()
     if not args.sem_cache:
@@ -124,6 +125,11 @@ def main() -> None:
         import zcfreader.visao_api as visao_api
         visao_api.renderizar_com_corel = lambda caminho, *a, **k: None
     ORCAMENTO_IA["usd"] = args.orcamento_ia
+    if args.modelo_rapido:
+        import zcfreader.configuracao as configuracao
+
+        original = configuracao.carregar_configuracao
+        configuracao.carregar_configuracao = lambda: {**original(), "modelo_rapido": args.modelo_rapido}
     casos_ids = None
     if args.so_falhas:
         anterior = json.loads(args.so_falhas.read_text(encoding="utf-8"))
