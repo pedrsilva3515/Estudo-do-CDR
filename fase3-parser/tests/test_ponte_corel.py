@@ -225,7 +225,8 @@ class TestTextosDoPedido(unittest.TestCase):
         from zcfreader.ponte_corel import _analisar_regras
 
         fatos = {
-            "auditoria_regional": {"itens": [self._regra("A01", 105.6, 106.8, "adesivo"), self._regra("A02", 105.6, 140.5)]},
+            "auditoria_regional": {"itens": [{**self._regra("A01", 105.6, 106.8, "adesivo"), "papel": "produto_plausivel"},
+                                             self._regra("A02", 105.6, 140.5)]},
             "candidatos": {"A01": self._candidato(0, 105.6, 0, 106.8), "A02": self._candidato(0, 105.6, 0, 140.5)},
         }
         self.assertEqual([i["candidatos"] for i in _analisar_regras(None, fatos)["itens"]], [["A01"]])
@@ -235,7 +236,8 @@ class TestTextosDoPedido(unittest.TestCase):
         from zcfreader.ponte_corel import _analisar_regras
 
         fatos = {
-            "auditoria_regional": {"itens": [self._regra("A01", 33.6, 30.2, "lona"), self._regra("A02", 70, 100)]},
+            "auditoria_regional": {"itens": [{**self._regra("A01", 33.6, 30.2, "lona"), "papel": "produto_plausivel"},
+                                             self._regra("A02", 70, 100)]},
             "candidatos": {"A01": self._candidato(0, 33.6, 0, 30.2), "A02": self._candidato(0, 70, 0, 100)},
         }
         self.assertEqual(len(_analisar_regras(None, fatos)["itens"]), 2)
