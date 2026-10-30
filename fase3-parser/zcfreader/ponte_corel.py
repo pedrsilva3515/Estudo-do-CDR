@@ -229,6 +229,169 @@ def _material_do_nome_arquivo(caminho: Path | None, itens: list[dict]) -> None:
     _aplicar_nome_arquivo(itens, {"texto": evidencia["texto"], "material": evidencia["material"]})
 
 
+def _material_do_cabecalho(itens: list[dict], fatos: dict) -> None:
+    """Peça sem material herda o do título de material mais próximo acima dela, na mesma coluna.
+
+    O cliente escreve "VINIL FOSCO" ou "Paineis outdoor" uma vez em cima de várias fileiras
+    de peças; as regras só ligam o título à primeira fileira. Títulos com medida
+    ("BANNER 90X60") falam de uma peça só e não valem para a coluna.
+    """
+    from .agente import _quantidade_de_cada
+    from .experimento_agente import _dimensoes_instrucao_material, _especificacao_material
+
+    candidatos = fatos.get("candidatos") or {}
+    titulos = []
+    for texto in (fatos.get("textos") or {}).values():
+        especificacao = _especificacao_material(texto.get("texto") or "")
+        if especificacao and texto.get("caixa_cm") and not _dimensoes_instrucao_material(texto["texto"], especificacao):
+            titulos.append((texto["caixa_cm"], especificacao, texto["texto"]))
+    for item in itens:
+        if (item.get("material") or {}).get("valor"):
+            continue
+        caixa = _caixa_do_item(item, candidatos)
+        if not caixa:
+            continue
+        centro_x = (caixa["esquerda"] + caixa["direita"]) / 2
+        acima, de_cada = [], []
+        for titulo, especificacao, texto in titulos:
+            margem = max(2.0, (titulo["direita"] - titulo["esquerda"]) * 0.15)
+            if titulo["esquerda"] - margem <= centro_x <= titulo["direita"] + margem and titulo["base"] >= caixa["topo"] - 0.5:
+                acima.append((titulo["base"] - caixa["topo"], especificacao))
+            # "paineis outdoor 1und de cada" embaixo de vários painéis vale para todos os que ele toca.
+            if _quantidade_de_cada(texto) and titulo["esquerda"] < caixa["direita"] and caixa["esquerda"] < titulo["direita"]:
+                distancia = titulo["base"] - caixa["topo"] if titulo["base"] >= caixa["topo"] else caixa["base"] - titulo["topo"]
+                if distancia >= -0.5:
+                    de_cada.append((distancia, especificacao))
+        if not (acima or de_cada):
+            continue
+        especificacao = min(acima or de_cada, key=lambda par: par[0])[1]
+        item["material"] = {"valor": especificacao["material"], "origem": "titulo_da_coluna"}
+        if especificacao.get("acabamento") and not (item.get("acabamento") or {}).get("valor"):
+            item["acabamento"] = {"valor": especificacao["acabamento"]}
+
+
+def _medida_confere(texto: str, largura_cm: float, altura_cm: float) -> bool | None:
+    """A medida escrita no texto é a da peça? None se o texto não tem medida."""
+    from .pedido import parse_dimensoes
+
+    dimensoes = parse_dimensoes(texto)
+    if not dimensoes or not dimensoes.get("largura_mm") or not dimensoes.get("altura_mm"):
+        return None
+    w, h = dimensoes["largura_mm"] / 10, dimensoes["altura_mm"] / 10
+    return any(
+        abs(a - w) <= max(1.5, 0.03 * w) and abs(b - h) <= max(1.5, 0.03 * h)
+        for a, b in ((largura_cm, altura_cm), (altura_cm, largura_cm))
+    )
+
+
+def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
+    """Liga às peças as quantidades escritas que as regras não ligaram.
+
+    - Um texto com quantidade junto de cada cópia ("5 UN (67X102 CM)" em cima de cada
+      placa, "30und" embaixo de cada adesivo): o pedido é a soma. Cada texto pertence à
+      cópia mais próxima (acima, abaixo ou ao lado). Com duas ou mais cópias, a soma vale
+      mesmo se as regras já tinham ligado um dos textos à peça inteira.
+
+    As demais só mexem em item cuja quantidade não veio de um texto (veio do desenho ou
+    do padrão 1):
+    - Texto com quantidade e a medida da peça ("35x25 10 unidades"): vale para ela.
+    - Um único "N de cada" no arquivo: N por peça desenhada.
+    - Um único texto com quantidade e uma única peça: é dela.
+    """
+    from .agente import _quantidade_de_cada
+    from .experimento_agente import caixas_das_ocorrencias
+    from .pedido import parse_quantidade
+
+    candidatos = fatos.get("candidatos") or {}
+    textos = []
+    for texto in (fatos.get("textos") or {}).values():
+        quantidade = parse_quantidade(texto.get("texto") or "")
+        por_peca = _quantidade_de_cada(texto.get("texto"))
+        if (quantidade or por_peca) and texto.get("caixa_cm"):
+            textos.append({**texto, "quantidade": por_peca or quantidade[0], "de_cada": por_peca})
+    if not textos:
+        return
+    de_cada = {t["de_cada"] for t in textos if t["de_cada"]}
+
+    def junto(texto: dict, caixa: dict) -> float | None:
+        """Distância do texto logo acima, abaixo ou ao lado da caixa."""
+        t = texto["caixa_cm"]
+        centro_x, centro_y = (t["esquerda"] + t["direita"]) / 2, (t["base"] + t["topo"]) / 2
+        if caixa["esquerda"] - 0.5 <= centro_x <= caixa["direita"] + 0.5:
+            limite = max(3.0, 0.3 * (caixa["topo"] - caixa["base"]))
+            for distancia in (t["base"] - caixa["topo"], caixa["base"] - t["topo"]):
+                if -0.5 <= distancia <= limite:
+                    return max(distancia, 0.0)
+        if caixa["base"] - 0.5 <= centro_y <= caixa["topo"] + 0.5:
+            limite = max(3.0, 0.3 * (caixa["direita"] - caixa["esquerda"]))
+            for distancia in (caixa["esquerda"] - t["direita"], t["esquerda"] - caixa["direita"]):
+                if -0.5 <= distancia <= limite:
+                    return max(distancia, 0.0)
+        return None
+
+    # Cada texto de quantidade fica com a cópia mais próxima, entre todas as peças.
+    copias = []
+    for indice, item in enumerate(itens):
+        ids = item.get("candidatos") or []
+        candidato = candidatos.get(ids[0]) if len(ids) == 1 else None
+        if candidato:
+            for caixa in caixas_das_ocorrencias(candidato) or [candidato["caixa_cm"]]:
+                copias.append((indice, caixa, candidato["largura_cm"], candidato["altura_cm"]))
+    rotulos: dict[tuple[int, int], list[tuple[float, dict]]] = {}
+    for texto in textos:
+        if texto["de_cada"]:
+            continue
+        distancias = [
+            (d, numero) for numero, (_, caixa, largura, altura) in enumerate(copias)
+            if _medida_confere(texto["texto"], largura, altura) is not False and (d := junto(texto, caixa)) is not None
+        ]
+        if not distancias:
+            continue
+        menor = min(d for d, _ in distancias)
+        empatadas = {copias[numero][0] for d, numero in distancias if d - menor <= 0.2}
+        if len(empatadas) == 1:
+            numero = min(distancias, key=lambda par: par[0])[1]
+            rotulos.setdefault((copias[numero][0], numero), []).append((menor, texto))
+
+    for indice, item in enumerate(itens):
+        numeros = [numero for numero, copia in enumerate(copias) if copia[0] == indice]
+        if not numeros:
+            continue
+        novo = None
+        por_copia = []
+        for numero in numeros:
+            proprios = rotulos.get((indice, numero)) or []
+            if not proprios:
+                break
+            menor = min(d for d, _ in proprios)
+            # Dois textos no mesmo lugar com quantidades diferentes (um escondido atrás do outro): não dá para saber.
+            if len({t["quantidade"] for d, t in proprios if d - menor <= 0.2}) > 1:
+                break
+            por_copia.append(min(proprios, key=lambda par: par[0])[1])
+        quantidade = item.get("quantidade") or {}
+        sem_texto = quantidade.get("origem") == "desenho" or (
+            quantidade.get("origem") is None and (item.get("origem_campos") or {}).get("quantidade") == "padrao_grafica")
+        if len(por_copia) == len(numeros) and (len(numeros) >= 2 or sem_texto):
+            novo = sum(t["quantidade"] for t in por_copia)
+        if not sem_texto and novo is None:
+            continue
+        ids = item.get("candidatos") or []
+        candidato = candidatos[ids[0]]
+        largura, altura = candidato["largura_cm"], candidato["altura_cm"]
+        ocorrencias = numeros
+        if novo is None:
+            com_medida = [t for t in textos if _medida_confere(t["texto"], largura, altura)]
+            if len(com_medida) == 1:
+                novo = com_medida[0]["quantidade"] * (len(ocorrencias) if com_medida[0]["de_cada"] else 1)
+        if novo is None and len(de_cada) == 1:
+            novo = next(iter(de_cada)) * len(ocorrencias)
+        if novo is None and len(textos) == 1 and len(itens) == 1 and not textos[0]["de_cada"]:
+            novo = textos[0]["quantidade"]
+        if novo:
+            item["quantidade"] = {"valor": int(novo), "origem": "texto"}
+            (item.get("origem_campos") or {}).pop("quantidade", None)
+
+
 def _analisar_regras(caminho: Path, fatos: dict) -> dict:
     from .camadas import regras_resolvem, resultado_das_regras
 
@@ -237,6 +400,7 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
         resultado = resultado_das_regras(auditoria)
         for item in resultado["itens"]:
             item["situacao"] = "regras"
+        _quantidade_escrita(resultado["itens"], fatos)
         _material_do_nome_arquivo(caminho, resultado["itens"])
         return {"itens": resultado["itens"], "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras"}}
     itens = []
@@ -251,7 +415,8 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
             continue
         itens.append({
             "indice": len(itens) + 1,
-            "quantidade": {"valor": int(regra.get("quantidade_pedido") or regra.get("quantidade_desenhada") or 1)},
+            "quantidade": {"valor": int(regra.get("quantidade_pedido") or regra.get("quantidade_desenhada") or 1),
+                           "origem": "texto" if regra.get("quantidade_pedido") else "desenho"},
             "dimensoes": {"largura_mm": regra["largura_cm"] * 10, "altura_mm": regra["altura_cm"] * 10},
             "material": {"valor": regra.get("material")},
             "acabamento": {"valor": regra.get("acabamento")},
@@ -300,14 +465,43 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
             for outro in listados if (candidatos.get(outro) or {}).get("caixa_cm")
         )
 
+    def copia_de_outra_peca(candidato_id: str) -> bool:
+        # A mesma peça em outra camada ou só o miolo dela (o fundo de 50x50 dentro da placa
+        # de 51x51, a curva de corte sobre o bitmap): cada cópia cabe numa cópia de outra
+        # peça listada quase do mesmo tamanho.
+        candidato = candidatos.get(candidato_id) or {}
+        if not candidato.get("caixa_cm"):
+            return False
+        for outro in listados:
+            pai = candidatos.get(outro) or {}
+            if outro == candidato_id or not pai.get("caixa_cm"):
+                continue
+            # Das duas camadas, fica a maior (e, do mesmo tamanho, a primeira).
+            area, area_pai = candidato["largura_cm"] * candidato["altura_cm"], pai["largura_cm"] * pai["altura_cm"]
+            if area > area_pai or (area == area_pai and candidato_id < outro):
+                continue
+            if not (0.85 * pai["largura_cm"] <= candidato["largura_cm"] <= pai["largura_cm"] + 0.3
+                    and 0.85 * pai["altura_cm"] <= candidato["altura_cm"] <= pai["altura_cm"] + 0.3):
+                continue
+            if all(dentro_de_ocorrencia(caixa, pai) for caixa in caixas_das_ocorrencias(candidato) or [candidato["caixa_cm"]]):
+                return True
+        return False
+
     itens = [
         item for item in itens
         if item["situacao"] != "sem texto - confirmar"
-        or not (dentro_de_listado(item["candidatos"][0]) or emendas_de_outra_peca(item["candidatos"][0]))
+        or not (dentro_de_listado(item["candidatos"][0]) or emendas_de_outra_peca(item["candidatos"][0])
+                or copia_de_outra_peca(item["candidatos"][0]))
     ]
     for indice, item in enumerate(itens, 1):
         item["indice"] = indice
+    _quantidade_escrita(itens, fatos)
+    _material_do_cabecalho(itens, fatos)
     _material_do_nome_arquivo(caminho, itens)
+    for item in itens:
+        # Nada escrito sobre o material: vale o adesivo, o padrão da casa (aparece "(padrão)").
+        if not (item.get("material") or {}).get("valor"):
+            item["material"] = {"valor": "adesivo"}
     return {"itens": itens, "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras (a confirmar)"}}
 
 

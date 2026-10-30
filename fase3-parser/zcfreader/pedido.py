@@ -18,7 +18,8 @@ from .container import abrir_cdr
 _QUANTIDADE = re.compile(
     r"(?ix)(?:\bq(?:td|uantidade)?\s*[:=-]?\s*)?"
     # "x" só é unidade quando não separa duas medidas: "6x" sim, "2,15 x 1,95" não.
-    r"(?<![\d,.])(?P<valor>\d+)\s*(?P<unidade>uni|un(?:d|id(?:ade)?s?)?|u(?:n)?|x(?!\s*\d))\b"
+    # "1.100UND": ponto de milhar.
+    r"(?<![\d,.])(?P<valor>\d{1,3}(?:\.\d{3})+|\d+)\s*(?P<unidade>uni|un(?:d|id(?:ade)?s?)?|u(?:n)?|x(?!\s*\d))\b"
 )
 
 
@@ -42,7 +43,7 @@ def parse_quantidade(texto: str) -> tuple[int, str] | None:
         if match_qtd is None:
             return None
         return int(match_qtd.group(1)), "unidade"
-    return int(match.group("valor")), "unidade"
+    return int(match.group("valor").replace(".", "")), "unidade"
 
 
 # Erros de digitação comuns: "trasnparente", "trasparente", "tranparente".
@@ -57,6 +58,9 @@ _MODIFICADORES_ADESIVO = (
 def parse_material(texto: str) -> dict | None:
     """Extrai material e acabamento de instruções usuais da gráfica."""
     normalizado = _descolar(" ".join(texto.casefold().split()))
+    # Erros de digitação vistos nos pedidos: "ADEIVO SEM CROTE" (PORTA 111).
+    normalizado = re.sub(r"\b(?:adeivo|adesvo|adsivo|adesiv)(s?)\b", r"adesivo\1", normalizado)
+    normalizado = re.sub(r"\bsem\s+crote\b", "sem recorte", normalizado)
     # "leitoso com trasparente aplicado em cima" é laminação: o transparente não é o material.
     laminacao_transparente = re.search(
         r"(?:\bcom\s+)?(?:o\s+)?" + _TRANSPARENTE + r"\s+aplicad[oa]\s+(?:em|por)\s+cima", normalizado

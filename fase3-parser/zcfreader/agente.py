@@ -485,7 +485,11 @@ def _quantidade_de_cada(texto) -> int | None:
     from .pedido import parse_quantidade
 
     instrucao = parse_quantidade(str(texto))
-    return instrucao[0] if instrucao else None
+    if instrucao:
+        return instrucao[0]
+    # "70 DE CADA", sem unidade.
+    sem_unidade = re.search(r"(?i)(?<![\d,.])(\d+)\s+de\s+cada\b", str(texto))
+    return int(sem_unidade.group(1)) if sem_unidade else None
 
 
 def _cita(fatos: dict, texto_id, valor: str) -> bool:

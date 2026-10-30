@@ -55,9 +55,10 @@ def material_portal(material, acabamento=None) -> tuple[str | None, str]:
     t = _normal(f"{material or ''} {acabamento or ''}")
     if t.strip() == "":
         return None, ""
+    # O catálogo só tem prismático do cliente: "VINIL PRISMATICO BRANCO" é esse material.
+    if _tem(t, "prismatic"):
+        return ("Material do Cliente Prismático Amarelo" if _tem(t, "amarel") else "Material do Cliente Prismático Branco"), "arquivo"
     if _tem(t, "material do cliente"):
-        if _tem(t, "prismatic"):
-            return ("Material do Cliente Prismático Amarelo" if _tem(t, "amarel") else "Material do Cliente Prismático Branco"), "arquivo"
         if _tem(t, "lona", "banner"):
             return "Material do Cliente Lona", "arquivo"
         if _tem(t, "adesiv", "vinil"):
@@ -89,7 +90,7 @@ def material_portal(material, acabamento=None) -> tuple[str | None, str]:
         # Na gráfica, o vinil "brilhoso" é o próprio adesivo leitoso (operador, 22/10/2026).
         if _tem(t, "leitos", "brilh"):
             return PADRAO_ADESIVO, "arquivo"
-        if _tem(t, "super cola", "jatead", "refletiv", "prismatic"):
+        if _tem(t, "super cola", "jatead", "refletiv"):
             return None, ""  # o pedido diz um tipo que o catálogo não tem: o operador decide
         return PADRAO_ADESIVO, "padrao_grafica"
     return None, ""
