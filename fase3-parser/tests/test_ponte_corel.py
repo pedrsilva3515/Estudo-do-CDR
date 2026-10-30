@@ -209,6 +209,37 @@ class TestTextosDoPedido(unittest.TestCase):
         }
         self.assertEqual([i["quantidade"]["valor"] for i in _analisar_regras(None, fatos)["itens"]], [70, 70])
 
+    def test_instrucao_escrita_em_curvas_nao_vira_item(self):
+        # FACHADA: "VINIL BLACKOUT 65cm x 1,03m" em curvas; o OCR lê o texto em cima da faixa.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {
+            "auditoria_regional": {"itens": [self._regra("A01", 65, 103, "adesivo blackout"), self._regra("A02", 114, 16)]},
+            "candidatos": {"A01": self._candidato(0, 65, 0, 103), "A02": self._candidato(-25, 89, 110, 126)},
+            "textos": {"T01": {"texto": "VINIL BLACKOUT 65cm x 1,03m", "caixa_cm": self._caixa(-24, 88, 110, 126)}},
+        }
+        self.assertEqual([i["candidatos"] for i in _analisar_regras(None, fatos)["itens"]], [["A01"]])
+
+    def test_moldura_em_volta_da_peca_com_texto_nao_vira_item(self):
+        # Placa de 105,6x106,8 dentro de um retângulo de 105,6x140,5: a peça é a placa.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {
+            "auditoria_regional": {"itens": [self._regra("A01", 105.6, 106.8, "adesivo"), self._regra("A02", 105.6, 140.5)]},
+            "candidatos": {"A01": self._candidato(0, 105.6, 0, 106.8), "A02": self._candidato(0, 105.6, 0, 140.5)},
+        }
+        self.assertEqual([i["candidatos"] for i in _analisar_regras(None, fatos)["itens"]], [["A01"]])
+
+    def test_peca_grande_com_texto_ligado_a_um_detalhe_dentro_continua(self):
+        # Lona de 70x100 com "LONA COM VERNIZ" ligado só ao bitmap de 33x30 dentro dela.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {
+            "auditoria_regional": {"itens": [self._regra("A01", 33.6, 30.2, "lona"), self._regra("A02", 70, 100)]},
+            "candidatos": {"A01": self._candidato(0, 33.6, 0, 30.2), "A02": self._candidato(0, 70, 0, 100)},
+        }
+        self.assertEqual(len(_analisar_regras(None, fatos)["itens"]), 2)
+
     def test_mesma_peca_em_outra_camada_nao_vira_item_a_mais(self):
         # Placa de 51x51 com o fundo de 50x50 dentro: um item só.
         from zcfreader.ponte_corel import _analisar_regras

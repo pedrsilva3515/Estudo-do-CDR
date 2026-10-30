@@ -270,6 +270,24 @@ def _material_do_cabecalho(itens: list[dict], fatos: dict) -> None:
             item["acabamento"] = {"valor": especificacao["acabamento"]}
 
 
+def _parece_instrucao(texto: str) -> bool:
+    """Texto que fala do pedido (material, quantidade ou medida), e não da arte."""
+    import re
+
+    from .agente import _quantidade_de_cada
+    from .experimento_agente import _especificacao_material
+    from .pedido import parse_quantidade
+
+    return bool(_especificacao_material(texto) or parse_quantidade(texto) or _quantidade_de_cada(texto)
+                or re.search(r"(?i)\d\s*(?:cm|mm|m)\b|\d\s*[x×]\s*\d", texto))
+
+
+def _area_intersecao(a: dict, b: dict) -> float:
+    largura = min(a["direita"], b["direita"]) - max(a["esquerda"], b["esquerda"])
+    altura = min(a["topo"], b["topo"]) - max(a["base"], b["base"])
+    return largura * altura if largura > 0 and altura > 0 else 0.0
+
+
 def _medida_confere(texto: str, largura_cm: float, altura_cm: float) -> bool | None:
     """A medida escrita no texto é a da peça? None se o texto não tem medida."""
     from .pedido import parse_dimensoes
@@ -295,7 +313,7 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
     As demais só mexem em item cuja quantidade não veio de um texto (veio do desenho ou
     do padrão 1):
     - Texto com quantidade e a medida da peça ("35x25 10 unidades"): vale para ela.
-    - Um único "N de cada" no arquivo: N por peça desenhada.
+    - "N de cada" como única quantidade do arquivo: N por peça desenhada.
     - Um único texto com quantidade e uma única peça: é dela.
     """
     from .agente import _quantidade_de_cada
@@ -383,7 +401,8 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
             com_medida = [t for t in textos if _medida_confere(t["texto"], largura, altura)]
             if len(com_medida) == 1:
                 novo = com_medida[0]["quantidade"] * (len(ocorrencias) if com_medida[0]["de_cada"] else 1)
-        if novo is None and len(de_cada) == 1:
+        # Só quando é a única quantidade escrita: com outras, o "de cada" é de uma parte do pedido.
+        if novo is None and len(de_cada) == 1 and all(t["de_cada"] for t in textos):
             novo = next(iter(de_cada)) * len(ocorrencias)
         if novo is None and len(textos) == 1 and len(itens) == 1 and not textos[0]["de_cada"]:
             novo = textos[0]["quantidade"]
@@ -487,11 +506,55 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
                 return True
         return False
 
+    instrucoes = [t["caixa_cm"] for t in (fatos.get("textos") or {}).values()
+                  if t.get("caixa_cm") and _parece_instrucao(t.get("texto") or "")]
+
+    def instrucao_em_curvas(candidato_id: str) -> bool:
+        # "VINIL BLACKOUT 65cm x 1,03m" escrito em curvas: o OCR lê o texto em cima da peça.
+        candidato = candidatos.get(candidato_id) or {}
+        if not candidato.get("caixa_cm") or "bitmap" in (candidato.get("tipos") or []):
+            return False
+        for caixa in caixas_das_ocorrencias(candidato) if candidato.get("largura_cm") else [candidato["caixa_cm"]]:
+            area = (caixa["direita"] - caixa["esquerda"]) * (caixa["topo"] - caixa["base"])
+            if area <= 0 or sum(_area_intersecao(caixa, t) for t in instrucoes) / area < 0.5:
+                return False
+        return True
+
+    produtos = [item["candidatos"][0] for item in itens if item["situacao"] != "sem texto - confirmar"]
+
+    def sobre_peca_com_texto(candidato_id: str) -> bool:
+        # Moldura, fundo ou grupo em volta de uma peça que tem texto (a placa de 105,6x106,8
+        # dentro do retângulo de 105,6x140,5): a peça é a que o texto explica.
+        candidato = candidatos.get(candidato_id) or {}
+        caixa = candidato.get("caixa_cm")
+        if not caixa:
+            return False
+        area = (caixa["direita"] - caixa["esquerda"]) * (caixa["topo"] - caixa["base"])
+        if area <= 0:
+            return False
+        # Só quando as peças com texto ocupam a maior parte dela: a lona de 70x100 com o
+        # texto ligado a um bitmap de 33x30 dentro continua sendo a peça.
+        coberta = 0.0
+        for outro in produtos:
+            pai = candidatos.get(outro) or {}
+            # Peça com texto que é parte do grupo dela (o bitmap dentro do adesivo de 50x30):
+            # o grupo é a peça, e não uma moldura em volta, a não ser que o grupo junte a
+            # peça e a instrução escrita (peça + legenda).
+            if pai.get("pai_id") == candidato_id and not any(
+                    _area_intersecao(caixa, t) >= 0.8 * (t["direita"] - t["esquerda"]) * (t["topo"] - t["base"])
+                    for t in instrucoes):
+                continue
+            for ocorrencia in (caixas_das_ocorrencias(pai) if pai.get("largura_cm") else []) or [pai.get("caixa_cm")]:
+                if ocorrencia:
+                    coberta += _area_intersecao(caixa, ocorrencia)
+        return coberta >= 0.5 * area
+
     itens = [
         item for item in itens
         if item["situacao"] != "sem texto - confirmar"
         or not (dentro_de_listado(item["candidatos"][0]) or emendas_de_outra_peca(item["candidatos"][0])
-                or copia_de_outra_peca(item["candidatos"][0]))
+                or copia_de_outra_peca(item["candidatos"][0]) or instrucao_em_curvas(item["candidatos"][0])
+                or sobre_peca_com_texto(item["candidatos"][0]))
     ]
     for indice, item in enumerate(itens, 1):
         item["indice"] = indice
