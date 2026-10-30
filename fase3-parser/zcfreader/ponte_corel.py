@@ -8,6 +8,7 @@ lê sem bibliotecas extras. Uma linha por registro:
 
     INFO      camada   duracao_s   custo_usd
     ITEM      n  quantidade  largura_cm  altura_cm  material  acabamento  esquerda  direita  base  topo  situacao  origem_material  origem_quantidade
+    COPIAS    n  esquerda  direita  base  topo  (repetido para cada peça desenhada do item, quando são 2 ou mais)
     PERGUNTA  texto
     ERRO      mensagem
 
@@ -50,6 +51,27 @@ def _caixa_do_item(item: dict, candidatos: dict) -> dict | None:
         "esquerda": min(c["esquerda"] for c in caixas), "direita": max(c["direita"] for c in caixas),
         "base": min(c["base"] for c in caixas), "topo": max(c["topo"] for c in caixas),
     }
+
+
+def caixas_das_copias(item: dict, candidatos: dict) -> list[dict]:
+    """Caixa de cada peça desenhada que o item representa, para a macro selecionar todas.
+
+    A caixa do item pode ser só a da primeira cópia (cópias da mesma arte: exporta uma
+    arte com a quantidade) ou cobrir várias juntas; para conferir e exportar, o operador
+    precisa ver cada uma. Grade e faca já são uma peça só.
+    """
+    from .experimento_agente import caixas_das_ocorrencias
+
+    if item.get("grade") or item.get("faca"):
+        return []
+    copias = []
+    for candidato_id in item.get("candidatos") or []:
+        candidato = candidatos.get(candidato_id) or {}
+        if candidato.get("largura_cm") and candidato.get("posicoes_centro_cm"):
+            copias.extend(caixas_das_ocorrencias(candidato))
+        elif candidato.get("caixa_cm"):
+            copias.append(candidato["caixa_cm"])
+    return copias
 
 
 def separar_ocorrencias(resultado: dict, candidatos: dict, auditoria: dict | None = None) -> dict:
@@ -629,6 +651,10 @@ def linhas_de_saida(resultado: dict, candidatos: dict, duracao_s: float) -> list
             _campo((item.get("origem_campos") or {}).get("material") or "arquivo"),
             _campo((item.get("origem_campos") or {}).get("quantidade") or "arquivo"),
         ]))
+        copias = caixas_das_copias(item, candidatos)
+        if len(copias) >= 2:
+            linhas.append("\t".join(["COPIAS", str(n), *(_numero(c[lado]) for c in copias
+                                                          for lado in ("esquerda", "direita", "base", "topo"))]))
     for pergunta in resultado.get("perguntas_operador") or []:
         linhas.append("\t".join(["PERGUNTA", _campo(pergunta.get("pergunta") if isinstance(pergunta, dict) else pergunta)]))
     return linhas

@@ -34,6 +34,7 @@ Private itPeca() As String        ' "analise" ou "corel"
 Private itMotivo() As String, itObjs() As String, itSit() As String
 Private itEsq() As Double, itDir() As Double, itBase() As Double, itTopo() As Double
 Private itTem() As Boolean, itRemovido() As Boolean
+Private itCopias() As String     ' caixas de cada peça desenhada do item (esq;dir;base;topo;...)
 Private nItens As Long
 Private atual As Long
 Private linhaParaItem() As Long
@@ -148,6 +149,7 @@ Private Sub Crescer(ByVal n As Long)
     ReDim Preserve itEsq(1 To n): ReDim Preserve itDir(1 To n)
     ReDim Preserve itBase(1 To n): ReDim Preserve itTopo(1 To n)
     ReDim Preserve itTem(1 To n): ReDim Preserve itRemovido(1 To n)
+    ReDim Preserve itCopias(1 To n)
 End Sub
 
 Private Function CodigoOrigem(ByVal c As MSForms.ComboBox) As String
@@ -252,6 +254,7 @@ End Sub
 
 Private Sub Analisar(ByVal modo As String)
     Dim linhas As Collection, l As Variant, partes As Variant, info As String, perguntas As String
+    Dim k As Long, i As Long
 
     If Documents.Count = 0 Then
         MsgBox "Nenhum arquivo aberto no CorelDRAW.", 0
@@ -302,7 +305,7 @@ Private Sub Analisar(ByVal modo As String)
                 If UBound(partes) >= 13 Then
                     If partes(13) = "padrao_grafica" Then itOrQ(nItens) = "padrao_grafica"
                 End If
-                itPeca(nItens) = "analise": itMotivo(nItens) = "": itObjs(nItens) = ""
+                itPeca(nItens) = "analise": itMotivo(nItens) = "": itObjs(nItens) = "": itCopias(nItens) = ""
                 itSit(nItens) = IIf(partes(11) = "regras", "", partes(11))
                 itRemovido(nItens) = False
                 itTem(nItens) = (partes(7) <> "")
@@ -310,6 +313,14 @@ Private Sub Analisar(ByVal modo As String)
                     itEsq(nItens) = Val(partes(7)): itDir(nItens) = Val(partes(8))
                     itBase(nItens) = Val(partes(9)): itTopo(nItens) = Val(partes(10))
                 End If
+            End If
+        Case "COPIAS"
+            ' Uma caixa por peça desenhada: o item seleciona todas as cópias.
+            k = CLng(Val(partes(1)))
+            If k >= 1 And k <= nItens And UBound(partes) >= 5 Then
+                For i = 2 To UBound(partes)
+                    itCopias(k) = itCopias(k) & IIf(itCopias(k) = "", "", ";") & partes(i)
+                Next i
             End If
         Case "PERGUNTA"
             perguntas = perguntas & Chr(13) & "- " & partes(1)
@@ -340,7 +351,11 @@ Private Sub lstItens_Click()
     MostrarItem k
     If Not DocumentoCerto() Then Exit Sub
     If itTem(k) Then
-        n = SelecionarRegiao(itEsq(k), itDir(k), itBase(k), itTopo(k))
+        If itCopias(k) <> "" Then
+            n = SelecionarCopias(itCopias(k))
+        Else
+            n = SelecionarRegiao(itEsq(k), itDir(k), itBase(k), itTopo(k))
+        End If
         If n = 0 Then lblStatus.Caption = "Não encontrei a peça deste item no desenho."
     End If
 End Sub
@@ -386,7 +401,7 @@ Private Sub btnTrocar_Click()
     itEsq(atual) = e: itDir(atual) = d: itBase(atual) = b: itTopo(atual) = t
     itTem(atual) = True
     itLarg(atual) = d - e: itAlt(atual) = t - b
-    itPeca(atual) = "corel": itObjs(atual) = objs
+    itPeca(atual) = "corel": itObjs(atual) = objs: itCopias(atual) = ""
     itSit(atual) = "peça do Corel"
     AtualizarLista atual
     MostrarItem atual
@@ -424,7 +439,7 @@ Private Sub btnAdicionar_Click()
     itEsq(nItens) = e: itDir(nItens) = d: itBase(nItens) = b: itTopo(nItens) = t
     itTem(nItens) = True
     itLarg(nItens) = d - e: itAlt(nItens) = t - b
-    itPeca(nItens) = "corel": itObjs(nItens) = objs
+    itPeca(nItens) = "corel": itObjs(nItens) = objs: itCopias(nItens) = ""
     itSit(nItens) = "novo"
     AtualizarLista nItens
     MostrarItem nItens
@@ -469,7 +484,7 @@ Private Sub btnJuntar_Click()
     itEsq(nItens) = e: itDir(nItens) = d: itBase(nItens) = b: itTopo(nItens) = t
     itTem(nItens) = True
     itLarg(nItens) = d - e: itAlt(nItens) = t - b
-    itPeca(nItens) = "corel": itObjs(nItens) = objs
+    itPeca(nItens) = "corel": itObjs(nItens) = objs: itCopias(nItens) = ""
     itSit(nItens) = "grade"
     AtualizarLista nItens
     MostrarItem nItens

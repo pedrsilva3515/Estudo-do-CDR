@@ -40,6 +40,17 @@ class TestLinhasDeSaida(unittest.TestCase):
                                 "origem_campos": {"quantidade": "padrao_grafica"}}]}
         self.assertEqual(linhas_de_saida(resultado, {}, 1)[1].split("\t")[13], "padrao_grafica")
 
+    def test_item_com_duas_copias_manda_a_caixa_de_cada_uma(self):
+        # 2 lonas de 70x100 lado a lado: a macro seleciona as duas, mesmo com a caixa do item só na primeira.
+        resultado = {"itens": [{"quantidade": {"valor": 2}, "dimensoes": {"largura_mm": 700, "altura_mm": 1000},
+                                "candidatos": ["A12"], "caixa_cm": {"esquerda": 0, "direita": 70, "base": 0, "topo": 100}}]}
+        candidatos = {"A12": {"largura_cm": 70, "altura_cm": 100, "caixa_cm": {"esquerda": 0, "direita": 150, "base": 0, "topo": 100},
+                              "posicoes_centro_cm": [{"x": 35, "y": 50}, {"x": 115, "y": 50}]}}
+        linhas = linhas_de_saida(resultado, candidatos, 1)
+        self.assertEqual(linhas[1].split("\t")[7:11], ["0.000", "70.000", "0.000", "100.000"])
+        self.assertEqual(linhas[2].split("\t"), ["COPIAS", "1", "0.000", "70.000", "0.000", "100.000",
+                                                 "80.000", "150.000", "0.000", "100.000"])
+
 
 
 class TestCorrecao(unittest.TestCase):

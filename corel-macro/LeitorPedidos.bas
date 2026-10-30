@@ -173,6 +173,31 @@ End Sub
 
 ' Seleciona os objetos que formam a peca da regiao (coordenadas da analise, em cm).
 ' Devolve quantos objetos foram selecionados.
+' Seleciona todas as copias de um item: "esq;dir;base;topo;esq;dir;base;topo;..." (cm do arquivo).
+Public Function SelecionarCopias(ByVal caixas As String) As Long
+    Dim v As Variant, i As Long, j As Long, faixa As ShapeRange, todas As ShapeRange, ja As Object
+
+    v = Split(caixas, ";")
+    Set todas = CreateShapeRange
+    Set ja = CreateObject("Scripting.Dictionary")
+    For i = 0 To UBound(v) - 3 Step 4
+        If SelecionarRegiao(Val(v(i)), Val(v(i + 1)), Val(v(i + 2)), Val(v(i + 3))) > 0 Then
+            Set faixa = ActiveSelectionRange
+            For j = 1 To faixa.Count
+                If Not ja.Exists(CStr(faixa(j).StaticID)) Then
+                    ja(CStr(faixa(j).StaticID)) = True
+                    todas.Add faixa(j)
+                End If
+            Next j
+        End If
+    Next i
+    If todas.Count > 0 Then
+        todas.CreateSelection
+        ActiveWindow.ActiveView.ToFitShapeRange todas
+    End If
+    SelecionarCopias = todas.Count
+End Function
+
 Public Function SelecionarRegiao(ByVal e As Double, ByVal d As Double, ByVal b As Double, ByVal t As Double) As Long
     Const TOL As Double = 0.3
     Dim dentro As Object, i As Long, p As Shape, q As Shape, ancestralDentro As Boolean
