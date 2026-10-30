@@ -150,6 +150,76 @@ class TestPecasSemTexto(unittest.TestCase):
         self.assertEqual(resultado["itens"][0]["dimensoes"]["largura_mm"], 1250)
 
 
+class TestTextosDoPedido(unittest.TestCase):
+    @staticmethod
+    def _caixa(e, d, b, t):
+        return {"esquerda": e, "direita": d, "base": b, "topo": t}
+
+    @staticmethod
+    def _regra(id_, largura, altura, material=None):
+        return {"candidato_id": id_, "papel": "sem_classificacao", "largura_cm": largura, "altura_cm": altura,
+                "quantidade_pedido": None, "quantidade_desenhada": 1, "material": material, "acabamento": None}
+
+    def _candidato(self, e, d, b, t, centros=None):
+        return {"caixa_cm": self._caixa(e, d, b, t), "largura_cm": d - e, "altura_cm": t - b,
+                "posicoes_centro_cm": centros or [{"x": (e + d) / 2, "y": (b + t) / 2}],
+                "quantidade_geometrica": len(centros or [1])}
+
+    def test_titulo_de_material_vale_para_a_coluna_inteira(self):
+        # "VINIL FOSCO" em cima de duas fileiras: as regras só ligam a primeira.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {
+            "auditoria_regional": {"itens": [self._regra("A01", 40, 40, "adesivo fosco"), self._regra("A02", 50, 50)]},
+            "candidatos": {"A01": self._candidato(0, 40, 50, 90), "A02": self._candidato(0, 50, -10, 40)},
+            "textos": {"T01": {"texto": "VINIL FOSCO", "caixa_cm": self._caixa(0, 60, 95, 100)}},
+        }
+        itens = _analisar_regras(None, fatos)["itens"]
+        self.assertEqual([i["material"]["valor"] for i in itens], ["adesivo fosco", "adesivo fosco"])
+
+    def test_sem_material_escrito_vale_o_adesivo(self):
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {"auditoria_regional": {"itens": [self._regra("A01", 40, 40)]},
+                 "candidatos": {"A01": self._candidato(0, 40, 0, 40)}}
+        self.assertEqual(_analisar_regras(None, fatos)["itens"][0]["material"]["valor"], "adesivo")
+
+    def test_quantidade_em_cima_de_cada_copia_e_somada(self):
+        # VINIL PRISMATICO 509: "5 UN (67X102 CM)", "12 UN (67X102 CM)" em cima de cada placa.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        centros = [{"x": 33.5, "y": 51}, {"x": 103.5, "y": 51}]
+        fatos = {
+            "auditoria_regional": {"itens": [{**self._regra("A01", 67, 102, "adesivo"), "quantidade_desenhada": 2}]},
+            "candidatos": {"A01": self._candidato(0, 137, 0, 102, centros) | {"largura_cm": 67}},
+            "textos": {
+                "T01": {"texto": "5 UN (67X102 CM)", "caixa_cm": self._caixa(10, 55, 103, 108)},
+                "T02": {"texto": "12 UN (67X102 CM)", "caixa_cm": self._caixa(80, 125, 103, 108)},
+            },
+        }
+        self.assertEqual(_analisar_regras(None, fatos)["itens"][0]["quantidade"]["valor"], 17)
+
+    def test_de_cada_sem_unidade_vale_para_cada_peca(self):
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {
+            "auditoria_regional": {"itens": [self._regra("A01", 9, 9, "adesivo"), self._regra("A02", 11, 11, "adesivo")]},
+            "candidatos": {"A01": self._candidato(0, 9, 0, 9), "A02": self._candidato(20, 31, 0, 11)},
+            "textos": {"T01": {"texto": "70 DE CADA", "caixa_cm": self._caixa(5, 25, 20, 22)}},
+        }
+        self.assertEqual([i["quantidade"]["valor"] for i in _analisar_regras(None, fatos)["itens"]], [70, 70])
+
+    def test_mesma_peca_em_outra_camada_nao_vira_item_a_mais(self):
+        # Placa de 51x51 com o fundo de 50x50 dentro: um item só.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {
+            "auditoria_regional": {"itens": [self._regra("A01", 51, 51, "adesivo"), self._regra("A02", 50, 50)]},
+            "candidatos": {"A01": self._candidato(0, 51, 0, 51), "A02": self._candidato(0.5, 50.5, 0.5, 50.5)},
+        }
+        self.assertEqual([i["candidatos"] for i in _analisar_regras(None, fatos)["itens"]], [["A01"]])
+
+
 class TestMedidaDaFaca(unittest.TestCase):
     @staticmethod
     def _caixa(e, d, b, t):

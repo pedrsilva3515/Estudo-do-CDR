@@ -470,11 +470,11 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
         # de 51x51, a curva de corte sobre o bitmap): cada cópia cabe numa cópia de outra
         # peça listada quase do mesmo tamanho.
         candidato = candidatos.get(candidato_id) or {}
-        if not candidato.get("caixa_cm"):
+        if not (candidato.get("caixa_cm") and candidato.get("largura_cm")):
             return False
         for outro in listados:
             pai = candidatos.get(outro) or {}
-            if outro == candidato_id or not pai.get("caixa_cm"):
+            if outro == candidato_id or not (pai.get("caixa_cm") and pai.get("largura_cm")):
                 continue
             # Das duas camadas, fica a maior (e, do mesmo tamanho, a primeira).
             area, area_pai = candidato["largura_cm"] * candidato["altura_cm"], pai["largura_cm"] * pai["altura_cm"]
