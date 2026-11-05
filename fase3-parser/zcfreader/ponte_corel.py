@@ -433,6 +433,226 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
             (item.get("origem_campos") or {}).pop("quantidade", None)
 
 
+def _itens_pela_medida_escrita(itens: list[dict], fatos: dict) -> None:
+    """Pedido escrito com medida que nenhum item da lista tem.
+
+    - "23X12CM ADESIVO" e a peça de 22,3x11,1 desenhada mas não listada (as regras
+      listaram só as letras soltas dela): entra a peça.
+    - "ads recortados 4x4 100und" sem peça de 4x4 no arquivo (o cliente só escreveu):
+      entra um item com a medida, a quantidade e o material do texto.
+
+    Só textos que são instrução (com quantidade ou material); sem peça desenhada, só com
+    quantidade, porque "50X78 CM VINIL" ao lado da peça de 45x80 é a medida aproximada dela.
+    """
+    import re
+
+    from .experimento_agente import _especificacao_material
+    from .pedido import parse_dimensoes, parse_quantidade
+
+    candidatos = fatos.get("candidatos") or {}
+
+    def medidas(item: dict) -> tuple[float, float]:
+        d = item.get("dimensoes") or {}
+        return (d.get("largura_mm") or 0) / 10, (d.get("altura_mm") or 0) / 10
+
+    def bate(w: float, h: float, largura: float, altura: float) -> bool:
+        # Mais justo que _medida_confere: a peça de 2,8x3,5 não é o adesivo de 4x4.
+        return any(abs(a - w) <= max(0.3, 0.05 * w) and abs(b - h) <= max(0.3, 0.05 * h)
+                   for a, b in ((largura, altura), (altura, largura)))
+
+    for texto in (fatos.get("textos") or {}).values():
+        conteudo = texto.get("texto") or ""
+        quantidade = parse_quantidade(conteudo)
+        especificacao = _especificacao_material(conteudo) or {}
+        dimensoes = parse_dimensoes(conteudo)
+        # Sem unidade ("50x50 papel outdoor", "2000 1,25 X1,25 RECORTADOS"): vale quando o
+        # texto também diz o material ou começa pela quantidade.
+        sem_unidade = re.match(r"\s*(?:(\d+)\s+)?(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)(?![\d.,])", conteudo, re.I)
+        if not dimensoes and sem_unidade and (especificacao or sem_unidade.group(1)):
+            dimensoes = {"largura_mm": float(sem_unidade.group(2).replace(",", ".")) * 10,
+                         "altura_mm": float(sem_unidade.group(3).replace(",", ".")) * 10}
+            if sem_unidade.group(1) and not quantidade:
+                quantidade = (int(sem_unidade.group(1)), "unidade")
+        if not (dimensoes and dimensoes.get("largura_mm") and dimensoes.get("altura_mm")):
+            continue
+        largura, altura = dimensoes["largura_mm"] / 10, dimensoes["altura_mm"] / 10
+        if min(largura, altura) < 0.5:
+            continue
+        if not (quantidade or especificacao):
+            continue
+        if any(bate(largura, altura, *medidas(item)) or _medida_confere(conteudo, *medidas(item)) for item in itens):
+            continue
+        listados = {i for item in itens for i in item.get("candidatos") or []}
+        caixa_texto = texto.get("caixa_cm")
+        parecidos = [
+            (candidato_id, c) for candidato_id, c in candidatos.items()
+            if candidato_id not in listados and c.get("largura_cm") and c.get("caixa_cm")
+            and bate(largura, altura, c["largura_cm"], c["altura_cm"])
+        ]
+        item = {
+            "indice": len(itens) + 1,
+            "quantidade": ({"valor": int(quantidade[0]), "origem": "texto"} if quantidade
+                           else {"valor": 1, "origem": "desenho"}),
+            "material": {"valor": especificacao.get("material")},
+            "acabamento": {"valor": especificacao.get("acabamento")
+                           or ("recortado" if re.search(r"(?i)recort", conteudo) else None)},
+            "situacao": "a confirmar",
+            "motivo": f"medida escrita: {conteudo}",
+        }
+        if parecidos:
+            def distancia(par):
+                c = par[1]["caixa_cm"]
+                if not caixa_texto:
+                    return 0.0
+                return (abs((c["esquerda"] + c["direita"]) - (caixa_texto["esquerda"] + caixa_texto["direita"]))
+                        + abs((c["base"] + c["topo"]) - (caixa_texto["base"] + caixa_texto["topo"]))) / 2
+            candidato_id, candidato = min(parecidos, key=distancia)
+            if not quantidade:
+                item["quantidade"] = {"valor": int(candidato.get("quantidade_geometrica") or 1), "origem": "desenho"}
+            item["dimensoes"] = {"largura_mm": candidato["largura_cm"] * 10, "altura_mm": candidato["altura_cm"] * 10}
+            item["candidatos"] = [candidato_id]
+        elif quantidade:
+            item["dimensoes"] = {"largura_mm": largura * 10, "altura_mm": altura * 10}
+            item["candidatos"] = []
+            if caixa_texto:
+                item["caixa_cm"] = dict(caixa_texto)
+            item["situacao"] = "só escrito - confirmar"
+        else:
+            continue
+        itens.append(item)
+
+
+def _area(caixa: dict) -> float:
+    return max(0.0, caixa["direita"] - caixa["esquerda"]) * max(0.0, caixa["topo"] - caixa["base"])
+
+
+def _dentro(caixa: dict, fora: dict, folga: float = 0.3) -> bool:
+    return (fora["esquerda"] - folga <= caixa["esquerda"] and caixa["direita"] <= fora["direita"] + folga
+            and fora["base"] - folga <= caixa["base"] and caixa["topo"] <= fora["topo"] + folga)
+
+
+def _ocorrencias(candidato: dict) -> list[dict]:
+    from .experimento_agente import caixas_das_ocorrencias
+
+    if not candidato.get("caixa_cm"):
+        return []
+    return (caixas_das_ocorrencias(candidato) if candidato.get("largura_cm") else []) or [candidato["caixa_cm"]]
+
+
+def _pastas_em_volta(itens: list[dict], candidatos: dict) -> list[dict]:
+    """Grupo que só junta várias peças (as duas artes do freezer, o adesivo 30x40 e as
+    placas 30x20 lado a lado) não é uma peça: saem ele e entram as peças de dentro.
+
+    Peça de verdade costuma ter um fundo do tamanho dela entre os filhos; a pasta tem
+    duas ou mais peças grandes que não se sobrepõem e que juntas ocupam quase tudo.
+    """
+    listados = {i for item in itens for i in item.get("candidatos") or []}
+    resultado = []
+    for item in itens:
+        ids = item.get("candidatos") or []
+        pai = candidatos.get(ids[0]) if len(ids) == 1 else None
+        if not pai or int(pai.get("quantidade_geometrica") or 1) != 1 or not pai.get("caixa_cm"):
+            resultado.append(item)
+            continue
+        area_pai = _area(pai["caixa_cm"])
+        filhos = []
+        for filho_id, filho in candidatos.items():
+            if filho.get("pai_id") != ids[0] or not filho.get("largura_cm"):
+                continue
+            caixas = [c for c in _ocorrencias(filho) if _dentro(c, pai["caixa_cm"])]
+            if caixas and sum(_area(c) for c in caixas) >= 0.15 * area_pai:
+                filhos.append((filho_id, filho, caixas))
+        caixas = [c for _, _, lista in filhos for c in lista]
+        separadas = all(
+            _area_intersecao(a, b) <= 0.1 * min(_area(a), _area(b))
+            for n, a in enumerate(caixas) for b in caixas[n + 1:]
+        )
+        # Painel montado com quadros do mesmo tamanho (4 fotos no adesivo de 50x200) é uma
+        # peça; a pasta junta produtos de tamanhos diferentes.
+        areas = sorted(_area(c) for c in caixas)
+        tamanhos_diferentes = bool(areas) and areas[0] < 0.85 * areas[-1]
+        if (len(caixas) < 2 or not separadas or not tamanhos_diferentes
+                or any(_area(c) >= 0.85 * area_pai for c in caixas)
+                or sum(_area(c) for c in caixas) < 0.7 * area_pai):
+            resultado.append(item)
+            continue
+        for filho_id, filho, lista in filhos:
+            if filho_id in listados:
+                continue
+            resultado.append({
+                "quantidade": {"valor": len(lista), "origem": "desenho"},
+                "dimensoes": {"largura_mm": filho["largura_cm"] * 10, "altura_mm": filho["altura_cm"] * 10},
+                "material": dict(item.get("material") or {}),
+                "acabamento": dict(item.get("acabamento") or {}),
+                "candidatos": [filho_id],
+                "situacao": "sem texto - confirmar",
+            })
+            listados.add(filho_id)
+    return resultado
+
+
+def _juntar_partes_na_peca(itens: list[dict], candidatos: dict) -> list[dict]:
+    """Item que é parte de outra peça da lista (o bitmap de 33x30 dentro da lona de 70x100,
+    a faixa de cima de cada cópia da capa) se junta a ela.
+
+    O texto às vezes fica ligado à parte, e não à peça: a peça leva o material, o
+    acabamento e a quantidade escrita da parte.
+    """
+    por_candidato = {}
+    for indice, item in enumerate(itens):
+        ids = item.get("candidatos") or []
+        if len(ids) == 1:
+            por_candidato.setdefault(ids[0], indice)
+    removidos = set()
+    for indice, item in enumerate(itens):
+        ids = item.get("candidatos") or []
+        parte = candidatos.get(ids[0]) if len(ids) == 1 else None
+        if not parte or item.get("grade"):
+            continue
+        vistos, pai_id = set(), parte.get("pai_id")
+        while pai_id and pai_id not in vistos:
+            vistos.add(pai_id)
+            alvo = por_candidato.get(pai_id)
+            pai = candidatos.get(pai_id) or {}
+            if alvo is not None and alvo != indice and alvo not in removidos and pai.get("caixa_cm"):
+                ocorrencias_pai = _ocorrencias(pai)
+                if all(any(_dentro(c, o) for o in ocorrencias_pai) for c in _ocorrencias(parte)):
+                    break
+            pai_id = pai.get("pai_id")
+        else:
+            # Sem ser filha no arquivo: cabe inteira numa peça listada bem maior (o bitmap
+            # solto em cima da lona).
+            caixas_parte = _ocorrencias(parte)
+            area_parte = sum(_area(c) for c in caixas_parte) / max(1, len(caixas_parte))
+            alvo = None
+            for outro_id, outro_indice in por_candidato.items():
+                outro = candidatos.get(outro_id) or {}
+                if outro_indice == indice or outro_indice in removidos or not outro.get("caixa_cm"):
+                    continue
+                ocorrencias_outro = _ocorrencias(outro)
+                # Folga proporcional: a camada de 172,7 cm em cima do bitmap de 172,4 cm.
+                folga = max(0.3, 0.005 * max(outro.get("largura_cm") or 0, outro.get("altura_cm") or 0))
+                if (min(_area(o) for o in ocorrencias_outro) >= 1.5 * area_parte
+                        and all(any(_dentro(c, o, folga) for o in ocorrencias_outro) for c in caixas_parte)):
+                    if alvo is None or _area(candidatos[outro_id]["caixa_cm"]) < _area(candidatos[itens[alvo]["candidatos"][0]]["caixa_cm"]):
+                        alvo = outro_indice
+            if alvo is None:
+                continue
+        peca = itens[alvo]
+        com_texto = item.get("situacao") not in (None, "sem texto - confirmar")
+        if com_texto:
+            for campo in ("material", "acabamento"):
+                if (item.get(campo) or {}).get("valor") and (
+                        not (peca.get(campo) or {}).get("valor") or peca.get("situacao") == "sem texto - confirmar"):
+                    peca[campo] = dict(item[campo])
+            if (item.get("quantidade") or {}).get("origem") == "texto" and (peca.get("quantidade") or {}).get("origem") != "texto":
+                peca["quantidade"] = dict(item["quantidade"])
+            if peca.get("situacao") == "sem texto - confirmar":
+                peca["situacao"] = item.get("situacao")
+        removidos.add(indice)
+    return [item for indice, item in enumerate(itens) if indice not in removidos]
+
+
 def _analisar_regras(caminho: Path, fatos: dict) -> dict:
     from .camadas import regras_resolvem, resultado_das_regras
 
@@ -441,7 +661,12 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
         resultado = resultado_das_regras(auditoria)
         for item in resultado["itens"]:
             item["situacao"] = "regras"
+        candidatos = fatos.get("candidatos") or {}
+        resultado["itens"] = _juntar_partes_na_peca(_pastas_em_volta(resultado["itens"], candidatos), candidatos)
+        for indice, item in enumerate(resultado["itens"], 1):
+            item["indice"] = indice
         _quantidade_escrita(resultado["itens"], fatos)
+        _itens_pela_medida_escrita(resultado["itens"], fatos)
         _material_do_nome_arquivo(caminho, resultado["itens"])
         return {"itens": resultado["itens"], "perguntas_operador": [], "processamento": {"fluxo": "macro_corel", "camada_final": "regras"}}
     itens = []
@@ -464,10 +689,11 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
             "candidatos": [regra["candidato_id"]],
             "situacao": "a confirmar" if produto else "sem texto - confirmar",
         })
+    _itens_pela_medida_escrita(itens, fatos)
     # Peça sem texto que está dentro de outra peça da lista é parte dela (ex.: o bitmap
     # dentro do grupo com fundo), não um item a mais.
     candidatos = fatos.get("candidatos") or {}
-    listados = {item["candidatos"][0] for item in itens}
+    listados = {item["candidatos"][0] for item in itens if item.get("candidatos")}
 
     from .experimento_agente import caixas_das_ocorrencias
 
@@ -542,7 +768,8 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
                 return False
         return True
 
-    produtos = [item["candidatos"][0] for item in itens if item["situacao"] != "sem texto - confirmar"]
+    produtos = [item["candidatos"][0] for item in itens
+                if item["situacao"] != "sem texto - confirmar" and item.get("candidatos")]
 
     def sobre_peca_com_texto(candidato_id: str) -> bool:
         # Moldura, fundo ou grupo em volta de uma peça que tem texto (a placa de 105,6x106,8
@@ -578,6 +805,7 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
                 or copia_de_outra_peca(item["candidatos"][0]) or instrucao_em_curvas(item["candidatos"][0])
                 or sobre_peca_com_texto(item["candidatos"][0]))
     ]
+    itens = _juntar_partes_na_peca(_pastas_em_volta(itens, candidatos), candidatos)
     for indice, item in enumerate(itens, 1):
         item["indice"] = indice
     _quantidade_escrita(itens, fatos)

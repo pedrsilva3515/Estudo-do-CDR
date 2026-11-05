@@ -242,8 +242,9 @@ class TestTextosDoPedido(unittest.TestCase):
         }
         self.assertEqual([i["candidatos"] for i in _analisar_regras(None, fatos)["itens"]], [["A01"]])
 
-    def test_peca_grande_com_texto_ligado_a_um_detalhe_dentro_continua(self):
-        # Lona de 70x100 com "LONA COM VERNIZ" ligado só ao bitmap de 33x30 dentro dela.
+    def test_peca_grande_com_texto_ligado_a_um_detalhe_dentro_leva_o_texto(self):
+        # Lona de 70x100 com "LONA COM VERNIZ" ligado só ao bitmap de 33x30 dentro dela:
+        # o item é a lona, com o material do texto (revisão do pedido "4 - laminação").
         from zcfreader.ponte_corel import _analisar_regras
 
         fatos = {
@@ -251,7 +252,57 @@ class TestTextosDoPedido(unittest.TestCase):
                                              self._regra("A02", 70, 100)]},
             "candidatos": {"A01": self._candidato(0, 33.6, 0, 30.2), "A02": self._candidato(0, 70, 0, 100)},
         }
-        self.assertEqual(len(_analisar_regras(None, fatos)["itens"]), 2)
+        itens = _analisar_regras(None, fatos)["itens"]
+        self.assertEqual([i["candidatos"] for i in itens], [["A02"]])
+        self.assertEqual(itens[0]["material"]["valor"], "lona")
+        self.assertEqual(itens[0]["situacao"], "a confirmar")
+
+    def test_pasta_em_volta_de_pecas_diferentes_sai_da_lista(self):
+        # Grupo de 60x40 com o adesivo de 30x40 e a placa de 30x20 lado a lado: as peças ficam.
+        from zcfreader.ponte_corel import _pastas_em_volta
+
+        candidatos = {
+            "A01": self._candidato(0, 60, 0, 40),
+            "A02": {**self._candidato(0, 30, 0, 40), "pai_id": "A01"},
+            "A03": {**self._candidato(30, 60, 0, 20), "pai_id": "A01"},
+        }
+        itens = [{"candidatos": ["A01"], "situacao": "sem texto - confirmar"},
+                 {"candidatos": ["A02"], "situacao": "a confirmar"}]
+        self.assertEqual(sorted(i["candidatos"][0] for i in _pastas_em_volta(itens, candidatos)), ["A02", "A03"])
+
+    def test_painel_com_quadros_iguais_continua_uma_peca(self):
+        # Adesivo de 50x200 com 3 fotos de 43x64 empilhadas: é um painel só.
+        from zcfreader.ponte_corel import _pastas_em_volta
+
+        candidatos = {"A01": self._candidato(0, 50, 0, 200)}
+        for n, base in enumerate((2, 68, 134), 2):
+            candidatos[f"A0{n}"] = {**self._candidato(3, 46, base, base + 64), "pai_id": "A01"}
+        itens = [{"candidatos": ["A01"], "situacao": "a confirmar"}]
+        self.assertEqual(_pastas_em_volta(itens, candidatos), itens)
+
+    def test_pedido_so_escrito_com_medida_vira_item(self):
+        # "ads recortados 4x4 100und" sem peça de 4x4 desenhada.
+        from zcfreader.ponte_corel import _itens_pela_medida_escrita
+
+        itens = [{"dimensoes": {"largura_mm": 300, "altura_mm": 400}, "candidatos": ["A01"]}]
+        fatos = {"candidatos": {"A01": self._candidato(0, 30, 0, 40)},
+                 "textos": {"T01": {"texto": "ads recortados 4x4 100und",
+                                    "caixa_cm": {"esquerda": 40, "direita": 60, "base": 0, "topo": 2}}}}
+        _itens_pela_medida_escrita(itens, fatos)
+        self.assertEqual(len(itens), 2)
+        self.assertEqual(itens[1]["quantidade"]["valor"], 100)
+        self.assertEqual((itens[1]["dimensoes"]["largura_mm"], itens[1]["dimensoes"]["altura_mm"]), (40, 40))
+        self.assertEqual(itens[1]["material"]["valor"], "adesivo")
+
+    def test_medida_aproximada_sem_quantidade_nao_vira_item(self):
+        # "50X78 CM VINIL" ao lado da peça de 45x80: é a medida aproximada dela.
+        from zcfreader.ponte_corel import _itens_pela_medida_escrita
+
+        itens = [{"dimensoes": {"largura_mm": 451, "altura_mm": 807}, "candidatos": ["A01"]}]
+        fatos = {"candidatos": {"A01": self._candidato(0, 45.1, 0, 80.7)},
+                 "textos": {"T01": {"texto": "50X78 CM VINIL", "caixa_cm": {"esquerda": 0, "direita": 20, "base": 81, "topo": 83}}}}
+        _itens_pela_medida_escrita(itens, fatos)
+        self.assertEqual(len(itens), 1)
 
     def test_mesma_peca_em_outra_camada_nao_vira_item_a_mais(self):
         # Placa de 51x51 com o fundo de 50x50 dentro: um item só.
