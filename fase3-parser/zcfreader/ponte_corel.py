@@ -11,6 +11,7 @@ lê sem bibliotecas extras. Uma linha por registro:
     COPIAS    n  esquerda  direita  base  topo  (repetido para cada peça desenhada do item, quando são 2 ou mais)
     PERGUNTA  texto
     ERRO      mensagem
+    ANTIGO    mensagem  (CDR de versão antiga: a macro salva uma cópia na versão atual e analisa de novo)
 
 As coordenadas (cm) são as do arquivo, com origem no centro da página; a macro
 converte para as do CorelDRAW. O resultado completo também é gravado em JSON ao
@@ -27,6 +28,8 @@ import json
 import sys
 from pathlib import Path
 from time import perf_counter
+
+from .container import FormatoCdrAntigo
 
 
 LADO_MINIMO_SEM_TEXTO_CM = 3.0
@@ -1012,6 +1015,9 @@ def main(argumentos: list[str]) -> int:
                        indent=2, default=str),
             encoding="utf-8",
         )
+    except FormatoCdrAntigo as erro:
+        # A macro salva uma cópia na versão atual (o Corel lê o formato antigo) e analisa a cópia.
+        linhas = ["\t".join(["ANTIGO", _campo(str(erro))])]
     except Exception as erro:  # a macro mostra a mensagem ao operador
         linhas = ["\t".join(["ERRO", _campo(f"{type(erro).__name__}: {erro}")])]
     saida.write_text("\r\n".join(linhas) + "\r\n", encoding="cp1252", errors="replace", newline="")

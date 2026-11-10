@@ -522,7 +522,8 @@ Private Sub btnSalvar_Click()
     lblStatus.Caption = "Salvando a correção..."
     Me.Repaint
     DoEvents
-    resposta = SalvarCorrecao(docAnalisado, conteudo)
+    ' O pacote leva o arquivo que a analise leu (a copia na versao atual, se o original e antigo).
+    resposta = SalvarCorrecao(ArquivoAnalisado(), conteudo)
     partes = Split(resposta, Chr(9))
     If partes(0) = "OK" Then
         lblStatus.Caption = "Correção salva: " & partes(1)

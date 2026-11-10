@@ -14,6 +14,30 @@ from pathlib import Path
 MIMETYPE_ESPERADO = b"application/x-vnd.corel.zcf.draw.document+zip"
 
 
+class FormatoCdrAntigo(Exception):
+    """CDR salvo numa versão antiga do CorelDRAW (X5 ou anterior), que o leitor não entende."""
+
+
+def versao_antiga(caminho) -> str | None:
+    """Descreve a versão quando o `.cdr` está no formato antigo; None no formato atual.
+
+    Até o X5 o desenho inteiro vem num único `content/riffData.cdr` compactado; do X6
+    em diante, em `content/data/*.dat`, que é o que este leitor lê. Sem isso, o arquivo
+    abriria com zero peças e zero textos, sem erro nenhum (pedido "cell1cdr", 10/11/2026).
+    """
+    try:
+        with zipfile.ZipFile(caminho) as pacote:
+            nomes = pacote.namelist()
+            if "content/riffData.cdr" not in nomes or any(n.startswith("content/data/") for n in nomes):
+                return None
+            versao = re.search(rb"<CoreVersion>(\d+)</CoreVersion>", pacote.read("metadata/metadata.xml")) \
+                if "metadata/metadata.xml" in nomes else None
+    except (zipfile.BadZipFile, OSError):
+        return None
+    numero = int(versao.group(1)) // 100 if versao else None
+    return f"CorelDRAW versão {numero}" if numero else "CorelDRAW antigo"
+
+
 class ZcfContainer:
     """Wrapper fino sobre o ZIP interno de um `.cdr` ZCF."""
 
@@ -447,4 +471,10 @@ class ZcfContainer:
 
 def abrir_cdr(caminho) -> ZcfContainer:
     """Abre um arquivo `.cdr` (ou `.zip` equivalente) para leitura."""
+    versao = versao_antiga(caminho)
+    if versao:
+        raise FormatoCdrAntigo(
+            f"O arquivo foi salvo no {versao}, que o leitor não entende. "
+            "Abra no CorelDRAW e salve de novo na versão atual."
+        )
     return ZcfContainer(caminho)

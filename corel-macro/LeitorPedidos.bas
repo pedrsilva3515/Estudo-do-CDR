@@ -13,6 +13,7 @@ Private mFormas As ShapeRange
 Private mEsq() As Double, mDir() As Double, mBase() As Double, mTopo() As Double
 Private mN As Long
 Private mDx As Double, mDy As Double
+Private mAnalisado As String   ' arquivo que a analise leu (a copia, se o original e de versao antiga)
 
 Public Sub AbrirLeitorPedidos()
     frmLeitor.Show 0
@@ -40,8 +41,9 @@ End Function
 ' Roda a analise (fora do Corel) e devolve as linhas do resultado.
 Public Function RodarAnalise(ByVal caminho As String, ByVal modo As String) As Collection
     Dim linhas As New Collection
-    Dim saida As String, f As Integer, linha As String
+    Dim saida As String, f As Integer, linha As String, copia As String
 
+    mAnalisado = caminho
     saida = ArquivoResultado()
     If Dir(saida) <> "" Then Kill saida
     If Not RodarPonte(caminho, saida, modo) Then
@@ -61,7 +63,44 @@ Public Function RodarAnalise(ByVal caminho As String, ByVal modo As String) As C
         Loop
         Close #f
     End If
+
+    ' CDR salvo em versao antiga (X5 ou anterior): o leitor nao entende, mas o Corel sim.
+    ' Salva uma copia na versao atual (o documento aberto continua sendo o original) e analisa a copia.
+    If linhas.Count > 0 Then
+        If Left(linhas(1), 7) = "ANTIGO" & Chr(9) Then
+            copia = CopiaNaVersaoAtual()
+            If copia <> "" And copia <> caminho Then
+                Set RodarAnalise = RodarAnalise(copia, modo)
+                Exit Function
+            End If
+            Set linhas = New Collection
+            linhas.Add "ERRO" & Chr(9) & "Arquivo de versao antiga do CorelDRAW. Use Arquivo > Salvar como (versao atual) e analise de novo."
+        End If
+    End If
     Set RodarAnalise = linhas
+End Function
+
+' Arquivo que a ultima analise leu: o original ou a copia na versao atual.
+Public Function ArquivoAnalisado() As String
+    ArquivoAnalisado = mAnalisado
+End Function
+
+' Copia do documento ativo na versao atual, com o mesmo nome, numa pasta temporaria.
+Private Function CopiaNaVersaoAtual() As String
+    Dim pasta As String, copia As String
+    pasta = Environ("TEMP") & "\leitor_corel_versao_atual"
+    copia = pasta & "\" & ActiveDocument.FileName
+    On Error Resume Next
+    If Dir(pasta, 16) = "" Then MkDir pasta
+    If Dir(copia) <> "" Then Kill copia
+    Err.Clear
+    ActiveDocument.SaveAsCopy copia
+    If Err.Number <> 0 Then copia = ""
+    On Error GoTo 0
+    If copia <> "" Then
+        If Dir(copia) = "" Then copia = ""
+    End If
+    CopiaNaVersaoAtual = copia
 End Function
 
 ' Grava a correcao como pacote de revisao (mesmo formato do aplicativo).
