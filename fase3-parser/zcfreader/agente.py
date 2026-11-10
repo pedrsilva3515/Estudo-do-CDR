@@ -380,7 +380,12 @@ def _ferramentas() -> list[dict]:
     item = {
         "type": "object",
         "properties": {
-            "ids": {**ids, "description": "IDs das candidatas deste produto"},
+            "ids": {**ids, "minItems": 0, "description": "IDs das candidatas deste produto; vazio só para item escrito sem peça desenhada (use medida_escrita)"},
+            "medida_escrita": {
+                "type": ["object", "null"],
+                "properties": {"largura_cm": {"type": "number"}, "altura_cm": {"type": "number"}},
+                "description": "Só para item que o cliente escreveu mas não desenhou (\"ads recortados 4x4 100und\" sem peça de 4x4): a medida escrita no texto de texto_quantidade.",
+            },
             "combinar": {"type": "string", "enum": ["nao", "uniao"], "description": "'nao': cada ID é uma peça com a mesma medida; 'uniao': os IDs juntos formam UMA peça, medida = caixa que envolve todos"},
             "quantidade": {"type": "integer", "minimum": 1},
             "origem_quantidade": {"type": "string", "enum": ["texto", "ocorrencias_desenhadas"]},
@@ -529,11 +534,48 @@ def _cita_no_catalogo(fatos: dict, texto_id, campo: str, valor: str) -> bool:
     return bool(pedidos) and set(pedidos) <= set(acabamentos_portal(None, fonte))
 
 
+def _e_material_padrao(valor) -> bool:
+    from .catalogo_portal import PADRAO_ADESIVO, material_portal
+
+    return material_portal(valor)[0] == PADRAO_ADESIVO
+
+
+def _numeros_do_texto(texto: str) -> set[int]:
+    """Números inteiros do texto: "02 VINIL" tem 2, "1.100UND" tem 1100."""
+    numeros = set()
+    for bruto in re.findall(r"\d{1,3}(?:\.\d{3})+|\d+", str(texto or "")):
+        numeros.add(int(bruto.replace(".", "")))
+    return numeros
+
+
+def _validar_item_escrito(fatos: dict, n: int, item: dict) -> list[str]:
+    """Item que o cliente só escreveu ("ads recortados 4x4 100und"), sem peça desenhada."""
+    from .pedido import parse_dimensoes
+
+    medida = item.get("medida_escrita") or {}
+    texto_id = item.get("texto_quantidade")
+    texto = (fatos["textos"].get(texto_id) or {}).get("texto")
+    if not texto:
+        return [f"Item {n}: item sem peça desenhada precisa de texto_quantidade com o texto que pede o item."]
+    dimensoes = parse_dimensoes(texto) or {}
+    escrita = (float(dimensoes.get("largura_mm") or 0) / 10, float(dimensoes.get("altura_mm") or 0) / 10)
+    pedida = (float(medida.get("largura_cm") or 0), float(medida.get("altura_cm") or 0))
+    if not all(escrita) or not any(
+            abs(a - b) <= 0.1 and abs(c - d) <= 0.1 for (a, c), b, d in [(escrita, *pedida), (escrita[::-1], *pedida)]):
+        return [f"Item {n}: a medida_escrita {pedida} não está escrita no texto {texto_id} (\"{texto}\")."]
+    if item.get("quantidade") not in _numeros_do_texto(texto) and not _quantidade_de_cada(texto):
+        return [f"Item {n}: o texto {texto_id} (\"{texto}\") não contém a quantidade {item.get('quantidade')}."]
+    return []
+
+
 def validar(fatos: dict, resposta: dict) -> list[str]:
     erros = []
     usados: dict[str, int] = {}
     for n, item in enumerate(resposta.get("itens") or [], 1):
         ids = item.get("ids") or []
+        if not ids and item.get("medida_escrita"):
+            erros += _validar_item_escrito(fatos, n, item)
+            continue
         desconhecidos = [i for i in ids if i not in fatos["candidatos"]]
         if desconhecidos or not ids:
             erros.append(f"Item {n}: IDs inexistentes {desconhecidos or '(nenhum)'}.")
@@ -562,7 +604,7 @@ def validar(fatos: dict, resposta: dict) -> list[str]:
                         f"desenhadas; use quantidade {por_peca * desenhadas} ou separe em {desenhadas} itens "
                         f"de {por_peca} unidades (investigue os IDs internos com ver_detalhe)."
                     )
-            elif not re.search(rf"(?<!\d){quantidade}(?!\d)", texto):
+            elif quantidade not in _numeros_do_texto(texto):
                 erros.append(f"Item {n}: o texto {texto_id} (\"{texto}\") não contém a quantidade {quantidade}.")
         elif item.get("origem_quantidade") == "ocorrencias_desenhadas":
             esperado = 1 if item.get("combinar") == "uniao" else desenhadas
@@ -570,7 +612,9 @@ def validar(fatos: dict, resposta: dict) -> list[str]:
                 erros.append(f"Item {n}: {quantidade} unidades, mas há {esperado} ocorrência(s) desenhada(s) nesses IDs.")
         for campo in ("material", "acabamento"):
             valor, fonte = item.get(campo), item.get(f"texto_{campo}")
-            if valor and not _cita(fatos, fonte, valor) and not _cita_no_catalogo(fatos, fonte, campo, valor):
+            # Nada escrito sobre o material: o padrão da casa (Adesivo Leitoso) dispensa prova.
+            padrao = campo == "material" and not fonte and _e_material_padrao(valor)
+            if valor and not padrao and not _cita(fatos, fonte, valor) and not _cita_no_catalogo(fatos, fonte, campo, valor):
                 erros.append(f"Item {n}: {campo} '{valor}' sem texto que o comprove ({fonte!r}); cite o ID correto ou use null.")
         acabamento, material = item.get("acabamento"), item.get("material")
         if (acabamento and material and _termos(acabamento) and "banner" not in str(acabamento).casefold()
@@ -595,6 +639,19 @@ def resultado_do_agente(fatos: dict, resposta: dict) -> dict:
     itens = []
     for item in resposta.get("itens") or []:
         ids = [i for i in item.get("ids") or [] if i in fatos["candidatos"]]
+        if not ids and item.get("medida_escrita"):
+            # Só escrito, sem peça desenhada: a medida vem do texto e a arte, de fora do arquivo.
+            medida = item["medida_escrita"]
+            itens.append({
+                "indice": len(itens) + 1,
+                "quantidade": {"valor": int(item["quantidade"]), "fonte": "agente", "texto_origem": item.get("texto_quantidade")},
+                "dimensoes": {"largura_mm": round(float(medida["largura_cm"]) * 10, 2),
+                              "altura_mm": round(float(medida["altura_cm"]) * 10, 2), "fonte": "texto"},
+                "material": {"valor": item.get("material"), "fonte": "agente", "texto_origem": item.get("texto_material")},
+                "acabamento": {"valor": item.get("acabamento"), "fonte": "agente", "texto_origem": item.get("texto_acabamento")},
+                "candidatos": [], "justificativa": item.get("justificativa"), "situacao": "só escrito - sem arte desenhada",
+            })
+            continue
         if not ids:
             continue
         if item.get("combinar") == "uniao":
@@ -610,6 +667,10 @@ def resultado_do_agente(fatos: dict, resposta: dict) -> dict:
             "acabamento": {"valor": item.get("acabamento"), "fonte": "agente", "texto_origem": item.get("texto_acabamento")},
             "candidatos": ids, "justificativa": item.get("justificativa"),
         })
+    for item in itens:
+        # Material sem texto que o prove é o padrão da casa: a macro mostra "(padrão)".
+        if item["material"]["valor"] and not item["material"]["texto_origem"]:
+            item["origem_campos"] = {"material": "padrao_grafica"}
     return {
         "itens": itens, "total_unidades": sum(i["quantidade"]["valor"] for i in itens),
         "perguntas": resposta.get("perguntas") or [], "observacoes": resposta.get("observacoes"),

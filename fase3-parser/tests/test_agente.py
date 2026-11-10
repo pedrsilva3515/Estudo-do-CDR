@@ -83,6 +83,30 @@ class TestValidadorAgente(unittest.TestCase):
         item.update(acabamento=None, texto_acabamento=None)
         self.assertEqual(validar(fatos, {"itens": [item]}), [])
 
+    def test_quantidade_com_zero_a_esquerda_e_milhar(self):
+        # "02 VINIL" prova 2 unidades; "1.100UND", 1100 (antes o validador recusava e a IA deixava 1).
+        fatos = {**FATOS, "textos": {"T01": {"texto": "02 VINIL"}, "T02": {"texto": "Adesivo leitoso COM CORTE 1.100UND"}}}
+        self.assertEqual(validar(fatos, {"itens": [_item(["A47"], 2, texto="T01")]}), [])
+        self.assertEqual(validar(fatos, {"itens": [_item(["A20"], 1100, texto="T02")]}), [])
+
+    def test_material_padrao_sem_texto_e_aceito_e_marcado(self):
+        resposta = {"itens": [_item(["A47"], 12, texto="T11", material="Adesivo Leitoso Interm.")]}
+        self.assertEqual(validar(FATOS, resposta), [])
+        item = resultado_do_agente(FATOS, resposta)["itens"][0]
+        self.assertEqual(item["origem_campos"], {"material": "padrao_grafica"})
+        # Outro material sem prova continua recusado.
+        self.assertTrue(validar(FATOS, {"itens": [_item(["A47"], 12, texto="T11", material="lona")]}))
+
+    def test_item_escrito_sem_peca_desenhada(self):
+        fatos = {**FATOS, "textos": {"T02": {"texto": "ads recortados 4x4 100und"}}}
+        item = {**_item([], 100, texto="T02"), "medida_escrita": {"largura_cm": 4, "altura_cm": 4}}
+        self.assertEqual(validar(fatos, {"itens": [item]}), [])
+        convertido = resultado_do_agente(fatos, {"itens": [item]})["itens"][0]
+        self.assertEqual((convertido["dimensoes"]["largura_mm"], convertido["quantidade"]["valor"]), (40, 100))
+        self.assertEqual(convertido["candidatos"], [])
+        item["medida_escrita"] = {"largura_cm": 5, "altura_cm": 5}
+        self.assertTrue(any("não está escrita" in e for e in validar(fatos, {"itens": [item]})))
+
     def test_material_sem_prova(self):
         erros = validar(FATOS, {"itens": [_item(["A47"], 12, texto="T11", material="lona", texto_material="T11")]})
         self.assertTrue(any("material 'lona'" in e for e in erros))

@@ -43,7 +43,12 @@ PADRAO_LONA = "Lona Brilho 440g"              # ~74% das lonas exportadas
 
 def _normal(texto) -> str:
     texto = "".join(c for c in unicodedata.normalize("NFKD", str(texto or "").casefold()) if not unicodedata.combining(c))
-    return " " + " ".join(re.sub(r"[^\w]+", " ", texto).split()) + " "
+    t = " " + " ".join(re.sub(r"[^\w]+", " ", texto).split()) + " "
+    # Erros de digitação vistos nos pedidos: "ADEIVO SEM CROTE", "painel oudoor".
+    for errado, certo in ((" adeivo", " adesivo"), (" adesvo", " adesivo"), (" adsivo", " adesivo"),
+                          (" oudoor", " outdoor"), (" crote ", " recorte ")):
+        t = t.replace(errado, certo)
+    return t
 
 
 def _tem(t: str, *palavras: str) -> bool:
