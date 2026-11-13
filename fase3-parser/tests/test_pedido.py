@@ -41,6 +41,8 @@ class TestQuantidade(unittest.TestCase):
             ("4 vinil blackout", 4),
             ("5 BANNERES", 5),
             ("50ADESIVOSVINILCOMRECORTE", 50),
+            ("100 cartões de visita em papel couche A3", 100),
+            ("7 papel couchê A3", 7),
         ):
             with self.subTest(texto=texto):
                 self.assertEqual(parse_quantidade(texto), (esperado, "unidade"))
@@ -55,6 +57,8 @@ class TestQuantidade(unittest.TestCase):
         # "38X67 VINIL": o 67 é a altura.
         self.assertIsNone(parse_quantidade("38X67 VINIL SEM RECORTE"))
         self.assertIsNone(parse_quantidade("38 x 67 vinil"))
+        # "A3 papel": o 3 é do formato da folha.
+        self.assertIsNone(parse_quantidade("A3 papel"))
         self.assertEqual(parse_quantidade("Lona fosca com ilhoes _2,15 x 1,95_1 un"), (1, "unidade"))
         self.assertEqual(parse_quantidade("6x"), (6, "unidade"))
 

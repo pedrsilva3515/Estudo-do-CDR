@@ -35,8 +35,9 @@ from .container import FormatoCdrAntigo
 LADO_MINIMO_SEM_TEXTO_CM = 3.0
 # Muitas peças pequenas da mesma medida desenhadas: o cliente mandou a grade montada.
 # Nas revisões de 22/10/2026 eram grade 25, 30, 90 e 120 peças de 4 a 10 cm; não eram
-# 6 árvores de 20 cm, 5 faixas de 90 cm nem pares de peças grandes.
-GRADE_MINIMA_PECAS = 6
+# 6 árvores de 20 cm, 5 faixas de 90 cm nem pares de peças grandes. Em 13/11/2026 passou
+# de 6 para 5: os 5 adesivos de 10x10 do "natal e banner" eram 1 grade de 21,5x31,1.
+GRADE_MINIMA_PECAS = 5
 GRADE_PECA_MAXIMA_CM = 15.0
 
 
@@ -574,6 +575,20 @@ def _itens_pela_medida_escrita(itens: list[dict], fatos: dict) -> None:
             "situacao": "a confirmar",
             "motivo": f"medida escrita: {conteudo}",
         }
+        juntos = _pedacos_com_a_medida(itens, candidatos, caixa_texto, conteudo, largura, altura) if not parecidos else None
+        if juntos:
+            # "23X12CM ADESIVO" logo acima de duas metades de 11,1x11,1 sem texto (JUBILEU):
+            # a peça é o conjunto delas.
+            indices, uniao = juntos
+            if not quantidade:
+                item["quantidade"] = {"valor": 1, "origem": "desenho"}
+            item["dimensoes"] = {"largura_mm": (uniao["direita"] - uniao["esquerda"]) * 10,
+                                 "altura_mm": (uniao["topo"] - uniao["base"]) * 10}
+            item["candidatos"] = []
+            item["caixa_cm"] = uniao
+            itens[:] = [i for n, i in enumerate(itens) if n not in indices]
+            itens.append(item)
+            continue
         if parecidos:
             def distancia(par):
                 c = par[1]["caixa_cm"]
@@ -600,6 +615,44 @@ def _itens_pela_medida_escrita(itens: list[dict], fatos: dict) -> None:
         else:
             continue
         itens.append(item)
+
+
+def _pedacos_com_a_medida(itens: list[dict], candidatos: dict, caixa_texto: dict | None, conteudo: str,
+                          largura: float, altura: float) -> tuple[set[int], dict] | None:
+    """Itens sem texto, encostados uns nos outros e perto do texto, cujo conjunto tem a
+    medida escrita: (índices, caixa do conjunto)."""
+    if not caixa_texto:
+        return None
+    perto = max(largura, altura)
+
+    def distancia(a: dict, b: dict) -> float:
+        dx = max(0.0, max(a["esquerda"], b["esquerda"]) - min(a["direita"], b["direita"]))
+        dy = max(0.0, max(a["base"], b["base"]) - min(a["topo"], b["topo"]))
+        return max(dx, dy)
+
+    pedacos = {}
+    for indice, item in enumerate(itens):
+        ids = item.get("candidatos") or []
+        c = candidatos.get(ids[0]) if len(ids) == 1 else None
+        if item.get("situacao") == "sem texto - confirmar" and c and c.get("caixa_cm") and distancia(c["caixa_cm"], caixa_texto) <= perto:
+            pedacos[indice] = c["caixa_cm"]
+    restantes = set(pedacos)
+    while restantes:
+        grupo, fila = set(), [restantes.pop()]
+        while fila:
+            atual = fila.pop()
+            grupo.add(atual)
+            for outro in list(restantes):
+                if distancia(pedacos[atual], pedacos[outro]) <= 1.0:
+                    restantes.discard(outro)
+                    fila.append(outro)
+        if len(grupo) < 2:
+            continue
+        uniao = {"esquerda": min(pedacos[i]["esquerda"] for i in grupo), "direita": max(pedacos[i]["direita"] for i in grupo),
+                 "base": min(pedacos[i]["base"] for i in grupo), "topo": max(pedacos[i]["topo"] for i in grupo)}
+        if _medida_confere(conteudo, uniao["direita"] - uniao["esquerda"], uniao["topo"] - uniao["base"]):
+            return grupo, uniao
+    return None
 
 
 def _area(caixa: dict) -> float:
@@ -917,6 +970,14 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
     instrucoes = [t["caixa_cm"] for t in (fatos.get("textos") or {}).values()
                   if t.get("caixa_cm") and _parece_instrucao(t.get("texto") or "")]
 
+    def faixa_solta(candidato_id: str) -> bool:
+        # Faixa comprida e fina em vetor, sem texto (o friso de 150,5x13,3 entre as artes da
+        # FACHADA, a régua de 203x10 em cima do REFILADO): acabamento da montagem, não peça.
+        candidato = candidatos.get(candidato_id) or {}
+        lados = sorted((candidato.get("largura_cm") or 0, candidato.get("altura_cm") or 0))
+        # A lona de 130x1700 (loreal) é estreita em proporção, mas é a peça.
+        return (candidato.get("tipos") or []) == ["curva"] and 0 < lados[0] <= 15 and lados[1] / lados[0] >= 8
+
     def instrucao_em_curvas(candidato_id: str) -> bool:
         # "VINIL BLACKOUT 65cm x 1,03m" escrito em curvas: o OCR lê o texto em cima da peça.
         candidato = candidatos.get(candidato_id) or {}
@@ -985,7 +1046,7 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
         and (item["situacao"] != "sem texto - confirmar"
              or not (dentro_de_listado(item["candidatos"][0]) or emendas_de_outra_peca(item["candidatos"][0])
                      or copia_de_outra_peca(item["candidatos"][0]) or instrucao_em_curvas(item["candidatos"][0])
-                     or sobre_peca_com_texto(item["candidatos"][0])))
+                     or sobre_peca_com_texto(item["candidatos"][0]) or faixa_solta(item["candidatos"][0])))
     ]
     itens = _pecas_pela_moldura(_juntar_partes_na_peca(_pastas_em_volta(itens, candidatos), candidatos), candidatos)
     for indice, item in enumerate(itens, 1):

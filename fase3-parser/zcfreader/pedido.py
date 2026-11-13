@@ -24,11 +24,12 @@ _QUANTIDADE = re.compile(
 
 
 # "50 ADESIVOS 8CM", "2 LONAS 3X1", "02 VINIL", "5 BANNERES": o número antes do nome do
-# produto é a quantidade. "50ADESIVOSVINILCOMRECORTE" (OCR sem espaços) também.
+# produto é a quantidade ("100 cartões de visita", "7 papel couchê A3").
+# "50ADESIVOSVINILCOMRECORTE" (OCR sem espaços) também.
 _QUANTIDADE_PRODUTO = re.compile(
-    # "38X67 VINIL": o 67 é medida, não quantidade.
-    r"(?i)(?<![\d,.x×])(?<![x×]\s)(?P<valor>\d+)\s*(?:adesivos?(?=[a-z])|(?:adesivos?|vinil|vinis|lonas?|banner(?:e?s)?|placas?|ps"
-    r"|pe[çc]as?|impress(?:[õo]es|[ãa]o)|c[óo]pias?)\b)"
+    # "38X67 VINIL": o 67 é medida, não quantidade; "A3 papel": o 3 é do formato.
+    r"(?i)(?<![\d,.x×a-z])(?<![x×]\s)(?P<valor>\d+)\s*(?:adesivos?(?=[a-z])|(?:adesivos?|vinil|vinis|lonas?|banner(?:e?s)?|placas?|ps"
+    r"|pe[çc]as?|impress(?:[õo]es|[ãa]o)|c[óo]pias?|cart(?:[õo]es|[ãa]o)|pap(?:el|[eé]is))\b)"
 )
 
 
