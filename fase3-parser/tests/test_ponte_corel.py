@@ -356,6 +356,53 @@ class TestTextosDoPedido(unittest.TestCase):
                  {"candidatos": ["A03"], "situacao": "sem texto - confirmar"}]
         self.assertEqual([i["candidatos"] for i in _juntar_partes_na_peca(itens, candidatos)], [["A01"], ["A02"]])
 
+    def test_moldura_repetida_em_volta_das_fotos_e_a_peca(self):
+        # 3 retângulos de 70x50, cada um com uma foto de ~67x46 dentro (IMPRESSÃO ADESIVO).
+        from zcfreader.ponte_corel import _pecas_pela_moldura
+
+        moldura = self._candidato(0, 70, 0, 150, centros=[{"x": 35, "y": 25}, {"x": 35, "y": 75}, {"x": 35, "y": 125}])
+        moldura.update(largura_cm=70, altura_cm=50)
+        candidatos = {"A01": moldura, "A03": self._candidato(1.4, 68.6, 52, 98), "A05": self._candidato(2, 68, 101.5, 148.3)}
+        itens = [{"candidatos": ["A03"], "quantidade": {"valor": 1, "origem": "desenho"}, "situacao": "sem texto - confirmar"},
+                 {"candidatos": ["A05"], "quantidade": {"valor": 1, "origem": "desenho"}, "situacao": "a confirmar"}]
+        novos = _pecas_pela_moldura(itens, candidatos)
+        self.assertEqual([(i["candidatos"], i["quantidade"]["valor"]) for i in novos], [(["A01"], 3)])
+        self.assertEqual(novos[0]["situacao"], "a confirmar")
+
+    def test_fundo_coberto_por_copias_da_arte_vira_as_copias(self):
+        # Fundo de 21x30 com 2 adesivos de 21x15 em cima (leitoso sem recorte).
+        from zcfreader.ponte_corel import _pecas_pela_moldura
+
+        arte = self._candidato(0, 21, 0, 30, centros=[{"x": 10.5, "y": 7.5}, {"x": 10.5, "y": 22.5}])
+        arte.update(largura_cm=21, altura_cm=15, tipos=["bitmap"])
+        candidatos = {"A01": {**self._candidato(0, 21, 0, 30), "tipos": ["retangulo"]}, "A02": arte}
+        itens = [{"candidatos": ["A01"], "quantidade": {"valor": 1, "origem": "desenho"}, "situacao": "sem texto - confirmar"}]
+        self.assertEqual([(i["candidatos"], i["quantidade"]["valor"]) for i in _pecas_pela_moldura(itens, candidatos)],
+                         [(["A02"], 2)])
+
+    def test_fundo_coberto_por_molduras_com_artes_diferentes_continua(self):
+        # 4 molduras de 30x20 com artes diferentes no fundo de 60x40: grade montada (lixeiras).
+        from zcfreader.ponte_corel import _pecas_pela_moldura
+
+        molduras = self._candidato(0, 60, 0, 40, centros=[{"x": 15, "y": 10}, {"x": 45, "y": 10}, {"x": 15, "y": 30}, {"x": 45, "y": 30}])
+        molduras.update(largura_cm=30, altura_cm=20, tipos=["retangulo"])
+        candidatos = {"A02": {**self._candidato(0, 60, 0, 40), "tipos": ["retangulo"]}, "A01": molduras}
+        itens = [{"candidatos": ["A02"], "quantidade": {"valor": 1, "origem": "desenho"}, "situacao": "sem texto - confirmar"}]
+        self.assertEqual([i["candidatos"] for i in _pecas_pela_moldura(itens, candidatos)], [["A02"]])
+
+    def test_de_cada_vale_para_as_vizinhas_iguais_sem_texto(self):
+        # "15 UNI DE CADA" ligado à fileira de cima; a de baixo, encostada, é o mesmo pedido (JOSES FAZENDA).
+        from zcfreader.ponte_corel import _de_cada_nos_vizinhos
+
+        candidatos = {"A01": self._candidato(0, 6, 10, 16), "A02": self._candidato(0, 6, 1.7, 7.7),
+                      "A03": self._candidato(40, 46, 10, 16)}
+        itens = [{"candidatos": ["A01"], "quantidade": {"valor": 15, "origem": "texto"}, "acabamento": {"valor": None}},
+                 {"candidatos": ["A02"], "quantidade": {"valor": 1, "origem": "desenho"}, "acabamento": {"valor": "recorte"}},
+                 {"candidatos": ["A03"], "quantidade": {"valor": 1, "origem": "desenho"}}]
+        _de_cada_nos_vizinhos(itens, candidatos, {15})
+        self.assertEqual([i["quantidade"]["valor"] for i in itens], [15, 15, 1])
+        self.assertIsNone(itens[1]["acabamento"]["valor"])
+
     def test_fundo_e_arte_no_mesmo_lugar_com_texto_sao_uma_peca(self):
         # O fundo de 111x212 e a arte de 111x211,9 em cima, os dois ligados ao texto (ADESIVO PERFURADO).
         from zcfreader.ponte_corel import _analisar_regras
@@ -439,6 +486,16 @@ class TestGradeMontada(unittest.TestCase):
         self.assertEqual(itens[0]["quantidade"]["valor"], 1)
         self.assertEqual((itens[0]["dimensoes"]["largura_mm"], itens[0]["dimensoes"]["altura_mm"]), (500, 450))
         self.assertEqual(itens[0]["grade"]["pecas"], 90)
+
+    def test_grade_com_quantidade_escrita_por_peca_vira_quantidade_de_grades(self):
+        # "15 UNI DE CADA" sobre a grade de 8 adesivos: 120 peças = 15 grades (JOSES FAZENDA).
+        from zcfreader.ponte_corel import separar_ocorrencias
+
+        candidatos = {"A01": self._candidato(4, 2, 7.0)}
+        item = {**self._item("A01", 120, 7.0), "quantidade": {"valor": 120, "origem": "texto"}}
+        itens = separar_ocorrencias({"itens": [item]}, candidatos)["itens"]
+        self.assertEqual(itens[0]["grade"]["pecas"], 8)
+        self.assertEqual(itens[0]["quantidade"]["valor"], 15)
 
     def test_poucas_pecas_grandes_continuam_com_quantidade(self):
         from zcfreader.ponte_corel import separar_ocorrencias

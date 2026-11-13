@@ -120,7 +120,10 @@ def separar_ocorrencias(resultado: dict, candidatos: dict, auditoria: dict | Non
                 "esquerda": min(c["esquerda"] for c in caixas), "direita": max(c["direita"] for c in caixas),
                 "base": min(c["base"] for c in caixas), "topo": max(c["topo"] for c in caixas),
             }
-            item["quantidade"] = {"valor": 1}
+            # "15 UNI DE CADA" sobre a grade de 8 (quantidade 120 = 15 x 8): 15 grades.
+            escrita = (item.get("quantidade") or {}).get("origem") == "texto"
+            por_grade = quantidade // len(caixas) if escrita and quantidade > len(caixas) and quantidade % len(caixas) == 0 else 1
+            item["quantidade"] = {"valor": por_grade}
             item["dimensoes"] = {"largura_mm": round((grade["direita"] - grade["esquerda"]) * 10, 1),
                                  "altura_mm": round((grade["topo"] - grade["base"]) * 10, 1)}
             item["caixa_cm"] = grade
@@ -450,6 +453,60 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
             item["quantidade"] = {"valor": int(novo), "origem": "texto"}
             (item.get("origem_campos") or {}).pop("quantidade", None)
 
+    _de_cada_nos_vizinhos(itens, candidatos, de_cada)
+
+
+def _de_cada_nos_vizinhos(itens: list[dict], candidatos: dict, de_cada: set) -> None:
+    """"15 UNI DE CADA" sobre um bloco de peças: as regras ligam o texto a algumas; as
+    vizinhas do mesmo tamanho, encostadas no bloco e sem quantidade escrita, também são
+    "de cada" (os 8 adesivos de 6x6 da JOSES FAZENDA, em duas fileiras)."""
+    if not de_cada:
+        return
+
+    def caixa_e_medida(item):
+        ids = item.get("candidatos") or []
+        c = candidatos.get(ids[0]) if len(ids) == 1 else None
+        if not c or not c.get("caixa_cm") or int(c.get("quantidade_geometrica") or 1) != 1:
+            return None
+        return c["caixa_cm"], c["largura_cm"], c["altura_cm"]
+
+    def sem_quantidade(item):
+        quantidade = item.get("quantidade") or {}
+        return quantidade.get("origem") == "desenho" or (
+            quantidade.get("origem") is None and (item.get("origem_campos") or {}).get("quantidade") == "padrao_grafica")
+
+    def encostadas(a, b, folga=2.0):
+        return (a["esquerda"] - folga <= b["direita"] and b["esquerda"] - folga <= a["direita"]
+                and a["base"] - folga <= b["topo"] and b["base"] - folga <= a["topo"])
+
+    for n in de_cada:
+        bloco = [i for i, item in enumerate(itens)
+                 if (item.get("quantidade") or {}).get("origem") == "texto"
+                 and (item.get("quantidade") or {}).get("valor") == n and caixa_e_medida(item)]
+        if not bloco:
+            continue
+        mudou = True
+        while mudou:
+            mudou = False
+            for indice, item in enumerate(itens):
+                dados = caixa_e_medida(item)
+                if indice in bloco or not dados or not sem_quantidade(item):
+                    continue
+                caixa, largura, altura = dados
+                for outro in bloco:
+                    caixa_outro, l2, a2 = caixa_e_medida(itens[outro])
+                    if (abs(largura - l2) <= 0.2 * l2 and abs(altura - a2) <= 0.2 * a2
+                            and encostadas(caixa, caixa_outro, max(2.0, 0.5 * min(l2, a2)))):
+                        item["quantidade"] = {"valor": n, "origem": "texto"}
+                        (item.get("origem_campos") or {}).pop("quantidade", None)
+                        # Mesmo pedido que a vizinha: mesmo material e acabamento.
+                        for campo in ("material", "acabamento", "situacao"):
+                            if campo in itens[outro]:
+                                item[campo] = dict(itens[outro][campo]) if isinstance(itens[outro][campo], dict) else itens[outro][campo]
+                        bloco.append(indice)
+                        mudou = True
+                        break
+
 
 def _itens_pela_medida_escrita(itens: list[dict], fatos: dict) -> None:
     """Pedido escrito com medida que nenhum item da lista tem.
@@ -691,6 +748,71 @@ def _juntar_partes_na_peca(itens: list[dict], candidatos: dict) -> list[dict]:
     return [item for indice, item in enumerate(itens) if indice not in removidos]
 
 
+def _pecas_pela_moldura(itens: list[dict], candidatos: dict) -> list[dict]:
+    """Troca a peça listada pela que o desenho mostra com as cópias certas.
+
+    - Moldura repetida em volta das artes (os 3 retângulos de 70x50, cada um com uma
+      foto de 67x46 dentro): a peça é a moldura, uma por cópia.
+    - Retângulo de fundo sem texto coberto pelas cópias de uma arte (o fundo de 21x30
+      com 2 adesivos de 21x15 em cima): a peça é a arte, uma por cópia.
+    """
+    listados = {i for item in itens for i in item.get("candidatos") or []}
+
+    def novo_item(candidato_id: str, base: dict) -> dict:
+        c = candidatos[candidato_id]
+        return {
+            **base,
+            "quantidade": {"valor": int(c.get("quantidade_geometrica") or 1), "origem": "desenho"},
+            "dimensoes": {"largura_mm": c["largura_cm"] * 10, "altura_mm": c["altura_cm"] * 10},
+            "candidatos": [candidato_id],
+        }
+
+    removidos, novos = set(), []
+    for moldura_id, moldura in candidatos.items():
+        if moldura_id in listados or int(moldura.get("quantidade_geometrica") or 1) < 2 or not moldura.get("largura_cm"):
+            continue
+        ocorrencias = _ocorrencias(moldura)
+        if len(ocorrencias) < 2:
+            continue
+        dentro = []
+        for indice, item in enumerate(itens):
+            ids = item.get("candidatos") or []
+            peca = candidatos.get(ids[0]) if len(ids) == 1 else None
+            if not peca or indice in removidos or (item.get("quantidade") or {}).get("origem") == "texto":
+                continue
+            caixas = _ocorrencias(peca)
+            if all(any(_dentro(c, o) and _area(c) >= 0.75 * _area(o) for o in ocorrencias) for c in caixas):
+                dentro.append(indice)
+        if not dentro:
+            continue
+        com_texto = [itens[i] for i in dentro if itens[i].get("situacao") != "sem texto - confirmar"]
+        removidos.update(dentro)
+        novos.append(novo_item(moldura_id, com_texto[0] if com_texto else itens[dentro[0]]))
+        listados.add(moldura_id)
+
+    for indice, item in enumerate(itens):
+        ids = item.get("candidatos") or []
+        fundo = candidatos.get(ids[0]) if len(ids) == 1 else None
+        if (not fundo or indice in removidos or item.get("situacao") != "sem texto - confirmar"
+                or (fundo.get("tipos") or []) != ["retangulo"] or int(fundo.get("quantidade_geometrica") or 1) != 1):
+            continue
+        for arte_id, arte in candidatos.items():
+            if arte_id in listados or int(arte.get("quantidade_geometrica") or 1) < 2 or not arte.get("largura_cm"):
+                continue
+            # Só a arte repetida; 4 molduras de 30x20 com artes diferentes dentro do fundo de
+            # 60x40 são uma grade montada (lixeiras), e a peça é o fundo.
+            if (arte.get("tipos") or []) == ["retangulo"]:
+                continue
+            caixas = _ocorrencias(arte)
+            if (len(caixas) >= 2 and all(_dentro(c, fundo["caixa_cm"]) for c in caixas)
+                    and sum(_area(c) for c in caixas) >= 0.9 * _area(fundo["caixa_cm"])):
+                removidos.add(indice)
+                novos.append(novo_item(arte_id, item))
+                listados.add(arte_id)
+                break
+    return [item for indice, item in enumerate(itens) if indice not in removidos] + novos
+
+
 def _analisar_regras(caminho: Path, fatos: dict) -> dict:
     from .camadas import regras_resolvem, resultado_das_regras
 
@@ -865,7 +987,7 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
                      or copia_de_outra_peca(item["candidatos"][0]) or instrucao_em_curvas(item["candidatos"][0])
                      or sobre_peca_com_texto(item["candidatos"][0])))
     ]
-    itens = _juntar_partes_na_peca(_pastas_em_volta(itens, candidatos), candidatos)
+    itens = _pecas_pela_moldura(_juntar_partes_na_peca(_pastas_em_volta(itens, candidatos), candidatos), candidatos)
     for indice, item in enumerate(itens, 1):
         item["indice"] = indice
     _quantidade_escrita(itens, fatos)
