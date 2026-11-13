@@ -304,6 +304,69 @@ class TestTextosDoPedido(unittest.TestCase):
         _itens_pela_medida_escrita(itens, fatos)
         self.assertEqual(len(itens), 1)
 
+    def test_medida_e_material_escritos_sem_peca_parecida_vira_item(self):
+        # "50x50 papel outdoor" e nenhuma peça desenhada perto dessa medida (lona repiteco).
+        from zcfreader.ponte_corel import _itens_pela_medida_escrita
+
+        itens = [{"dimensoes": {"largura_mm": 700, "altura_mm": 700}, "candidatos": ["A01"]}]
+        fatos = {"candidatos": {"A01": self._candidato(0, 70, 0, 70)},
+                 "textos": {"T01": {"texto": "50x50 papel outdoor", "caixa_cm": self._caixa(80, 100, 0, 2)}}}
+        _itens_pela_medida_escrita(itens, fatos)
+        self.assertEqual(len(itens), 2)
+        self.assertEqual(itens[1]["quantidade"]["valor"], 1)
+        self.assertEqual(itens[1]["material"]["valor"], "papel outdoor")
+
+    @staticmethod
+    def _item(id_, quantidade, origem):
+        return {"candidatos": [id_], "quantidade": {"valor": quantidade, "origem": origem}, "origem_campos": {}}
+
+    def test_quantidade_entre_duas_pecas_fica_com_a_que_nao_tem_a_sua(self):
+        # "15und" entre duas peças; a de baixo já tem o seu "15und" embaixo (emanuel).
+        from zcfreader.ponte_corel import _quantidade_escrita
+
+        itens = [self._item("A01", 1, "desenho"), self._item("A02", 1, "desenho")]
+        fatos = {
+            "candidatos": {"A01": self._candidato(0, 10, 8, 12), "A02": self._candidato(0, 4, 2.5, 6.5)},
+            "textos": {"T01": {"texto": "15und", "caixa_cm": self._caixa(1, 3, 6.9, 7.6)},
+                       "T02": {"texto": "15und", "caixa_cm": self._caixa(1, 3, 1.7, 2.2)}},
+        }
+        _quantidade_escrita(itens, fatos)
+        self.assertEqual([i["quantidade"]["valor"] for i in itens], [15, 15])
+
+    def test_peca_com_quantidade_de_outra_fica_com_a_sua(self):
+        # As regras deram "50und" às duas peças; a grande tem o "2und" ao lado (refilado).
+        from zcfreader.ponte_corel import _quantidade_escrita
+
+        itens = [self._item("A01", 50, "texto"), self._item("A02", 50, "texto")]
+        fatos = {
+            "candidatos": {"A01": self._candidato(-14.6, 15.1, -26.9, -5.9), "A02": self._candidato(-9, 9, -3.2, 3.2)},
+            "textos": {"T01": {"texto": "50und", "caixa_cm": self._caixa(-17.2, -11.3, -0.5, 1.1)},
+                       "T02": {"texto": "2und", "caixa_cm": self._caixa(-21.2, -16.5, -18.4, -16.8)}},
+        }
+        _quantidade_escrita(itens, fatos)
+        self.assertEqual([i["quantidade"]["valor"] for i in itens], [2, 50])
+
+    def test_faixa_repetida_dentro_de_pecas_diferentes_sai_da_lista(self):
+        # A mesma faixa de 40,5x8,5 dentro da arte de 40,5x66 e da de 40,5x55 (ADESIVO TRANSPARENTE).
+        from zcfreader.ponte_corel import _juntar_partes_na_peca
+
+        faixa = self._candidato(0, 40.5, 50, 58.5, centros=[{"x": 20.25, "y": 54.25}, {"x": 70.25, "y": 54.25}])
+        candidatos = {"A01": self._candidato(0, 40.5, 0, 66), "A02": self._candidato(50, 90.5, 5, 60), "A03": faixa}
+        itens = [{"candidatos": ["A01"], "situacao": "a confirmar"}, {"candidatos": ["A02"], "situacao": "a confirmar"},
+                 {"candidatos": ["A03"], "situacao": "sem texto - confirmar"}]
+        self.assertEqual([i["candidatos"] for i in _juntar_partes_na_peca(itens, candidatos)], [["A01"], ["A02"]])
+
+    def test_fundo_e_arte_no_mesmo_lugar_com_texto_sao_uma_peca(self):
+        # O fundo de 111x212 e a arte de 111x211,9 em cima, os dois ligados ao texto (ADESIVO PERFURADO).
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {
+            "auditoria_regional": {"itens": [{**self._regra("A01", 111, 212, "adesivo perfurado"), "papel": "produto_plausivel"},
+                                             {**self._regra("A02", 111, 211.9, "adesivo perfurado"), "papel": "produto_plausivel"}]},
+            "candidatos": {"A01": self._candidato(0, 111, 0, 212), "A02": self._candidato(0, 111, 0.1, 212)},
+        }
+        self.assertEqual([i["candidatos"] for i in _analisar_regras(None, fatos)["itens"]], [["A01"]])
+
     def test_mesma_peca_em_outra_camada_nao_vira_item_a_mais(self):
         # Placa de 51x51 com o fundo de 50x50 dentro: um item só.
         from zcfreader.ponte_corel import _analisar_regras

@@ -23,9 +23,12 @@ _QUANTIDADE = re.compile(
 )
 
 
-# "50 ADESIVOS 8CM", "2 LONAS 3X1": o número antes do nome do produto é a quantidade.
+# "50 ADESIVOS 8CM", "2 LONAS 3X1", "02 VINIL", "5 BANNERES": o número antes do nome do
+# produto é a quantidade. "50ADESIVOSVINILCOMRECORTE" (OCR sem espaços) também.
 _QUANTIDADE_PRODUTO = re.compile(
-    r"(?i)(?<![\d,.])(?P<valor>\d+)\s*(?:adesivos?|lonas?|banners?|placas?|ps|pe[çc]as?|impress(?:[õo]es|[ãa]o)|c[óo]pias?)\b"
+    # "38X67 VINIL": o 67 é medida, não quantidade.
+    r"(?i)(?<![\d,.x×])(?<![x×]\s)(?P<valor>\d+)\s*(?:adesivos?(?=[a-z])|(?:adesivos?|vinil|vinis|lonas?|banner(?:e?s)?|placas?|ps"
+    r"|pe[çc]as?|impress(?:[õo]es|[ãa]o)|c[óo]pias?)\b)"
 )
 
 
@@ -80,7 +83,9 @@ def parse_material(texto: str) -> dict | None:
     banner = re.search(r"\b(?:banner|lona)", palavras) is not None
     # "Papel outdor" é erro comum e "painel outdoor" é o mesmo papel; "outdoor"
     # sozinho pode ser só o tema da arte.
-    papel = re.search(r"\b(?:papel|paine(?:l|is))\s+out\s?doo?r\b", palavras) is not None
+    # "painel oudoor" (sem o t) também; "OUTDOOR 0,70 X 0,50CM", com a medida, é pedido.
+    papel = re.search(r"\b(?:papel|paine(?:l|is))\s+out?\s?doo?r\b", palavras) is not None or re.search(
+        r"^\s*out\s?doo?r\s+\d+(?:[.,]\d+)?\s*(?:cm|m)?\s*[x×]\s*\d", palavras) is not None
     # "1 PS ADESIVADO", "placa de PS 2mm": a peça é a placa, mesmo com vinil aplicado.
     # "PS" solto num texto da arte (um "PS:" no fim de um recado) não é material.
     ps = re.search(r"\bps\b", palavras) is not None and re.search(

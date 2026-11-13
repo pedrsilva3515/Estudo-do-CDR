@@ -37,6 +37,10 @@ class TestQuantidade(unittest.TestCase):
             ("50 ADESIVOS 8CM", 50),
             ("1 ADESIVO 30 CM", 1),
             ("2 LONAS 3X1", 2),
+            ("02 VINIL", 2),
+            ("4 vinil blackout", 4),
+            ("5 BANNERES", 5),
+            ("50ADESIVOSVINILCOMRECORTE", 50),
         ):
             with self.subTest(texto=texto):
                 self.assertEqual(parse_quantidade(texto), (esperado, "unidade"))
@@ -48,6 +52,9 @@ class TestQuantidade(unittest.TestCase):
         # "x" entre duas medidas não é quantidade (pedido "lona fosca" lia 15 em "2,15 x 1,95").
         self.assertIsNone(parse_quantidade("5,40 x 1,40"))
         self.assertIsNone(parse_quantidade("10x20"))
+        # "38X67 VINIL": o 67 é a altura.
+        self.assertIsNone(parse_quantidade("38X67 VINIL SEM RECORTE"))
+        self.assertIsNone(parse_quantidade("38 x 67 vinil"))
         self.assertEqual(parse_quantidade("Lona fosca com ilhoes _2,15 x 1,95_1 un"), (1, "unidade"))
         self.assertEqual(parse_quantidade("6x"), (6, "unidade"))
 
@@ -242,6 +249,10 @@ class TestUnidadeGrudadaELaminacao(unittest.TestCase):
     def test_painel_outdoor_e_papel_outdoor(self):
         self.assertEqual(parse_material("painel outdoor")["material"], "papel outdoor")
         self.assertEqual(parse_material("paineis outdoor 1und de cada")["material"], "papel outdoor")
+        self.assertEqual(parse_material("painel oudoor")["material"], "papel outdoor")
+        # Com a medida é pedido; "outdoor" sozinho pode ser o tema da arte.
+        self.assertEqual(parse_material("OUTDOOR 0,70 X 0,50CM")["material"], "papel outdoor")
+        self.assertIsNone(parse_material("outdoor de natal"))
 
     def test_ads_solto_na_arte_nao_e_material(self):
         self.assertIsNone(parse_material("Google Ads"))

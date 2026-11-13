@@ -381,6 +381,7 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
             for caixa in caixas_das_ocorrencias(candidato) or [candidato["caixa_cm"]]:
                 copias.append((indice, caixa, candidato["largura_cm"], candidato["altura_cm"]))
     rotulos: dict[tuple[int, int], list[tuple[float, dict]]] = {}
+    duvidosos = []
     for texto in textos:
         if texto["de_cada"]:
             continue
@@ -395,6 +396,14 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
         if len(empatadas) == 1:
             numero = min(distancias, key=lambda par: par[0])[1]
             rotulos.setdefault((copias[numero][0], numero), []).append((menor, texto))
+        else:
+            duvidosos.append((texto, [(d, numero) for d, numero in distancias if d - menor <= 0.2]))
+    # "15und" entre duas peças, quando uma delas já tem o seu "15und" embaixo: é da outra.
+    for texto, empate in duvidosos:
+        livres = [(d, numero) for d, numero in empate if (copias[numero][0], numero) not in rotulos]
+        if len({copias[numero][0] for _, numero in livres}) == 1:
+            d, numero = min(livres, key=lambda par: par[0])
+            rotulos.setdefault((copias[numero][0], numero), []).append((d, texto))
 
     for indice, item in enumerate(itens):
         numeros = [numero for numero, copia in enumerate(copias) if copia[0] == indice]
@@ -416,6 +425,12 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
             quantidade.get("origem") is None and (item.get("origem_campos") or {}).get("quantidade") == "padrao_grafica")
         if len(por_copia) == len(numeros) and (len(numeros) >= 2 or sem_texto):
             novo = sum(t["quantidade"] for t in por_copia)
+        # As regras deram à peça o "50und" que está junto de outra, e ela tem o seu "2und" ao lado.
+        if (novo is None and not sem_texto and len(numeros) == 1 and len(por_copia) == 1
+                and quantidade.get("valor") != por_copia[0]["quantidade"]
+                and any(t["quantidade"] == quantidade.get("valor")
+                        for (dono, _), lista in rotulos.items() if dono != indice for _, t in lista)):
+            novo = por_copia[0]["quantidade"]
         if not sem_texto and novo is None:
             continue
         ids = item.get("candidatos") or []
@@ -514,7 +529,12 @@ def _itens_pela_medida_escrita(itens: list[dict], fatos: dict) -> None:
                 item["quantidade"] = {"valor": int(candidato.get("quantidade_geometrica") or 1), "origem": "desenho"}
             item["dimensoes"] = {"largura_mm": candidato["largura_cm"] * 10, "altura_mm": candidato["altura_cm"] * 10}
             item["candidatos"] = [candidato_id]
-        elif quantidade:
+        elif quantidade or (sem_unidade and especificacao.get("material") and not any(
+                # "50x50 papel outdoor" sem nenhuma peça desenhada nem perto dessa medida: é pedido só
+                # escrito. "50X78 CM VINIL" ao lado da peça de 45x80 é a medida aproximada dela.
+                c.get("largura_cm") and any(abs(a - largura) <= 0.2 * largura and abs(b - altura) <= 0.2 * altura
+                                            for a, b in ((c["largura_cm"], c["altura_cm"]), (c["altura_cm"], c["largura_cm"])))
+                for c in candidatos.values())):
             item["dimensoes"] = {"largura_mm": largura * 10, "altura_mm": altura * 10}
             item["candidatos"] = []
             if caixa_texto:
@@ -639,6 +659,21 @@ def _juntar_partes_na_peca(itens: list[dict], candidatos: dict) -> list[dict]:
                         and all(any(_dentro(c, o, folga) for o in ocorrencias_outro) for c in caixas_parte)):
                     if alvo is None or _area(candidatos[outro_id]["caixa_cm"]) < _area(candidatos[itens[alvo]["candidatos"][0]]["caixa_cm"]):
                         alvo = outro_indice
+            if alvo is None and item.get("situacao") == "sem texto - confirmar" and len(caixas_parte) >= 2:
+                # Cópias sem texto, cada uma dentro de uma peça listada diferente (a mesma faixa
+                # de 40,5x8,5 na arte de 40,5x66 e na de 40,5x55): são parte das peças.
+                donos = []
+                for caixa in caixas_parte:
+                    dono = next((outro_indice for outro_id, outro_indice in por_candidato.items()
+                                 if outro_indice != indice and outro_indice not in removidos
+                                 and (candidatos.get(outro_id) or {}).get("caixa_cm")
+                                 and any(_dentro(caixa, o, max(0.3, 0.005 * max(candidatos[outro_id].get("largura_cm") or 0,
+                                                                                candidatos[outro_id].get("altura_cm") or 0)))
+                                         and _area(o) >= 1.5 * _area(caixa)
+                                         for o in _ocorrencias(candidatos[outro_id]))), None)
+                    donos.append(dono)
+                if all(dono is not None for dono in donos):
+                    alvo = donos[0]
             if alvo is None:
                 continue
         peca = itens[alvo]
@@ -801,12 +836,34 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
                     coberta += _area_intersecao(caixa, ocorrencia)
         return coberta >= 0.5 * area
 
+    def mesmo_lugar_de_outra_peca(candidato_id: str) -> bool:
+        # O fundo de 111x212 e a arte de 111x211,9 em cima, as duas com texto (ADESIVO
+        # PERFURADO): as mesmas cópias no mesmo lugar são uma peça só. Fica a maior.
+        candidato = candidatos.get(candidato_id) or {}
+        if not (candidato.get("caixa_cm") and candidato.get("largura_cm")):
+            return False
+        caixas = caixas_das_ocorrencias(candidato) or [candidato["caixa_cm"]]
+        for outro in listados:
+            pai = candidatos.get(outro) or {}
+            if outro == candidato_id or not (pai.get("caixa_cm") and pai.get("largura_cm")):
+                continue
+            area, area_pai = candidato["largura_cm"] * candidato["altura_cm"], pai["largura_cm"] * pai["altura_cm"]
+            if area > area_pai or (area == area_pai and candidato_id < outro):
+                continue
+            caixas_pai = caixas_das_ocorrencias(pai) or [pai["caixa_cm"]]
+            if len(caixas) == len(caixas_pai) and all(
+                    any(all(abs(c[lado] - o[lado]) <= 0.5 for lado in ("esquerda", "direita", "base", "topo")) for o in caixas_pai)
+                    for c in caixas):
+                return True
+        return False
+
     itens = [
         item for item in itens
-        if item["situacao"] != "sem texto - confirmar"
-        or not (dentro_de_listado(item["candidatos"][0]) or emendas_de_outra_peca(item["candidatos"][0])
-                or copia_de_outra_peca(item["candidatos"][0]) or instrucao_em_curvas(item["candidatos"][0])
-                or sobre_peca_com_texto(item["candidatos"][0]))
+        if not (item.get("candidatos") and mesmo_lugar_de_outra_peca(item["candidatos"][0]))
+        and (item["situacao"] != "sem texto - confirmar"
+             or not (dentro_de_listado(item["candidatos"][0]) or emendas_de_outra_peca(item["candidatos"][0])
+                     or copia_de_outra_peca(item["candidatos"][0]) or instrucao_em_curvas(item["candidatos"][0])
+                     or sobre_peca_com_texto(item["candidatos"][0])))
     ]
     itens = _juntar_partes_na_peca(_pastas_em_volta(itens, candidatos), candidatos)
     for indice, item in enumerate(itens, 1):
