@@ -220,6 +220,18 @@ class TestTextosDoPedido(unittest.TestCase):
         }
         self.assertEqual([i["quantidade"]["valor"] for i in _analisar_regras(None, fatos)["itens"]], [70, 70])
 
+    def test_de_cada_com_recorte_da_o_acabamento_as_pecas(self):
+        # 8 - adesivo 24: "50 adesivos com recorte de cada" logo acima de dois adesivos de 5,1x6.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        fatos = {
+            "auditoria_regional": {"itens": [self._regra("A01", 5, 6, "adesivo"), self._regra("A02", 5, 6, "adesivo")]},
+            "candidatos": {"A01": self._candidato(0, 5, 0, 6), "A02": self._candidato(7, 12, 0, 6)},
+            "textos": {"T01": {"texto": "50 adesivos com recorte de cada", "caixa_cm": self._caixa(-2, 14, 7, 8)}},
+        }
+        itens = _analisar_regras(None, fatos)["itens"]
+        self.assertEqual([i["acabamento"]["valor"] for i in itens], ["recorte especial"] * 2)
+
     def test_instrucao_escrita_em_curvas_nao_vira_item(self):
         # FACHADA: "VINIL BLACKOUT 65cm x 1,03m" em curvas; o OCR lê o texto em cima da faixa.
         from zcfreader.ponte_corel import _analisar_regras

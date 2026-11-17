@@ -275,7 +275,9 @@ def _material_do_cabecalho(itens: list[dict], fatos: dict) -> None:
         if especificacao and texto.get("caixa_cm") and not _dimensoes_instrucao_material(texto["texto"], especificacao):
             titulos.append((texto["caixa_cm"], especificacao, texto["texto"]))
     for item in itens:
-        if (item.get("material") or {}).get("valor"):
+        material_atual = (item.get("material") or {}).get("valor")
+        # Com material, só falta o acabamento do "50 adesivos com recorte de cada" que toca a peça.
+        if material_atual and (item.get("acabamento") or {}).get("valor"):
             continue
         caixa = _caixa_do_item(item, candidatos)
         if not caixa:
@@ -291,6 +293,13 @@ def _material_do_cabecalho(itens: list[dict], fatos: dict) -> None:
                 distancia = titulo["base"] - caixa["topo"] if titulo["base"] >= caixa["topo"] else caixa["base"] - titulo["topo"]
                 if distancia >= -0.5:
                     de_cada.append((distancia, especificacao))
+        if material_atual:
+            # O título precisa ser do mesmo material ("adesivo" genérico vale para qualquer adesivo).
+            de_cada = [(d, e) for d, e in de_cada if e.get("acabamento") and e["material"] in {material_atual, "adesivo"}
+                       and material_atual.split()[0] == e["material"].split()[0]]
+            if de_cada:
+                item["acabamento"] = {"valor": min(de_cada, key=lambda par: par[0])[1]["acabamento"]}
+            continue
         if not (acima or de_cada):
             continue
         especificacao = min(acima or de_cada, key=lambda par: par[0])[1]

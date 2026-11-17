@@ -65,9 +65,12 @@ def parse_material(texto: str) -> dict | None:
     # Erros de digitação vistos nos pedidos: "ADEIVO SEM CROTE" (PORTA 111).
     normalizado = re.sub(r"\b(?:adeivo|adesvo|adsivo|adesiv)(s?)\b", r"adesivo\1", normalizado)
     normalizado = re.sub(r"\bsem\s+crote\b", "sem recorte", normalizado)
-    # "leitoso com trasparente aplicado em cima" é laminação: o transparente não é o material.
+    # "50 adesivos com rocorte de cada" (8 - adesivo 24).
+    normalizado = re.sub(r"\brocort(e|ad[oa]s?)\b", r"recort\1", normalizado)
+    # "leitoso com trasparente aplicado em cima" e "recortado com transparente por cima"
+    # são laminação: o transparente não é o material.
     laminacao_transparente = re.search(
-        r"(?:\bcom\s+)?(?:o\s+)?" + _TRANSPARENTE + r"\s+aplicad[oa]\s+(?:em|por)\s+cima", normalizado
+        r"(?:\bcom\s+)?(?:o\s+)?" + _TRANSPARENTE + r"\s+(?:aplicad[oa]\s+)?(?:em|por)\s+cima", normalizado
     )
     laminacao = laminacao_transparente is not None or re.search(r"\blamina(?:d[oa]s?|[çc][ãa]o)\b", normalizado)
     if laminacao_transparente:
@@ -136,7 +139,7 @@ def parse_material(texto: str) -> dict | None:
         acabamento = "sem recorte"
     elif re.search(r"\brecortad[oa]s?\b", normalizado):
         acabamento = "recortado"
-    elif re.search(r"\bbanners?\b", palavras):
+    elif re.search(r"\bbanner(?:e?s)?\b", palavras):  # "5 BANNERES"
         acabamento = "banner"
     else:
         acabamento = None

@@ -111,6 +111,9 @@ class TestInventarioGeometrico(unittest.TestCase):
 class TestMaterial(unittest.TestCase):
     def test_banner_e_lona_com_acabamento_banner(self):
         self.assertEqual(parse_material("BANNER"), {"material": "lona", "acabamento": "banner"})
+        self.assertEqual(parse_material("5 BANNERES"), {"material": "lona", "acabamento": "banner"})
+        # Só "lona" é a lona pura, sem acabamento de banner.
+        self.assertEqual(parse_material("LONA 1X1"), {"material": "lona", "acabamento": None})
 
     def test_brilhoso_nao_e_ilhos(self):
         from zcfreader.experimento_agente import _especificacao_material
@@ -243,6 +246,12 @@ class TestUnidadeGrudadaELaminacao(unittest.TestCase):
             {"material": "adesivo leitoso", "acabamento": "laminação"},
         )
         self.assertEqual(parse_material("adesivo recortado e laminado")["acabamento"], "recortado + laminação")
+        self.assertEqual(parse_material("50 adesivos com rocorte de cada")["acabamento"], "recorte especial")
+        # 8 - adesivo 24: o operador confirmou que "transparente por cima" é laminação.
+        self.assertEqual(
+            parse_material("adesivo recortado com transparente por cima"),
+            {"material": "adesivo", "acabamento": "recortado + laminação"},
+        )
 
     def test_medida_e_quantidade_em_linhas_separadas(self):
         texto = "ads recortados \n4x4\n100und"
