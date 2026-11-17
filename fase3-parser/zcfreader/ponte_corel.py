@@ -355,7 +355,7 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
     - Um único texto com quantidade e uma única peça: é dela.
     """
     from .agente import _quantidade_de_cada
-    from .experimento_agente import caixas_das_ocorrencias
+    from .experimento_agente import _especificacao_material, caixas_das_ocorrencias
     from .pedido import parse_quantidade
 
     candidatos = fatos.get("candidatos") or {}
@@ -442,6 +442,25 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
             quantidade.get("origem") is None and (item.get("origem_campos") or {}).get("quantidade") == "padrao_grafica")
         if len(por_copia) == len(numeros) and (len(numeros) >= 2 or sem_texto):
             novo = sum(t["quantidade"] for t in por_copia)
+            # O rótulo junto da peça também diz o material ("100UND leitoso" logo abaixo dela):
+            # vale mais que o material de um texto mais longe que as regras ligaram (marilia).
+            material_atual = (item.get("material") or {}).get("valor")
+
+            def do_rotulo(texto: str) -> dict | None:
+                # "100UND leitoso" numa peça de adesivo: o rótulo só diz o tipo do adesivo.
+                especificacao = _especificacao_material(texto)
+                if especificacao is None and (material_atual or "").startswith("adesivo"):
+                    especificacao = _especificacao_material("adesivo " + texto)
+                    if especificacao and especificacao["material"] == "adesivo":
+                        especificacao = None
+                return especificacao
+
+            materiais = {(do_rotulo(t["texto"]) or {}).get("material") for t in por_copia}
+            if len(materiais) == 1 and None not in materiais:
+                especificacao = do_rotulo(por_copia[0]["texto"])
+                if especificacao["material"] != "adesivo" or not material_atual:
+                    item["material"] = {"valor": especificacao["material"], "origem": "rotulo_da_peca"}
+                    (item.get("origem_campos") or {}).pop("material", None)
         # As regras deram à peça o "50und" que está junto de outra, e ela tem o seu "2und" ao lado.
         if (novo is None and not sem_texto and len(numeros) == 1 and len(por_copia) == 1
                 and quantidade.get("valor") != por_copia[0]["quantidade"]
@@ -466,6 +485,23 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
         if novo:
             item["quantidade"] = {"valor": int(novo), "origem": "texto"}
             (item.get("origem_campos") or {}).pop("quantidade", None)
+
+    # "5x5 20und de cada" junto de 5 adesivos iguais: as regras ligaram só o 20 (jj rec).
+    for item in itens:
+        ids = item.get("candidatos") or []
+        candidato = candidatos.get(ids[0]) if len(ids) == 1 else None
+        quantidade = item.get("quantidade") or {}
+        if not candidato or quantidade.get("origem") != "texto":
+            continue
+        caixas = caixas_das_ocorrencias(candidato) or []
+        if len(caixas) < 2 or quantidade.get("valor") * len(caixas) == quantidade.get("valor"):
+            continue
+        for texto in textos:
+            if (texto["de_cada"] == quantidade.get("valor")
+                    and _medida_confere(texto["texto"], candidato["largura_cm"], candidato["altura_cm"]) is not False
+                    and any(junto(texto, caixa) is not None for caixa in caixas + [candidato["caixa_cm"]])):
+                item["quantidade"] = {"valor": texto["de_cada"] * len(caixas), "origem": "texto"}
+                break
 
     _de_cada_nos_vizinhos(itens, candidatos, de_cada)
 

@@ -210,6 +210,36 @@ class TestTextosDoPedido(unittest.TestCase):
         }
         self.assertEqual(_analisar_regras(None, fatos)["itens"][0]["quantidade"]["valor"], 17)
 
+    def test_de_cada_ligado_pelas_regras_vale_para_cada_copia(self):
+        # jj rec: "5x5 20und de cada" embaixo de 5 adesivos; as regras ligaram só o 20.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        centros = [{"x": 2.5 + 6 * n, "y": 4.5} for n in range(5)]
+        regra = {**self._regra("A01", 5, 5, "adesivo leitoso"), "papel": "produto_confirmado",
+                 "quantidade_pedido": 20, "quantidade_desenhada": 5}
+        fatos = {
+            "auditoria_regional": {"itens": [regra]},
+            "candidatos": {"A01": self._candidato(0, 29, 2, 7, centros) | {"largura_cm": 5, "altura_cm": 5}},
+            "textos": {"T01": {"texto": "5x5 20und de cada Ads leitoso rec", "caixa_cm": self._caixa(10, 16, -0.5, 1.5)}},
+        }
+        self.assertEqual(_analisar_regras(None, fatos)["itens"][0]["quantidade"]["valor"], 100)
+
+    def test_rotulo_junto_da_peca_da_o_material(self):
+        # Marilia: as regras ligaram a peça ao "25UND trasparente" de longe; logo abaixo dela está "100UND leitoso".
+        from zcfreader.ponte_corel import _analisar_regras
+
+        regra = {**self._regra("A01", 4.6, 1.6, "adesivo transparente"), "papel": "produto_plausivel"}
+        fatos = {
+            "auditoria_regional": {"itens": [regra]},
+            "candidatos": {"A01": self._candidato(0, 4.6, 4.5, 6.1)},
+            "textos": {
+                "T01": {"texto": "100UND leitoso", "caixa_cm": self._caixa(-0.3, 4.9, 2.7, 3.6)},
+                "T02": {"texto": "25UND trasparente", "caixa_cm": self._caixa(-0.2, 10, -5.5, -4.5)},
+            },
+        }
+        item = _analisar_regras(None, fatos)["itens"][0]
+        self.assertEqual((item["quantidade"]["valor"], item["material"]["valor"]), (100, "adesivo leitoso"))
+
     def test_texto_escondido_atras_de_outro_nao_conta(self):
         # Carvão: "150UN" por cima de "100UN" no mesmo lugar; vale o de cima (primeiro no arquivo).
         from zcfreader.ponte_corel import _analisar_regras
