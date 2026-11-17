@@ -44,6 +44,17 @@ class TestRegua(unittest.TestCase):
         obtido = {"itens": [item(220, "Verniz")]}
         self.assertTrue(comparar_tolerante(obtido, esperado)["pedido_correto"])
 
+    def test_so_soma_linhas_da_mesma_medida(self):
+        # Peônias: 3x6 não entra na linha de 3x5. BETH: 5,3x5,3 e 5x5 são o mesmo "5 x 5cm".
+        from zcfreader.avaliacao_caminhos import consolidar_linhas
+
+        def item(quantidade, largura, altura):
+            return {"quantidade": {"valor": quantidade}, "dimensoes": {"largura_mm": largura, "altura_mm": altura},
+                    "material": {"valor": "adesivo"}}
+
+        linhas = consolidar_linhas([item(50, 30, 50), item(40, 30, 60), item(93, 53, 53), item(31, 50, 50)])
+        self.assertEqual([i["quantidade"]["valor"] for i in linhas], [50, 40, 124])
+
     def test_texto_livre_antigo_e_nome_do_portal_sao_o_mesmo_material(self):
         from zcfreader.avaliacao_caminhos import materiais_compativeis
 

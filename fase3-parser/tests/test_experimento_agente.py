@@ -375,6 +375,32 @@ class TestMateriaisRegionais(unittest.TestCase):
         self.assertEqual(resultado["conflitos"][0]["valores"], ["adesivo", "lona"])
         self.assertFalse(resultado["exportavel_automaticamente"])
 
+    def test_lona_fosca_e_lona_sao_a_mesma_familia(self):
+        # BANNER_KAROL: "04 BANNER (FOSCO) - MED.120X200" no texto e "04 BANNER" no OCR.
+        item = candidato("A01", 120, 200, {"esquerda": 0, "direita": 120, "base": 0, "topo": 200})
+        item["visivel_inicialmente"] = True
+        catalogo = {
+            "arquivo": "pedido.cdr", "candidatos": [item], "blocos_producao": [],
+            "ocr_regional": {"associacoes": [], "leituras_ocr": []},
+            "evidencias_textuais": [
+                {
+                    "texto": "04 BANNER (FOSCO)", "quantidade": None, "dimensoes": None,
+                    "material": {"material": "lona fosca", "acabamento": "banner"},
+                    "caixa_mm": {"esquerda": 0, "direita": 1200, "base": 2050, "topo": 2100},
+                },
+                {
+                    "texto": "04 BANNER", "quantidade": None, "dimensoes": None,
+                    "material": {"material": "lona", "acabamento": "banner"},
+                    "caixa_mm": {"esquerda": 0, "direita": 1200, "base": 2120, "topo": 2150},
+                },
+            ],
+        }
+
+        resultado = associar_materiais_acabamentos(catalogo)[0]
+
+        self.assertEqual(resultado["material"], "lona fosca")
+        self.assertEqual(resultado["conflitos"], [])
+
     def test_divergencia_com_correcao_humana_preserva_evidencias(self):
         catalogo = {"materiais_regionais": [{
             "candidato_id": "A01", "material": "adesivo leitoso",

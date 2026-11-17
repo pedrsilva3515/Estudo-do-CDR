@@ -294,6 +294,24 @@ class TestTextosDoPedido(unittest.TestCase):
         }
         self.assertEqual(_analisar_regras(None, fatos)["itens"][0]["quantidade"]["valor"], 100)
 
+    def test_quantidade_diferente_embaixo_de_cada_peca_e_uma_linha_por_peca(self):
+        # Peônias: fileira de 5 adesivos 5x5 com "22und", "2und", "9und", "100und", "100und" embaixo;
+        # o terceiro tem uma cópia empilhada no mesmo lugar. Não é grade: são 5 linhas.
+        from zcfreader.ponte_corel import _analisar_regras, separar_ocorrencias
+
+        xs = [2.5, 8, 13.5, 13.5, 19, 24.5]
+        centros = [{"x": x, "y": 2.5 + (0.1 if n == 3 else 0)} for n, x in enumerate(xs)]
+        fatos = {
+            "auditoria_regional": {"itens": [{**self._regra("A01", 5, 5, "adesivo"), "quantidade_desenhada": 6}]},
+            "candidatos": {"A01": self._candidato(0, 27, 0, 5.1, centros) | {"largura_cm": 5, "altura_cm": 5}},
+            "textos": {f"T{n}": {"texto": f"{q}und", "caixa_cm": self._caixa(x - 1, x + 1, -0.9, -0.3)}
+                       for n, (x, q) in enumerate(zip([2.5, 8, 13.5, 19, 24.5], [22, 2, 9, 100, 100]))},
+        }
+        resultado = _analisar_regras(None, fatos)
+        itens = separar_ocorrencias(resultado, fatos["candidatos"])["itens"]
+        self.assertEqual([i["quantidade"]["valor"] for i in itens], [22, 2, 9, 100, 100])
+        self.assertFalse(any(i.get("grade") for i in itens))
+
     def test_rotulo_junto_da_peca_da_o_material(self):
         # Marilia: as regras ligaram a peça ao "25UND trasparente" de longe; logo abaixo dela está "100UND leitoso".
         from zcfreader.ponte_corel import _analisar_regras

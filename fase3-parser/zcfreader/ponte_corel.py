@@ -107,6 +107,15 @@ def separar_ocorrencias(resultado: dict, candidatos: dict, auditoria: dict | Non
     itens = []
     for item in resultado.get("itens") or []:
         ids = item.get("candidatos") or []
+        rotulos = item.pop("rotulos_por_copia", None)
+        if rotulos:
+            # Cada peça com a sua quantidade escrita ao lado (peônias): uma linha por peça, nunca grade.
+            for rotulo in sorted(rotulos, key=lambda r: (-round(r["caixa_cm"]["topo"]), r["caixa_cm"]["esquerda"])):
+                novo = deepcopy(item)
+                novo["quantidade"] = {**(novo.get("quantidade") or {}), "valor": rotulo["quantidade"]}
+                novo["caixa_cm"] = rotulo["caixa_cm"]
+                itens.append(novo)
+            continue
         candidato = candidatos.get(ids[0]) if len(ids) == 1 else None
         caixas = caixas_das_ocorrencias(candidato) if candidato else []
         if len(caixas) <= 1:
@@ -392,7 +401,12 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
         ids = item.get("candidatos") or []
         candidato = candidatos.get(ids[0]) if len(ids) == 1 else None
         if candidato:
+            vistas = []
             for caixa in caixas_das_ocorrencias(candidato) or [candidato["caixa_cm"]]:
+                # Duas cópias empilhadas no mesmo lugar são uma peça só (peônias: um "9und" embaixo).
+                if any(all(abs(caixa[k] - v[k]) <= 0.3 for k in v) for v in vistas):
+                    continue
+                vistas.append(caixa)
                 copias.append((indice, caixa, candidato["largura_cm"], candidato["altura_cm"]))
     rotulos: dict[tuple[int, int], list[tuple[float, dict]]] = {}
     duvidosos = []
@@ -442,6 +456,12 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
             quantidade.get("origem") is None and (item.get("origem_campos") or {}).get("quantidade") == "padrao_grafica")
         if len(por_copia) == len(numeros) and (len(numeros) >= 2 or sem_texto):
             novo = sum(t["quantidade"] for t in por_copia)
+            # "22und", "2und", "9und" embaixo de cada peça: cada uma é uma linha do pedido.
+            if len({t["quantidade"] for t in por_copia}) > 1:
+                item["rotulos_por_copia"] = [
+                    {"caixa_cm": copias[numero][1], "quantidade": t["quantidade"]}
+                    for numero, t in zip(numeros, por_copia)
+                ]
             # O rótulo junto da peça também diz o material ("100UND leitoso" logo abaixo dela):
             # vale mais que o material de um texto mais longe que as regras ligaram (marilia).
             material_atual = (item.get("material") or {}).get("valor")

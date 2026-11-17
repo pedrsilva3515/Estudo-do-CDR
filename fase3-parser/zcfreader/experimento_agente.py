@@ -1000,7 +1000,8 @@ def associar_materiais_acabamentos(catalogo: dict) -> list[dict]:
     for candidato_id, opcoes in propostas.items():
         materiais = {item["material"] for item in opcoes if item.get("material")}
         familias = {
-            "adesivo" if material.startswith("adesivo") else "lona" if material in {"banner", "lona"} else material
+            # "lona fosca" (BANNER (FOSCO)) e "lona" (BANNER) são a mesma família: vale a mais detalhada.
+            "adesivo" if material.startswith("adesivo") else "lona" if material == "banner" or material.startswith("lona") else material
             for material in materiais
         }
         locais = [item for item in opcoes if item["fonte"] != "nome_arquivo"]
