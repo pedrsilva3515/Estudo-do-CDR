@@ -486,6 +486,31 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
             item["quantidade"] = {"valor": int(novo), "origem": "texto"}
             (item.get("origem_campos") or {}).pop("quantidade", None)
 
+    # "50 UNIDADES CADA" logo acima de uma fileira de peças diferentes (RECORTADOS): vale
+    # para cada peça que ele cobre de lado, mesmo com outras quantidades no arquivo.
+    for item in itens:
+        ids = item.get("candidatos") or []
+        candidato = candidatos.get(ids[0]) if len(ids) == 1 else None
+        if not candidato or (item.get("quantidade") or {}).get("origem") != "desenho":
+            continue
+        caixas = caixas_das_ocorrencias(candidato) or [candidato["caixa_cm"]]
+        perto = []
+        for texto in textos:
+            t = texto["caixa_cm"]
+            if not texto["de_cada"] or _medida_confere(texto["texto"], candidato["largura_cm"], candidato["altura_cm"]) is False:
+                continue
+            for caixa in caixas:
+                if not (t["esquerda"] < caixa["direita"] and caixa["esquerda"] < t["direita"]):
+                    continue
+                limite = max(3.0, 0.5 * (caixa["topo"] - caixa["base"]))
+                distancia = t["base"] - caixa["topo"] if t["base"] >= caixa["topo"] - 0.5 else caixa["base"] - t["topo"]
+                if -0.5 <= distancia <= limite:
+                    perto.append((distancia, texto["de_cada"]))
+                    break
+        if perto:
+            item["quantidade"] = {"valor": min(perto)[1] * len(caixas), "origem": "texto"}
+            (item.get("origem_campos") or {}).pop("quantidade", None)
+
     # "5x5 20und de cada" junto de 5 adesivos iguais: as regras ligaram só o 20 (jj rec).
     for item in itens:
         ids = item.get("candidatos") or []
@@ -1053,7 +1078,8 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
         # macro, adicionar peça dá muito mais trabalho que remover; simulação nos 68
         # pedidos revisados: faltando 31 -> 8 linhas, com ~44 a mais para remover.
         sem_texto = (regra.get("papel") == "sem_classificacao"
-                     and min(regra["largura_cm"], regra["altura_cm"]) >= LADO_MINIMO_SEM_TEXTO_CM)
+                     # Folga de arredondamento: a faixa de 19,9x2,98 é de 3 cm (5 - ADESIVO COM RECORTE).
+                     and min(regra["largura_cm"], regra["altura_cm"]) >= LADO_MINIMO_SEM_TEXTO_CM - 0.05)
         if not (produto or sem_texto):
             continue
         itens.append({

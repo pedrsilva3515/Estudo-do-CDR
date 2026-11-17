@@ -77,14 +77,18 @@ def _erro_medida(a: tuple[float, float], b: tuple[float, float]) -> float | None
 
 
 def consolidar_linhas(itens: list[dict]) -> list[dict]:
-    """Soma linhas de mesma medida e material: "5 x 1 un" e "1 x 5 un" são o mesmo pedido."""
+    """Soma linhas de mesma medida e material: "5 x 1 un" e "1 x 5 un" são o mesmo pedido.
+
+    O acabamento não separa linhas: ele não entra na nota do pedido, e separar por ele
+    fazia "110 verniz + 110 verniz e recorte" contra "220 verniz" contar como erro de
+    quantidade (TROFEL).
+    """
     consolidados: list[dict] = []
     for item in itens:
         destino = next((
             c for c in consolidados
             if _erro_medida(_medidas_cm(item), _medidas_cm(c)) is not None
             and _material(_valor(item, "material")) == _material(_valor(c, "material"))
-            and _texto(_valor(item, "acabamento")) == _texto(_valor(c, "acabamento"))
         ), None)
         if destino is None:
             copia = deepcopy(item)

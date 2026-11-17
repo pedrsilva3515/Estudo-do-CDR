@@ -485,7 +485,13 @@ def _termos(texto) -> list[str]:
 
 def _quantidade_de_cada(texto) -> int | None:
     """Quantidade por peça em instruções como "3 UNIDADES DE CADA"."""
-    if not texto or not re.search(r"(?i)\bde\s+cada\b", str(texto)):
+    if not texto:
+        return None
+    # "50 UNIDADES CADA" (sem o "de"); o OCR lê junto: "50UNIDADESCADA" (RECORTADOS).
+    sem_de = re.search(r"(?i)(?<![\d,.])(\d+)\s*(?:unidades?|unids?|und|un)\.?\s*cada\b", str(texto))
+    if sem_de:
+        return int(sem_de.group(1))
+    if not re.search(r"(?i)\bde\s+cada\b", str(texto)):
         return None
     from .pedido import parse_quantidade
 

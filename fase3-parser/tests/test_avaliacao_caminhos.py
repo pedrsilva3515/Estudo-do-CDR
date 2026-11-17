@@ -32,6 +32,18 @@ class TestRegua(unittest.TestCase):
             ["Adesivo Leitoso Interm.", None],
         )
 
+    def test_acabamento_nao_separa_linhas_na_nota(self):
+        # TROFEL: "110 verniz e recorte + 110 verniz" é o mesmo pedido que "220 verniz".
+        from zcfreader.avaliacao_caminhos import comparar_tolerante
+
+        def item(quantidade, acabamento):
+            return {"quantidade": {"valor": quantidade}, "dimensoes": {"largura_mm": 18, "altura_mm": 21},
+                    "material": {"valor": "Adesivo Leitoso Interm."}, "acabamento": {"valor": acabamento}}
+
+        esperado = {"itens": [item(110, "Verniz + Recorte"), item(110, "Verniz")]}
+        obtido = {"itens": [item(220, "Verniz")]}
+        self.assertTrue(comparar_tolerante(obtido, esperado)["pedido_correto"])
+
     def test_texto_livre_antigo_e_nome_do_portal_sao_o_mesmo_material(self):
         from zcfreader.avaliacao_caminhos import materiais_compativeis
 

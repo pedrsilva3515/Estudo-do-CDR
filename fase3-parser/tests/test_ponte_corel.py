@@ -132,10 +132,12 @@ class TestPecasSemTexto(unittest.TestCase):
             regra("A02", "sem_classificacao", 20, 28),
             regra("A03", "sem_classificacao", 2, 0.8),        # etiqueta pequena: fica de fora
             regra("A04", "detalhe_interno_do_produto", 10, 10),
+            regra("A05", "sem_classificacao", 19.9, 2.98),    # faixa de 3 cm arredondada para baixo: entra
+            regra("A06", "sem_classificacao", 19.9, 2.9),
         ]}}
         resultado = _analisar_regras(None, fatos)
-        self.assertEqual([i["candidatos"] for i in resultado["itens"]], [["A01"], ["A02"]])
-        self.assertEqual([i["situacao"] for i in resultado["itens"]], ["a confirmar", "sem texto - confirmar"])
+        self.assertEqual([i["candidatos"] for i in resultado["itens"]], [["A01"], ["A02"], ["A05"]])
+        self.assertEqual([i["situacao"] for i in resultado["itens"]], ["a confirmar", "sem texto - confirmar", "sem texto - confirmar"])
 
     def test_folhas_de_um_painel_nao_viram_item_a_mais(self):
         from zcfreader.ponte_corel import _analisar_regras
@@ -209,6 +211,25 @@ class TestTextosDoPedido(unittest.TestCase):
             },
         }
         self.assertEqual(_analisar_regras(None, fatos)["itens"][0]["quantidade"]["valor"], 17)
+
+    def test_unidades_cada_acima_de_uma_fileira_vale_para_cada_peca(self):
+        # RECORTADOS: "50 UNIDADES CADA" (OCR "50UNIDADESCADA") acima de 3 adesivos diferentes,
+        # com outra quantidade ("18unidades") em outra parte do arquivo.
+        from zcfreader.agente import _quantidade_de_cada
+        from zcfreader.ponte_corel import _analisar_regras
+
+        self.assertEqual(_quantidade_de_cada("50UNIDADESCADA"), 50)
+        self.assertEqual(_quantidade_de_cada("50 UNIDADES CADA"), 50)
+        self.assertIsNone(_quantidade_de_cada("18unidades"))
+        fatos = {
+            "auditoria_regional": {"itens": [self._regra("A01", 8, 8), self._regra("A02", 6.5, 8.3),
+                                             self._regra("A03", 6.5, 8.3), self._regra("A04", 8, 8)]},
+            "candidatos": {"A01": self._candidato(17.6, 25.6, -9.6, -1.6), "A02": self._candidato(27.8, 34.3, -9.9, -1.6),
+                           "A03": self._candidato(38, 44.5, -9.9, -1.6), "A04": self._candidato(38, 46, 4, 12)},
+            "textos": {"T01": {"texto": "18unidades", "caixa_cm": self._caixa(38.7, 44.6, 12.7, 13.9)},
+                       "T02": {"texto": "50UNIDADESCADA", "caixa_cm": self._caixa(19.2, 42.8, -0.7, 1.2)}},
+        }
+        self.assertEqual([i["quantidade"]["valor"] for i in _analisar_regras(None, fatos)["itens"]], [50, 50, 50, 18])
 
     def test_grade_no_vao_de_outra_grade_e_a_mesma_folha(self):
         # adesivo_com_corte: 6 adesivos em "L" e 2 menores no vão do L são uma folha só.
