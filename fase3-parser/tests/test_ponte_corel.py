@@ -210,6 +210,22 @@ class TestTextosDoPedido(unittest.TestCase):
         }
         self.assertEqual(_analisar_regras(None, fatos)["itens"][0]["quantidade"]["valor"], 17)
 
+    def test_texto_escondido_atras_de_outro_nao_conta(self):
+        # Carvão: "150UN" por cima de "100UN" no mesmo lugar; vale o de cima (primeiro no arquivo).
+        from zcfreader.ponte_corel import _analisar_regras
+
+        centros = [{"x": 3, "y": 3}, {"x": 11, "y": 3}]
+        fatos = {
+            "auditoria_regional": {"itens": [{**self._regra("A01", 6, 6, "adesivo"), "quantidade_desenhada": 2}]},
+            "candidatos": {"A01": self._candidato(0, 14, 0, 6, centros) | {"largura_cm": 6}},
+            "textos": {
+                "T01": {"texto": "150UN", "caixa_cm": self._caixa(1, 5, 6.5, 7.5)},
+                "T02": {"texto": "100UN", "caixa_cm": self._caixa(1, 5, 6.5, 7.5)},
+                "T03": {"texto": "50UN", "caixa_cm": self._caixa(9, 13, 6.5, 7.5)},
+            },
+        }
+        self.assertEqual(_analisar_regras(None, fatos)["itens"][0]["quantidade"]["valor"], 200)
+
     def test_de_cada_sem_unidade_vale_para_cada_peca(self):
         from zcfreader.ponte_corel import _analisar_regras
 

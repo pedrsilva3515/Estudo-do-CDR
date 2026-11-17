@@ -137,7 +137,7 @@ def parse_material(texto: str) -> dict | None:
         acabamento = "recorte especial"
     elif re.search(r"\bsem\s+rec(?:orte|ortad[oa]s?|\.)?\b", normalizado):
         acabamento = "sem recorte"
-    elif re.search(r"\brecortad[oa]s?\b", normalizado):
+    elif re.search(r"\brecortad[oa]s?\b|(?:\+|\bcom)\s*corte\b", normalizado):  # "ADESIVO + CORTE"
         acabamento = "recortado"
     elif re.search(r"\bbanner(?:e?s)?\b", palavras):  # "5 BANNERES"
         acabamento = "banner"

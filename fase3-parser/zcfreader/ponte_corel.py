@@ -364,7 +364,8 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
         quantidade = parse_quantidade(texto.get("texto") or "")
         por_peca = _quantidade_de_cada(texto.get("texto"))
         if (quantidade or por_peca) and texto.get("caixa_cm"):
-            textos.append({**texto, "quantidade": por_peca or quantidade[0], "de_cada": por_peca})
+            # "ordem": posição no arquivo; o primeiro é o que está por cima no desenho.
+            textos.append({**texto, "quantidade": por_peca or quantidade[0], "de_cada": por_peca, "ordem": len(textos)})
     if not textos:
         return
     de_cada = {t["de_cada"] for t in textos if t["de_cada"]}
@@ -429,9 +430,12 @@ def _quantidade_escrita(itens: list[dict], fatos: dict) -> None:
             if not proprios:
                 break
             menor = min(d for d, _ in proprios)
-            # Dois textos no mesmo lugar com quantidades diferentes (um escondido atrás do outro): não dá para saber.
-            if len({t["quantidade"] for d, t in proprios if d - menor <= 0.2}) > 1:
-                break
+            # Dois textos no mesmo lugar com quantidades diferentes, um escondido atrás do outro
+            # (carvão: "150UN" sobre "100UN"): vale o de cima, que vem primeiro no arquivo.
+            empatados = [t for d, t in proprios if d - menor <= 0.2]
+            if len({t["quantidade"] for t in empatados}) > 1:
+                por_copia.append(min(empatados, key=lambda t: t["ordem"]))
+                continue
             por_copia.append(min(proprios, key=lambda par: par[0])[1])
         quantidade = item.get("quantidade") or {}
         sem_texto = quantidade.get("origem") == "desenho" or (

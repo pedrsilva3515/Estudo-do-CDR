@@ -247,6 +247,7 @@ class TestUnidadeGrudadaELaminacao(unittest.TestCase):
         )
         self.assertEqual(parse_material("adesivo recortado e laminado")["acabamento"], "recortado + laminação")
         self.assertEqual(parse_material("50 adesivos com rocorte de cada")["acabamento"], "recorte especial")
+        self.assertEqual(parse_material("ADESIVO + CORTE"), {"material": "adesivo", "acabamento": "recortado"})
         # 8 - adesivo 24: o operador confirmou que "transparente por cima" é laminação.
         self.assertEqual(
             parse_material("adesivo recortado com transparente por cima"),
