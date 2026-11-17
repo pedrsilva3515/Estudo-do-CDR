@@ -210,6 +210,55 @@ class TestTextosDoPedido(unittest.TestCase):
         }
         self.assertEqual(_analisar_regras(None, fatos)["itens"][0]["quantidade"]["valor"], 17)
 
+    def test_grade_no_vao_de_outra_grade_e_a_mesma_folha(self):
+        # adesivo_com_corte: 6 adesivos em "L" e 2 menores no vão do L são uma folha só.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        em_l = [{"x": 2 + 4 * c, "y": 6} for c in range(4)] + [{"x": 10, "y": 2}, {"x": 14, "y": 2}]
+        no_vao = [{"x": 2, "y": 2}, {"x": 6, "y": 2}]
+        regra = lambda id_, l, a, n: {**self._regra(id_, l, a), "quantidade_desenhada": n}
+        fatos = {
+            "auditoria_regional": {"itens": [regra("A01", 4, 4, 6), regra("A02", 4, 3.4, 2)]},
+            "candidatos": {"A01": self._candidato(0, 16, 0, 8, em_l) | {"largura_cm": 4, "altura_cm": 4},
+                           "A02": self._candidato(0, 8, 0.3, 3.7, no_vao) | {"largura_cm": 4, "altura_cm": 3.4}},
+            "textos": {},
+        }
+        self.assertEqual([i["candidatos"] for i in _analisar_regras(None, fatos)["itens"]], [["A01"]])
+
+    def test_imagem_escondida_atras_de_dois_quadros_sai(self):
+        # LIVIA: imagem de 36x21 atrás da divisa de dois quadros; o operador só seleciona o de cima.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        confirmada = lambda id_, l, a: {**self._regra(id_, l, a, "adesivo"), "papel": "produto_confirmado", "quantidade_pedido": 1}
+        fatos = {
+            "auditoria_regional": {"itens": [confirmada("A01", 39.7, 26.9), confirmada("A02", 36.1, 20.9), confirmada("A03", 18, 27)]},
+            "candidatos": {"A01": self._candidato(49.2, 88.9, -8.8, 18.1), "A02": self._candidato(66.7, 102.8, 0.9, 21.8),
+                           "A03": self._candidato(90.8, 108.8, -8.9, 18.1)},
+            "textos": {},
+        }
+        self.assertEqual([i["candidatos"] for i in _analisar_regras(None, fatos)["itens"]], [["A01"], ["A03"]])
+
+    def test_peca_sem_texto_fora_das_artes_e_sobra(self):
+        # Retifica: desenho sem texto a 67 cm à direita de tudo sai; o mesmo entre duas artes fica.
+        from zcfreader.ponte_corel import _analisar_regras
+
+        def fatos(sobra):
+            return {
+                "auditoria_regional": {"itens": [
+                    {**self._regra("A01", 60, 30, "adesivo"), "papel": "produto_confirmado", "quantidade_pedido": 1},
+                    {**self._regra("A02", 60, 30, "adesivo"), "papel": "produto_confirmado", "quantidade_pedido": 2},
+                    self._regra("A03", 32, 11),
+                ]},
+                "candidatos": {"A01": self._candidato(0, 60, 0, 30), "A02": self._candidato(160, 220, 0, 30),
+                               "A03": self._candidato(*sobra)},
+                "textos": {},
+            }
+
+        fora = _analisar_regras(None, fatos((287, 319, 10, 21)))["itens"]
+        no_meio = _analisar_regras(None, fatos((94, 126, 10, 21)))["itens"]
+        self.assertEqual([i["candidatos"] for i in fora], [["A01"], ["A02"]])
+        self.assertEqual(len(no_meio), 3)
+
     def test_de_cada_ligado_pelas_regras_vale_para_cada_copia(self):
         # jj rec: "5x5 20und de cada" embaixo de 5 adesivos; as regras ligaram só o 20.
         from zcfreader.ponte_corel import _analisar_regras

@@ -915,6 +915,121 @@ def _pecas_pela_moldura(itens: list[dict], candidatos: dict) -> list[dict]:
     return [item for indice, item in enumerate(itens) if indice not in removidos] + novos
 
 
+def _sem_sobras_isoladas(itens: list[dict], candidatos: dict, fatos: dict) -> list[dict]:
+    """Tira a peça sem texto que está sozinha, longe das peças com texto e de qualquer texto.
+
+    O operador confirmou (retifica 12-11): desenho sem texto, isolado e longe das artes
+    do pedido, é sobra esquecida no arquivo. Só vale quando o pedido tem peças com texto.
+    """
+    com_texto = [item for item in itens if item.get("situacao") != "sem texto - confirmar"]
+    if not com_texto:
+        return itens
+    textos = [t["caixa_cm"] for t in (fatos.get("textos") or {}).values() if t.get("caixa_cm")]
+
+    def distancia(a: dict, b: dict) -> float:
+        dx = max(0.0, b["esquerda"] - a["direita"], a["esquerda"] - b["direita"])
+        dy = max(0.0, b["base"] - a["topo"], a["base"] - b["topo"])
+        return max(dx, dy)
+
+    sobras = set()
+    for indice, item in enumerate(itens):
+        if item.get("situacao") != "sem texto - confirmar":
+            continue
+        caixa = _caixa_do_item(item, candidatos)
+        if not caixa:
+            continue
+        lado = max(caixa["direita"] - caixa["esquerda"], caixa["topo"] - caixa["base"])
+        vizinhos = [c for c in [_caixa_do_item(outro, candidatos) for n, outro in enumerate(itens) if n != indice] + textos if c]
+        if not vizinhos:
+            continue
+        perto = min(distancia(caixa, c) for c in vizinhos)
+        # "Fora das artes": além da borda de tudo o que tem no pedido, não no meio das peças
+        # (7 - adesivoss: o 20x20 sem texto entre duas artes é pedido).
+        fora = (caixa["esquerda"] > max(c["direita"] for c in vizinhos) or caixa["direita"] < min(c["esquerda"] for c in vizinhos)
+                or caixa["base"] > max(c["topo"] for c in vizinhos) or caixa["topo"] < min(c["base"] for c in vizinhos))
+        if fora and perto > max(20.0, lado):
+            sobras.add(indice)
+    return [item for indice, item in enumerate(itens) if indice not in sobras]
+
+
+def _sem_grades_encaixadas(itens: list[dict], candidatos: dict) -> list[dict]:
+    """Tira a grade sem texto que preenche o vão de outra grade: as duas são a mesma folha.
+
+    adesivo_com_corte: 22 adesivos de 4x4 em "L" e 10 de 4x3,4 no vão do L formam uma
+    folha só de 34,7x17,5 (a caixa da grade de 22).
+    """
+    from .experimento_agente import caixas_das_ocorrencias
+
+    def dentro(c: dict, caixa: dict) -> bool:
+        return (caixa["esquerda"] - 0.3 <= c["esquerda"] and c["direita"] <= caixa["direita"] + 0.3
+                and caixa["base"] - 0.3 <= c["base"] and c["topo"] <= caixa["topo"] + 0.3)
+
+    def cruza(a: dict, b: dict) -> bool:
+        return (min(a["direita"], b["direita"]) - max(a["esquerda"], b["esquerda"]) > 0.3
+                and min(a["topo"], b["topo"]) - max(a["base"], b["base"]) > 0.3)
+
+    grades = {}
+    for indice, item in enumerate(itens):
+        ids = item.get("candidatos") or []
+        candidato = candidatos.get(ids[0]) if len(ids) == 1 else None
+        if candidato and candidato.get("largura_cm") and candidato.get("altura_cm"):
+            ocorrencias = caixas_das_ocorrencias(candidato) or []
+            if len(ocorrencias) >= 2:
+                grades[indice] = (candidato["caixa_cm"], ocorrencias)
+    encaixadas = set()
+    for indice, (_, ocorrencias) in grades.items():
+        if itens[indice].get("situacao") != "sem texto - confirmar":
+            continue
+        for outra, (caixa, outras) in grades.items():
+            if (outra != indice and outra not in encaixadas and len(outras) > len(ocorrencias)
+                    and all(dentro(o, caixa) for o in ocorrencias)
+                    and not any(cruza(o, p) for o in ocorrencias for p in outras)):
+                encaixadas.add(indice)
+                break
+    return [item for indice, item in enumerate(itens) if indice not in encaixadas]
+
+
+def _sem_pecas_escondidas(itens: list[dict], candidatos: dict) -> list[dict]:
+    """Tira a peça que está quase toda coberta por duas ou mais outras peças do pedido.
+
+    LIVIA: uma imagem de 36x21 atrás da divisa de dois quadros; clicando nela o
+    operador seleciona o quadro de cima. Escondida, não é pedido.
+    """
+    from .experimento_agente import caixas_das_ocorrencias
+
+    def sobreposicao(a: dict, b: dict) -> float:
+        largura = min(a["direita"], b["direita"]) - max(a["esquerda"], b["esquerda"])
+        altura = min(a["topo"], b["topo"]) - max(a["base"], b["base"])
+        return max(0.0, largura) * max(0.0, altura)
+
+    def caixas(item: dict) -> list[dict]:
+        """Uma caixa por cópia desenhada (a caixa de uma peça repetida cobre o vão entre as cópias)."""
+        ids = item.get("candidatos") or []
+        candidato = candidatos.get(ids[0]) if len(ids) == 1 and not item.get("caixa_cm") else None
+        if candidato and candidato.get("largura_cm") and candidato.get("altura_cm"):
+            return caixas_das_ocorrencias(candidato) or [candidato["caixa_cm"]]
+        caixa = _caixa_do_item(item, candidatos)
+        return [caixa] if caixa else []
+
+    escondidos = set()
+    for indice, item in enumerate(itens):
+        proprias = caixas(item)
+        if len(proprias) != 1:
+            continue
+        caixa = proprias[0]
+        area = (caixa["direita"] - caixa["esquerda"]) * (caixa["topo"] - caixa["base"])
+        if area <= 0:
+            continue
+        cobertas = [
+            c for n, outro in enumerate(itens) if n != indice and n not in escondidos
+            for c in caixas(outro) if sobreposicao(caixa, c) >= 0.2 * area
+        ]
+        # As outras peças não se sobrepõem entre si, então a soma é a área coberta.
+        if len(cobertas) >= 2 and sum(sobreposicao(caixa, c) for c in cobertas) >= 0.7 * area:
+            escondidos.add(indice)
+    return [item for indice, item in enumerate(itens) if indice not in escondidos]
+
+
 def _analisar_regras(caminho: Path, fatos: dict) -> dict:
     from .camadas import regras_resolvem, resultado_das_regras
 
@@ -1098,6 +1213,8 @@ def _analisar_regras(caminho: Path, fatos: dict) -> dict:
                      or sobre_peca_com_texto(item["candidatos"][0]) or faixa_solta(item["candidatos"][0])))
     ]
     itens = _pecas_pela_moldura(_juntar_partes_na_peca(_pastas_em_volta(itens, candidatos), candidatos), candidatos)
+    itens = _sem_pecas_escondidas(_sem_sobras_isoladas(itens, candidatos, fatos), candidatos)
+    itens = _sem_grades_encaixadas(itens, candidatos)
     for indice, item in enumerate(itens, 1):
         item["indice"] = indice
     _quantidade_escrita(itens, fatos)
